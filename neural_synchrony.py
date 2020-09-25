@@ -994,17 +994,17 @@ def set_filter_params(bands, smp_rate, filt, order=4, form='ba',
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================
-def coherence(data1, data2, axis=0, single_trial=None, ztransform=False,
+def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
               method='wavelet', data_type=None, smp_rate=None, time_axis=None,
               **kwargs):
     """
     Computes pairwise coherence between pair of channels of raw or
     spectral (time-frequency) data (LFP or spikes)
 
-    coh,freqs,timepts = coherence(data1,data2,axis=0,
-                                  single_trial=None,ztransform=False,
-                                  method='wavelet',data_type=None,smp_rate=None,
-                                  time_axis=None,**kwargs)
+    coh,freqs,timepts[,dphi] = coherence(data1,data2,axis=0,return_phase=False,
+                                         single_trial=None,ztransform=False,
+                                         method='wavelet',data_type=None,smp_rate=None,
+                                         time_axis=None,**kwargs)
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -1019,6 +1019,8 @@ def coherence(data1, data2, axis=0, single_trial=None, ztransform=False,
             frequencies, timepoints, conditions, etc.)
 
     axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+
+    return_phase Bool. If True, returns additional output with mean phase difference
 
     single_trial String or None. What type of coherence estimator to compute:
             None        standard across-trial estimator [default]
@@ -1052,11 +1054,18 @@ def coherence(data1, data2, axis=0, single_trial=None, ztransform=False,
     freqs   (n_freqs,). List of frequencies in coh (only for raw data)
     timepts (n_timepts,). List of timepoints in coh (only for raw data)
 
+    dphi   ndarray. Mean phase difference between data1 and data2 in radians.
+           Positive values correspond to data1 leading data2.
+           Negative values correspond to data1 lagging behind data2.
+           Optional: Only returned if return_phase is True.
+
     REFERENCE
     Single-trial method:    Womelsdorf, Fries, Mitra, Desimone (2006) Science
     Single-trial method:    Richter, ..., Fries (2015) NeuroImage
     """
-    # TODO Add return_phase option here
+    assert not((single_trial is not None) and return_phase), \
+        ValueError("Cannot do both single_trial AND return_phase together")
+            
     assert (single_trial is None) or (single_trial in ['pseudo','richter']), \
         ValueError("Parameter <single_trial> must be = None, 'pseudo', or 'richter'")
 
@@ -1085,15 +1094,20 @@ def coherence(data1, data2, axis=0, single_trial=None, ztransform=False,
     if single_trial is None:
         # Compute cross spectrum and auto-spectra, average across trials
         # Compute abs() to convert complex coherency -> coherence magnitude
-        # Noe: .real converts complex dtypes to float
-        S12 = np.abs(np.mean(data1.conj()*data2, axis=reduce_axes)).real
-        S1  = np.mean(data1.conj()*data1, axis=reduce_axes).real
-        S2  = np.mean(data2.conj()*data2, axis=reduce_axes).real
+        # Note: .real deals with floating point error, converts complex dtypes to float
+        S12 = np.mean(data1*data2.conj(), axis=reduce_axes)
+        S1  = np.mean(data1*data1.conj(), axis=reduce_axes).real
+        S2  = np.mean(data2*data2.conj(), axis=reduce_axes).real
 
         # Calculate coherence as cross-spectrum / product of spectra
-        # (.real converts  errors)
+        # Note: .real deals with floating point error, converts complex dtypes to float
         coh = S12/np.sqrt(S1*S2)
 
+        if return_phase: dphi = np.angle(coh)
+
+        # Absolute value converts complex coherency -> coherence
+        coh = np.abs(np.abs(coh)).real
+        
         if ztransform: coh = ztransform_coherence(coh,df)
 
     # Single-trial coherence estimator using jackknife resampling method
@@ -1129,7 +1143,8 @@ def coherence(data1, data2, axis=0, single_trial=None, ztransform=False,
         # If observation axis wasn't 0, permute axis back to original position
         if axis != 0: coh = np.moveaxis(coh,0,axis)
 
-    return  coh, freqs, timepts
+    if return_phase:    return coh, freqs, timepts, dphi
+    else:               return coh, freqs, timepts
 
 
 def ztransform_coherence(coh, df, beta=23/20):
@@ -1229,8 +1244,10 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     freqs   (n_freqs,). List of frequencies in plv (only for raw data)
     timepts (n_timepts,). List of timepoints in plv (only for raw data)
 
-    dphi    ndarray. If return_phase is True, mean data1 - data2 phase difference
-            (in radians) is also returned here
+    dphi   ndarray. Mean phase difference between data1 and data2 in radians.
+           Positive values correspond to data1 leading data2.
+           Negative values correspond to data1 lagging behind data2.
+           Optional: Only returned if return_phase is True.
 
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
@@ -1279,7 +1296,7 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
 def _spec_to_plv(data1, data2, axis=0, keepdims=False):
     """ Compute PLV from a pair of spectra/spectrograms """
     # Cross-spectrum-based method adapted from FieldTrip ft_conectivity_ppc()
-    csd = data1*data2.conj()          # Compute cross-spectrum
+    csd = data1*data2.conj()    # Compute cross-spectrum
     csd = csd / np.abs(csd)     # Normalize cross-spectrum
     # Compute vector mean across trial/observations -> absolute value
     return np.abs(np.mean(csd,axis=axis,keepdims=keepdims))
@@ -1294,7 +1311,7 @@ def _spec_to_plv(data1, data2, axis=0, keepdims=False):
 def _spec_to_plv_with_phase(data1, data2, axis=0, keepdims=False):
     """ Compute PLV, relative phase from a pair of spectra/spectrograms """
     # Cross-spectrum-based method adapted from FieldTrip ft_conectivity_ppc()
-    csd = data1*data2.conj()          # Compute cross-spectrum
+    csd = data1*data2.conj()    # Compute cross-spectrum
     csd = csd / np.abs(csd)     # Normalize cross-spectrum
     # Compute vector mean across trial/observations
     vector_mean =  np.mean(csd,axis=axis,keepdims=keepdims)
@@ -1363,8 +1380,10 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     freqs   (n_freqs,). List of frequencies in ppc (only for raw data)
     timepts (n_timepts,). List of timepoints in ppc (only for raw data)
 
-    dphi    ndarray. If return_phase is True, mean data1 - data2 phase difference
-            (in radians) is also returned here
+    dphi   ndarray. Mean phase difference between data1 and data2 in radians.
+           Positive values correspond to data1 leading data2.
+           Negative values correspond to data1 lagging behind data2.
+           Optional: Only returned if return_phase is True.
 
     REFERENCES
     Original concept:   Vinck et al. (2010) NeuroImage
@@ -1554,7 +1573,7 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
     spike-triggered LFP phase phi:
         plv  = abs( trialMean(exp(i*phi)) )
 
-    plv,freqs,timepts = phase_locking_value(spkdata,lfpdata,axis=0,return_phase=False,
+    plv,freqs,timepts = spike_field_phase_locking_value(spkdata,lfpdata,axis=0,return_phase=False,
                                           spec_method='wavelet',data_type=None,
                                           smp_rate=None,time_axis=None,
                                           **kwargs)
@@ -1617,6 +1636,7 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
     """
+    # FIXME I think we need to require timepts argument, no?
     # Ensure spkdata boolean array (not timestamps), is same shape as lfpdata
     assert spkdata.dtype != object, \
         "Spiking data must be converted from timestamps to boolean format for this function"
@@ -1696,8 +1716,10 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
 
     # Compute absolute value of complex vector mean = mean resultant = PLV
     # and optionally the mean phase angle as well. Also return spike counts.
-    if return_phase: return np.abs(vector_mean), freqs, timepts, n, np.angle(vector_mean)
-    else:           return np.abs(vector_mean), freqs, timepts, n
+    if return_phase:
+        return np.abs(vector_mean), freqs, timepts, n, np.angle(vector_mean)
+    else:
+        return np.abs(vector_mean), freqs, timepts, n
 
 
 def spike_field_pairwise_phase_consistency(spkdata, lfpdata, axis=0,
@@ -1995,7 +2017,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
     # Convert frequency bands into 1-d list of bin edges
     bins = []
-    [bins.extend(value) for value in bands.values()];
+    for value in bands.values(): bins.extend(value)
 
     # xarray: Pool values in bands using DataArray groupby_bins() method
     if HAS_XARRAY and isinstance(data,xr.DataArray):
@@ -2018,7 +2040,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
         band_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
                                  dims=temp_dims, coords=coords)
 
-        for i_band,(band,frange) in enumerate(bands.items()):
+        for i_band,(_,frange) in enumerate(bands.items()):
             fbool = (freqs >= frange[0]) & (freqs <= frange[1])
             band_data[i_band,...] = data[fbool,...].mean(axis=0)
 
@@ -2037,7 +2059,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
         data_shape= (len(bands), *data.shape[1:])
         band_data = np.zeros(data_shape,dtype=data.dtype)
 
-        for i_band,(band,frange) in enumerate(bands.items()):
+        for i_band,(_,frange) in enumerate(bands.items()):
             fbool = (freqs >= frange[0]) & (freqs <= frange[1])
             if func == 'mean':
                 band_data[i_band,...] = data[fbool,...].mean(axis=0)
@@ -2100,7 +2122,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
         epoch_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
                                   dims=temp_dims, coords=coords)
 
-        for i_epoch,(epoch,trange) in enumerate(epochs.items()):
+        for i_epoch,(_,trange) in enumerate(epochs.items()):
             tbool = (timepts >= trange[0]) & (timepts <= trange[1])
             epoch_data[i_epoch,...] = data[tbool,...].mean(axis=0)
 
@@ -2119,7 +2141,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
         data_shape= (len(epochs), *data.shape[1:])
         epoch_data = np.zeros(data_shape,dtype=data.dtype)
 
-        for i_epoch,(epoch,trange) in enumerate(epochs.items()):
+        for i_epoch,(_,trange) in enumerate(epochs.items()):
             tbool = (timepts >= trange[0]) & (timepts <= trange[1])
             epoch_data[i_epoch,...] = data[tbool,...].mean(axis=0)
 
