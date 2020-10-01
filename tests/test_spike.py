@@ -5,9 +5,6 @@ import pytest
 from ..spike_analysis import *
 from ..spike_analysis import _default_time_bins
 
-import numpy as np
-import pytest
-
 @pytest.fixture(scope='session')
 def fixture():
     data, _ = simulate_spike_trains(n_trials=20, n_conds=1, window=10.0, 
