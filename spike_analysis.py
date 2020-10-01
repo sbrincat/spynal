@@ -3,18 +3,25 @@
 A module for basic analyses of neural spiking activity
 
 FUNCTIONS
+## Rate analysis ##
 bin_count/rate      Computes spike counts/rates in series of time bins
 epoch_count/rate    Computes spike counts/rates in non-continuous time epochs
 density             Computes spike density (smoothed rate) with given kernel
 
-plot_raster         Generates a raster plot
-plot_mean_waveforms Plots mean spike waveforms from one/more units
-plot_waveform_heatmap Plots heatmap (2d histogram) of spike waveforms
-
+## Preprocessing ##
 realign_spike_times Realigns spike timestamps to new t=0
 times_to_bool       Converts spike timestamps to binary spike trains
 bool_to_times       Converts binary spike train to timestamps
 pool_electrode_units Pools all units on each electrode into a multi-unit
+
+## Plotting ##
+plot_raster         Generates a raster plot
+plot_mean_waveforms Plots mean spike waveforms from one/more units
+plot_waveform_heatmap Plots heatmap (2d histogram) of spike waveforms
+
+## Synthetic data generation ##
+simulate_spike_rates    Generates sythetic Poisson rates
+simulate_spike_trains   Generates sythetic Poisson process spike trains
 
 
 Created on Mon Aug 13 14:38:34 2018
@@ -24,7 +31,7 @@ Created on Mon Aug 13 14:38:34 2018
 # TODO  Generalize basic functions (count,2bool,etc.) to arbitrary shape of spike_times array?
 # TODO  Add ISI/autocorrelation stats?
 
-from math import isclose
+from math import isclose, ceil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -41,8 +48,8 @@ def bin_count(spike_times, bins=None, width=50e-3, lim=None, dtype='uint16'):
     """
     Computes spike count within given sequence of time bins
 
-    counts,bins = bin_count(spike_times,bins=None,width=50e-3,lim=None,
-                            dtype='uint16')
+    counts,centers = bin_count(spike_times,bins=None,width=50e-3,lim=None,
+                               dtype='uint16')
 
     INPUTS
     spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
@@ -68,7 +75,7 @@ def bin_count(spike_times, bins=None, width=50e-3, lim=None, dtype='uint16'):
     counts      (n_rows,n_cols,n_bins) ndarray of <dtype>. Spike counts within
                 each time bin (and usually for each trial and unit).
 
-    bins        (n_bins,) ndarray. Center of each time bin.
+    centers     (n_bins,) ndarray. Center of each time bin.
     """
     # Set histogram bins if not input
     if bins is None:  bins = _default_time_bins(lim,width)
@@ -85,16 +92,16 @@ def bin_count(spike_times, bins=None, width=50e-3, lim=None, dtype='uint16'):
             counts[row,col,:] = np.histogram(spike_times[row,col],bins)[0]
 
     # Compute center of each bin
-    bins = bins[0:-1] + (np.diff(bins)/2.0)
+    centers = bins[0:-1] + (np.diff(bins)/2.0)
 
-    return counts, bins
+    return counts, centers
 
 
 def bin_rate(spike_times, bins=None, width=50e-3, lim=None):
     """
     Computes spike rate within given sequence of time bins
 
-    rates,bins = bin_rate(spike_times,bins=None,width=50e-3,lim=None)
+    rates,centers = bin_rate(spike_times,bins=None,width=50e-3,lim=None)
 
     INPUTS
     spike_times  (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
@@ -114,19 +121,19 @@ def bin_rate(spike_times, bins=None, width=50e-3, lim=None):
     rates       (n_rows,n_cols,n_bins) ndarray of floats. Spike rate within each
                 time bin (and usually for each trial and unit)
 
-    bins        (n_bins,) ndarray. Center of each time bin.
+    centers     (n_bins,) ndarray. Center of each time bin.
 
     Also aliased as psth()
     """
     if bins is None:  bins = _default_time_bins(lim,width)
 
     # For each spike train in <spike_times> compute count w/in each hist bin
-    rates,bins = bin_count(spike_times,bins,dtype=float)
+    rates,centers = bin_count(spike_times,bins,dtype=float)
 
     # Normalize by bin widths to get spike rates (don't assume same-width bins)
     rates  = rates / np.diff(bins)
 
-    return rates, bins
+    return rates, centers
 
 psth = bin_rate
 """ Aliases function bin_rate as psth """
@@ -134,7 +141,7 @@ psth = bin_rate
 
 def epoch_count(spike_times, epochs, dtype='uint16'):
     """
-    Computes spike count within given sequence of time epochs
+    Computes spike count within given series of arbitrary time epochs
 
     counts = epoch_count(spike_times,epochs,dtype='uint16')
 
@@ -144,7 +151,7 @@ def epoch_count(spike_times, epochs, dtype='uint16'):
                 Spike timestamps, usually in seconds referenced to some
                 within-trial event. Must be in same time units as epochs.
 
-    epochs      (n_epochs,2) array-like. Edges of all time epochs.
+    epochs      (n_epochs,2) array-like. [start,end] of all time epochs.
 
     dtype       String | dtype object. Variable types of elements of <counts>.
                 Default: uint16. (Note: this implies a limit of 65536 spikes per
@@ -165,7 +172,7 @@ def epoch_count(spike_times, epochs, dtype='uint16'):
 
     counts = np.zeros((n_rows,n_cols,n_epochs),dtype=dtype)
 
-    # For each spike train in <spike_times> compute count w/in each hist bin
+    # For each spike train in <spike_times> compute count w/in each time epoch
     for row in range(n_rows):
         for col in range(n_cols):
             for i_epoch,epoch in enumerate(epochs):
@@ -177,9 +184,9 @@ def epoch_count(spike_times, epochs, dtype='uint16'):
 
 def epoch_rate(spike_times, epochs, dtype='uint16'):
     """
-    Computes spike count within given sequence of time epochs
+    Computes spike rate within given series of arbitrary time epochs
 
-    counts = epoch_count(spike_times,epochs,dtype='uint16')
+    rates = epoch_rate(spike_times,epochs,dtype='uint16')
 
     INPUTS
     spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
@@ -187,36 +194,24 @@ def epoch_rate(spike_times, epochs, dtype='uint16'):
                 Spike timestamps, usually in seconds referenced to some
                 within-trial event. Must be in same time units as epochs.
 
-    epochs      (n_epochs,2) array-like. Edges of all time epochs.
+    epochs      (n_epochs,2) array-like. [start,end] of all time epochs.
 
     dtype       String | dtype object. Variable types of elements of <counts>.
                 Default: uint16. (Note: this implies a limit of 65536 spikes per
                 bin; anything greater will overflow and alias to smaller numbers)
 
     RETURNS
-    counts      (n_rows,n_cols,n_epochs) ndarray of <dtype>. Spike counts within
-                each time epoch (and usually for each trial and unit).
+    rates       (n_rows,n_cols,n_epochs) ndarray of <dtype>. Spike rates (spks/s)
+                within each time epoch (and usually for each trial and unit).
     """
-    assert isinstance(epochs,list) or \
-           (isinstance(epochs,np.ndarray) and (epochs.shape[1] == 2)), \
-           ValueError("<epochs> must be given as list of tuples or (n_epochs,2) Numpy array")
+    # For each spike train in <spike_times> compute count w/in each time epoch
+    rates = epoch_rate(spike_times,epochs,dtype=dtype)
 
-    if isinstance(epochs,list): epochs = np.asarray(epochs)
+    # Normalize by epoch widths to get spike rates (don't assume same-width bins)
+    for i_epoch,epoch in enumerate(epochs):
+        rates[:,:,i_epoch] = rates[:,:,i_epoch] / (epoch[1] - epoch[0])
 
-    n_epochs      = epochs.shape[0]
-    n_rows,n_cols = spike_times.shape
-
-    counts = np.zeros((n_rows,n_cols,n_epochs),dtype=dtype)
-
-    # For each spike train in <spike_times> compute count w/in each hist bin
-    for row in range(n_rows):
-        for col in range(n_cols):
-            times = spike_times[row,col]
-            for i_epoch,epoch in enumerate(epochs):
-                counts[row,col,i_epoch] = \
-                    np.sum((times >= epoch[0]) & (times <= epoch[1]))
-
-    return counts
+    return rates
 
 
 def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
@@ -722,6 +717,174 @@ def pool_electrode_units_spike_times(spike_times_sua, electrodes, elec_set=None,
         return spike_times_mua, elec_idxs
     else:
         return spike_times_mua
+
+
+#==============================================================================
+# Synthetic data generation functions
+#==============================================================================
+def simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
+                         window=1.0,seed=None):
+    """
+    Simulates Poisson spike rates across multiple conditions/groups
+    with given condition effect size
+
+    rates,labels = simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,
+                                        n_trials=1000,window=1.0,seed=None)
+
+    INPUTS
+    gain    Scalar | (n_conds,) array-like. Spike rate gain (in spk/s) for
+            each condition, which sets effect size.
+            Scalar : spike rate difference between each successive condition
+            (n_conds,) vector : specific spike rate gain for each condition
+            Set = 0 to simulate no expected difference between conditions.
+            Default: 5.0 (5 spk/s difference btwn each condition)
+
+    offset  Scalar. Baseline rate added to condition effects. Default: 5.0 spk/s
+
+    n_conds Int. Number of distinct conditions/groups to simulate. Default: 2
+
+    n_trials Int. Number of trials/observations to simulate. Default: 1000
+
+    window  Scalar. Time window to count simulated spikes over. Can set = 1
+            if you want spike *counts*, rather than rates. Default: 1.0 s
+
+    seed    Int. Random generator seed for repeatable results.
+            Set=None [default] for actual random numbers.
+
+    RETURNS
+    rates   (n_trials,). Simulated Poisson spike rates
+
+    labels  (n_trials,) of int. Condition/group labels for each trial.
+            Sorted in group order to simplify visualization.
+    """
+    # TODO  Add support for muliple units w/ varying effect probability or size?
+
+    if seed is not None: np.random.seed(seed)
+
+    # Is gain scalar-valued or array-like?
+    scalar_gain = not isinstance(gain, (list, tuple, np.ndarray))
+
+    if not scalar_gain:
+        gain = np.asarray(gain)
+        assert len(gain) == n_conds, \
+            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
+                       % (len(gain), n_conds))
+
+    # Create (nTrials,) vector of group labels (ints in set 0-n_conds-1)
+    n_reps = ceil(n_trials/n_conds)
+    labels = np.tile(np.arange(n_conds),(n_reps,))[0:n_trials]
+    # For easy visualization, sort trials by group number
+    labels.sort()
+
+    # Per-trial Poisson rate parameters = expected number of spikes in interval
+    # Single gain = incremental difference btwn cond 0 and 1, 1 and 2, etc.
+    if scalar_gain: lambdas = (offset + gain*labels)*window
+    # Hand-set gain specific for each condition
+    else:           lambdas = (offset + gain[labels])*window
+
+    # Simulate Poisson spike counts, convert to rates
+    rates = np.random.poisson(lambdas,(n_trials,)) / window
+
+    return rates, labels
+
+
+def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
+                          window=1.0,seed=None,out_type='timestamp'):
+    """
+    Simulates Poisson spike trains across multiple conditions/groups
+    with given condition effect size
+
+    trains,labels = simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,
+                                          n_trials=1000,window=1.0,seed=None,
+                                          out_type='timestamp')
+
+    INPUTS
+    gain    Scalar | (n_conds,) array-like. Spike rate gain (in spk/s) for
+            each condition, which sets effect size.
+            Scalar : spike rate difference between each successive condition
+            (n_conds,) vector : specific spike rate gain for each condition
+            Set = 0 to simulate no expected difference between conditions.
+            Default: 5.0 (5 spk/s difference btwn each condition)
+
+    offset  Scalar. Baseline rate added to condition effects. Default: 5.0 spk/s
+
+    n_conds Int. Number of distinct conditions/groups to simulate. Default: 2
+
+    n_trials Int. Number of trials/observations to simulate. Default: 1000
+
+    window  Scalar. Time window to count simulated spikes over. Can set = 1
+            if you want spike *counts*, rather than rates. Default: 1.0 s
+
+    seed    Int. Random generator seed for repeatable results.
+            Set=None [default] for actual random numbers.
+
+    out_type String. Format of output spike trains:
+            'timestamp' : Spike timestamps in s relative to trial starts [default]
+            'boolean'   : Binary (0/1) vectors flagging spike times
+
+    RETURNS
+    trains  (n_trials,) of object | (n_trials,n_timepts) of bool.
+            Simulated Poisson spike trains, either as list of timestamps relative
+            to trial start or as binary vector for each trial (depending on out_type).
+
+    labels  (n_trials,) of int. Condition/group labels for each trial.
+            Sorted in group order to simplify visualization.
+    """
+    # TODO  Add support for muliple units w/ varying effect probability or size?
+
+    if seed is not None: np.random.seed(seed)
+
+    assert out_type in ['timestamp','boolean'], \
+        ValueError("Unsupported value '%s' given for <out_type>. Should be 'timestamp' or 'boolean'" \
+                   % out_type)
+
+    # Is gain scalar-valued or array-like?
+    scalar_gain = not isinstance(gain, (list, tuple, np.ndarray))
+
+    if not scalar_gain:
+        gain = np.asarray(gain)
+        assert len(gain) == n_conds, \
+            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
+                       % (len(gain), n_conds))
+
+    # Create (nTrials,) vector of group labels (ints in set 0-n_conds-1)
+    n_reps = ceil(n_trials/n_conds)
+    labels = np.tile(np.arange(n_conds),(n_reps,))[0:n_trials]
+    # For easy visualization, sort trials by group number
+    labels.sort()
+
+    # Per-trial Poisson rate parameters = expected number of spikes/s
+    # Single gain = incremental difference btwn cond 0 and 1, 1 and 2, etc.
+    if scalar_gain: lambdas = (offset + gain*labels)
+    # Hand-set gain specific for each condition
+    else:           lambdas = (offset + gain[labels])
+
+    if out_type == 'timestamp':
+        trains = np.empty((n_trials,),dtype=object)
+    else:
+        n_timepts = int(round(window*1000))
+        trains = np.zeros((n_trials,n_timepts),dtype=bool)
+
+    # Simulate Poisson spike trains with given lambda for each trial
+    for i_trial,lam in enumerate(lambdas):
+        # Simulate inter-spike intervals. Poisson process has exponential ISIs.
+        # HACK Generate expected number of spikes + 50% extra, truncate below
+        n_spikes_exp = lam*window
+        ISIs = np.random.exponential(1/lam,(int(round(1.5*n_spikes_exp)),))
+
+        # Integrate ISIs to get actual spike times
+        timestamps = np.cumsum(ISIs)
+        # Keep only spike times within desired time window
+        timestamps = timestamps[timestamps < window]
+
+        if out_type == 'timestamp':
+            trains[i_trial] = timestamps
+        # Convert timestamps to boolean spike train
+        else:
+            idxs = np.floor(timestamps*1000).astype('int')
+            trains[i_trial,idxs] = True
+
+    return trains, labels
 
 
 #==============================================================================
