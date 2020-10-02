@@ -663,7 +663,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
     # Reshape data array -> (n_timepts_in,nDataSeries) matrix
     data, data_shape = _reshape_data(data,axis)
-    n_timepts_in,n_series = data.shape
+    n_timepts_in = data.shape[0]
 
     timepts_out = np.arange(buffer,n_timepts_in-buffer,downsmp)
 
@@ -681,11 +681,12 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
     # Compute FFT of data
     data = fft(data, n=n_fft,axis=0, **_FFTW_KWARGS_DEFAULT)
-
-    # Reshape data -> (1,n_timepts,...) (insert axis 0 for wavelet scales/frequencies)
-    # Reshape wavelets -> (n_freqs,n_timepts,1,1...) to broadcast
+    
+    # Reshape data -> (1,n_timepts,n_series) (insert axis 0 for wavelet scales/frequencies)
+    # Reshape wavelets -> (n_freqs,n_timepts,1) to broadcast 
+    #  (except for special case of 1D data with only a single time series)
     data = data[np.newaxis,...]
-    wavelets_fft = wavelets_fft[:,:,np.newaxis]
+    if data.ndim == 3: wavelets_fft = wavelets_fft[:,:,np.newaxis]
 
     spec = ifft(data*wavelets_fft, n=n_fft,axis=1, **_FFTW_KWARGS_DEFAULT)[:,timepts_out,...]
 
@@ -876,7 +877,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
     # Reshape data array -> (n_timepts_in,nDataSeries) matrix
     data, data_shape = _reshape_data(data,axis)
-    n_timepts_in,n_series = data.shape
+    if data.ndim == 1:  n_timepts_in,n_series = data.shape[0],1
+    else:               n_timepts_in,n_series = data.shape
     n_freqs = len(freqs)
 
     timepts_out     = np.arange(buffer,n_timepts_in-buffer,downsmp)
@@ -1072,11 +1074,14 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     if data_type is None: data_type = _infer_data_type(data1)
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
+        assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
+        assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
+        
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
                                           method=method,signal='lfp',**kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp',**kwargs)
-        if axis > time_axis: axis += 1   # Account for new frequency axis
+        if axis >= time_axis: axis += 1   # Account for new frequency axis
     else:
         freqs = []
         timepts = []
@@ -1260,11 +1265,14 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     if data_type is None: data_type = _infer_data_type(data1)
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
+        assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
+        assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
+        
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
-        if axis > time_axis: axis += 1   # Account for new frequency axis
+        if axis >= time_axis: axis += 1   # Account for new frequency axis
     else:
         freqs = []
         timepts = []
@@ -1399,11 +1407,14 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     if data_type is None: data_type = _infer_data_type(data1)
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
+        assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
+        assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
+        
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
-        if axis > time_axis: axis += 1   # Account for new frequency axis
+        if axis >= time_axis: axis += 1   # Account for new frequency axis
     else:
         freqs = []
         timepts = []
@@ -1552,7 +1563,7 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None,
                                             **kwargs)
         # Frequency axis always inserted just before time axis, so if
         # observation/trial axis is later, must increment it
-        if axis > time_axis: axis += 1
+        if axis >= time_axis: axis += 1
     else:
         freqs = []
         timepts = []
@@ -1654,7 +1665,7 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
 
         # Frequency axis always inserted just before time axis, so if
         # observation/trial axis is later, must increment it
-        if axis > time_axis: axis += 1
+        if axis >= time_axis: axis += 1
 
         # Insert singleton dimension into spkdata to match freq dim in lfpdata
         spkdata = spkdata[np.newaxis,:,:]
@@ -1680,7 +1691,7 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
     # the first place, but makes axis bookeeping tractable)
     spkdata = spkdata.squeeze(axis=0)
 
-    n_freqs,n_timepts,_ = lfpdata.shape
+    n_freqs = lfpdata.shape[0]
     n_timewins = timewins.shape[0]
 
     # Normalize LFP spectrum/spectrogram so data is all unit-length complex vectors

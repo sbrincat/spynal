@@ -31,7 +31,7 @@ Created on Mon Aug 13 14:38:34 2018
 # TODO  Generalize basic functions (count,2bool,etc.) to arbitrary shape of spike_times array?
 # TODO  Add ISI/autocorrelation stats?
 
-from math import isclose, ceil
+from math import isclose, ceil, sqrt
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -720,7 +720,7 @@ def pool_electrode_units_spike_times(spike_times_sua, electrodes, elec_set=None,
 
 
 #==============================================================================
-# Synthetic data generation functions
+# Synthetic data generation and testing functions
 #==============================================================================
 def simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
                          window=1.0,seed=None):
@@ -867,10 +867,15 @@ def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
 
     # Simulate Poisson spike trains with given lambda for each trial
     for i_trial,lam in enumerate(lambdas):
+        # Lambda=0 implies no spikes at all, so leave empty
+        if lam == 0:
+            if out_type == 'timestamp': trains[i_trial] = np.asarray([],dtype=object)
+            continue
+        
         # Simulate inter-spike intervals. Poisson process has exponential ISIs.
-        # HACK Generate expected number of spikes + 50% extra, truncate below
+        # HACK Generate 2x expected number of spikes, truncate below
         n_spikes_exp = lam*window
-        ISIs = np.random.exponential(1/lam,(int(round(1.5*n_spikes_exp)),))
+        ISIs = np.random.exponential(1/lam,(int(round(2*n_spikes_exp)),))
 
         # Integrate ISIs to get actual spike times
         timestamps = np.cumsum(ISIs)
@@ -886,6 +891,88 @@ def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
 
     return trains, labels
 
+
+def test_rate(method, plot=False, rates=(5,10,20,40), n_trials=1000, **kwargs):
+    """
+    Basic testing for functions estimating spike rate over time.
+    
+    Generates synthetic spike train data with given underlying rates,
+    estimates rate using given function, and compares estimated to expected.
+    
+    means,sems = test_rate(method,plot=False,
+                            rates=(5,10,20,40),n_trials=1000, **kwargs)
+                              
+    INPUTS
+    method  String. Name of rate estimation function to test:
+            'bin_rate' | 'density'
+            
+    plot    Bool. Set=True to plot test results. Default: False
+    
+    rates   (n_rates,) array-like. List of expected spike rates to test
+            Default: (5,10,20,40)
+            
+    n_trials Int. Number of trials to include in simulated data. Default: 1000
+
+    **kwargs All other keyword args passed to rate estimation function
+    
+    RETURNS
+    means   (n_rates,) ndarray. Estimated mean rate for each expected rate
+    sems    (n_rates,) ndarray. SEM of mean rate for each expected rate
+    
+    ACTION
+    Throws an error if any estimated rate is too far from expected value
+    If <plot> is True, also generates a plot summarizing expected vs estimated rates
+    """            
+    if method in ['bin','bin_rate']:
+        rate_func = bin_rate
+        n_timepts = 20
+        tbool     = np.ones((n_timepts,),dtype=bool)
+    elif method == 'density':
+        rate_func = density
+        n_timepts = 1001
+        # HACK For spike density method, remove edges, which are influenced by boundary artifacts
+        t         = np.arange(0,1.001,0.001)
+        tbool     = (t > 0.1) & (t < 0.9)
+    else:
+        raise ValueError("Unsupported option '%s' given for <method>. \
+                         Should be 'bin_rate'|'density'" % method)
+       
+    rates = np.asarray(rates)
+                            
+    means = np.empty((len(rates),))
+    sems = np.empty((len(rates),))
+        
+    for i,rate in enumerate(rates):
+        # Generate simulated spike train data and compute spike rates
+        trains,_ = simulate_spike_trains(gain=0.0,offset=float(rate),
+                                         n_conds=1,n_trials=n_trials,seed=0)
+        
+        spike_rates,t = rate_func(trains, lim=[0,1], **kwargs)
+        # Take average across timepoints -> (n_trials,)
+        spike_rates = spike_rates[:,:,tbool].mean(axis=2).squeeze(axis=1)
+        
+        # Compute mean and SEM across trials
+        means[i] = spike_rates.mean(axis=0)
+        sems[i]  = spike_rates.std(axis=0,ddof=0) / sqrt(n_trials)
+        
+    if plot:
+        fig = plt.figure()
+        fig.add_subplot(111,aspect='equal')        
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.plot([0,1.1*rates[-1]], [0,1.1*rates[-1]], '-', color='k', linewidth=1)
+        plt.errorbar(rates, means, 3*sems, marker='o')
+        
+    # Determine if any estimated rates are outside acceptable range (expected mean +/- 3*SEM)
+    errors = np.abs(means - rates) / sems
+
+    # Find estimates that are clearly wrong
+    bad_estimates = (errors > 3.3)        
+    if bad_estimates.any():         
+        if plot: plt.plot(rates[bad_estimates], means[bad_estimates]+0.1, '*', color='k')
+        raise AssertionError("%d tested rates failed" % bad_estimates.sum())
+        
+    return means, sems
+                
 
 #==============================================================================
 # Helper functions

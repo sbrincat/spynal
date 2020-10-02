@@ -24,10 +24,11 @@ Created on Mon Sep 17 00:05:25 2018
 # TODO  Group2idx-type mechanism to convert arbitrary X to integer indexes in ANOVA models
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
-from patsy import DesignMatrix
+from patsy import DesignMatrix, dmatrix
 
 
 # =============================================================================
@@ -58,40 +59,43 @@ def neural_info(X, y, method='pev', **kwargs):
     exp_var (...,n_terms,...). Measure of information in y about X
             Shape is same as y, with observation axis reduced to length = n_terms.
     """
-    if method.upper() == 'pev':
+    method = method.lower()
+    
+    if method == 'pev':
         return pev(X,y,**kwargs)
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
 
 
-def pev(X, y, model, axis=0, as_pct=True, return_stats=False, **kwargs):
+def pev(X, y, axis=0, model=None, as_pct=True, return_stats=False, **kwargs):
     """
     Mass-univariate percent explained variance (PEV) analysis.
 
     Computes the percentage (or proportion) of variance explained in data y by
     predictors in design matrix X, using one of a few types of linear models.
 
-    exp_var = pev(X,y,model,axis=0,as_pct=True,return_stats=False,**kwargs)
-    exp_var,stats = pev(X,y,model,axis=0,as_pct=True,return_stats=False,**kwargs)
+    exp_var = pev(X,y,axis=0,model=None,as_pct=True,return_stats=False,**kwargs)
+    exp_var,stats = pev(X,y,axis=0,model=None,as_pct=True,return_stats=False,**kwargs)
 
     ARGS
     X       (n_obs,n_terms) array-like. Design matrix (group labels for ANOVA models,
             or regressors for regression model) for each observation (trial).
-            Must be same length as y.shape[0] along dimension DIM.
+            X.shape[0] must be same length as observation <axis> of <y>.
 
     y       (...,n_obs,...) ndarray. Data to fit with linear model. Axis <axis> should
-            correspond to observations (trials), while rest of axis(s) are any
+            correspond to observations (trials), while any other axes can be any
             independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels X.
+            that will be fit separately using the same list of group labels <X>.
+
+    axis    Int. Data axis corresponding to distinct observations. Default: 0
 
     model   String. Type of linear model to fit, in order to compute PEV.
             'anova1'    : 1-way ANOVA model. X is (n_obs,) vector)
             'anova2'    : 2-way ANOVA model (X must be a (n_obs,2) array)
             'anovan'    : n-way ANOVA model (X must be a (n_obs,n_terms) array)
             'regress'   : linear regression model (X is (n_obs,nModelParams) array)
-
-    axis    Int. Data axis corresponding to distinct observations. Default: 0
+            Default: we attempt to infer from <X>. Safest to set explicitly.
 
     as_pct  Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
             Otherwise PEV returned as a proportion (range ~ 0-1)
@@ -108,14 +112,34 @@ def pev(X, y, model, axis=0, as_pct=True, return_stats=False, **kwargs):
     stats   Dict. If <return_stats> set, statistics on each fit also returned.
             See model function for specific stats returned by each.
     """
+    # TODO Add anovan model
+    X = np.asarray(X)
+
+    # Attempt to infer proper linear model based on X
+    if model is None:
+        # If X is vector-valued, assume 1-way ANOVA model
+        if (X.ndim == 1) or (X.shape[1] == 1):  model = 'anova1'
+        # If X has constant/intercept term (column of all 1's), assume regression model
+        elif (X == 1).all(axis=0).any():        model = 'regress'
+        # If X has > 3 columns, assume n-way ANOVA
+        # TODO ADD: elif X.shape[1] > 3:                    model = 'anovan'
+        # Otherwise, could be ANOVA2, ANOVAn, regress ... dangerous to assume
+        else:
+            raise ValueError("Could not determine appropriate linear model.\n" \
+                             "Please set explicitly using <model> argument.")
+                
+        print("Assuming '%s' linear model based on given <X> labels/design matrix" % model)
+        
+    model = model.lower()
+    
     # Compute PEV based on 1-way ANOVA model
-    if model.upper() == 'anova1':
+    if model == 'anova1':
         return anova1(X,y,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
     # Compute PEV based on 2-way ANOVA model
-    elif model.upper() == 'anova2':
+    elif model == 'anova2':
         return anova2(X,y,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
     # Compute PEV based on 2-way ANOVA model
-    elif model.lower() == 'regress':
+    elif model == 'regress':
         return regress(X,y,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
     else:
         raise ValueError("'%s' model is not supported for computing PEV" % model)
@@ -828,3 +852,126 @@ def _unsorted_unique(x):
     idxs = np.unique(x,return_index=True)[1]
     return x[np.sort(idxs)]
 
+
+#==============================================================================
+# Testing functions
+#==============================================================================
+def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs):
+    """
+    Basic testing for functions estimating neural information.
+    
+    Generates synthetic spike rate data, estimates information using given method,
+    and compares estimated to expected values.
+    
+    info,sd = test_info(method,test='gain',plot=False,n_reps=20, **kwargs)
+                              
+    INPUTS
+    method  String. Name of information function to test:
+            'pev' | 'anova1' | 'anova2' | 'regress'
+            
+    test    String. Type of test to run. Default: 'gain'. Options:
+            'gain'  Tests multiple values between-condition rate difference (gain)
+                    Checks for monotonically increasing information
+            'n'     Tests multiple values of number of trials (n)
+                    Checks that information doesn't vary with n.                    
+            'bias'  Tests multiple n values with 0 btwn-cond difference
+                    Checks that information is not > 0 (unbiased)
+            'n_conds' Tests multiple values for number of conditions
+                    (no actual checking, just to see behavior of info measure)
+            
+    values  (n_values,) array-like. List of values to test. 
+            Interpretation and defaults are test-specific:
+            'gain'  Btwn-condition rate differences (gains). Default: [1,2,5,10,20]
+            'n'     Trial numbers. Default: [25,50,100,200,400,800]
+            
+    plot    Bool. Set=True to plot test results. Default: False
+    
+    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
+    
+    **kwargs All other keyword args passed to information estimation function
+    
+    RETURNS
+    info    (n_values,) ndarray. Estimated information for each tested value
+    sd      (n_values,) ndarray. Across-run SD of information for each tested value
+    
+    ACTION
+    Throws an error if any estimated information is too far from expected value
+    If <plot> is True, also generates a plot summarizing estimated information
+    """    
+    from spike_analysis import simulate_spike_rates
+    
+    test = test.lower()
+    method = method.lower()
+    
+    # Set defaults for tested values and set up rate generator function depending on <test>
+    if test == 'gain':
+        values = [1,2,5,10,20] if values is None else values
+        gen_rates = lambda gain,seed: simulate_spike_rates(gain=float(gain),offset=5.0,
+                                                           n_conds=2,n_trials=1000,
+                                                           seed=seed)
+        
+    elif test in ['n','n_trials','bias']:
+        values = [25,50,100,200,400,800] if values is None else values
+        gain = 0.0 if test == 'bias' else 5.0
+        gen_rates = lambda n_trials,seed: simulate_spike_rates(gain=gain,offset=5.0,
+                                                               n_conds=2,n_trials=n_trials,
+                                                               seed=seed)
+
+    elif test == 'n_conds':
+        values = [2,4,8] if values is None else values
+        gen_rates = lambda n_conds,seed: simulate_spike_rates(gain=10.0,offset=5.0,
+                                                              n_conds=n_conds,n_trials=1000,
+                                                              seed=seed)
+        
+    else:
+        raise ValueError("Unsupported value '%s' set for <test>" % test)
+            
+    # Deal with special-case linear models -- funnel into pev function 
+    if method in ['pev','regress','anova1','anova2','anovan']:
+        method_ = 'pev'
+        # For PEV, additional argument to neural_info() specifying linear model to use
+        if method == 'pev': kwargs.update({'model':'anova1'})
+        else:               kwargs.update({'model':method})
+    else:
+        method_ = method 
+        
+    info = np.empty((len(values),n_reps))
+        
+    for i,value in enumerate(values):        
+        for seed in range(n_reps):
+            # Generate simulated spike rates with given test value and random seed
+            rates,labels = gen_rates(value,seed)
+
+            # For regression model, convert labels list -> design matrix, append intercept term 
+            if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
+                            
+            info[i,seed] =  neural_info(rates,labels,method=method_,**kwargs)            
+            
+    # Compute mean and std dev across different reps of simulation            
+    sd = info.std(axis=1,ddof=0)
+    info = info.mean(axis=1)
+    
+    if plot:
+        plt.figure()
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.errorbar(values, info, sd, marker='o')
+        plt.xlabel(test)
+        plt.ylabel("Information (%s)" % method_)
+        
+    # Determine if test actually produced the expected values
+    # 'gain' : Test if information increases monotonically with gain
+    if test == 'gain':
+        assert (np.sort(info) == info).all(), \
+            AssertionError("Information does not increase monotonically with between-condition rate difference")
+                                
+    # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
+    elif test in ['n','n_trials']:
+        assert info.ptp() < sd.max(), \
+            AssertionError("Information has larger than expected range across n's (likely biased by n)")
+        
+    # 'bias': Test if information is not > 0 if gain = 0, for varying n
+    elif test == 'bias':
+        assert (info < sd).all(), \
+            AssertionError("Information is non-zero for 0 rate difference between conditions")
+         
+    return info, sd
