@@ -20,7 +20,7 @@ Created on Mon Sep 17 00:05:25 2018
 
 @author: sbrincat
 """
-# TODO  Actually implement other info metrics -- mutual info, AUC-ROC, Cohen's d', etc.
+# TODO  Actually implement other info metrics -- mutual info, AUC-ROC, etc.
 # TODO  Group2idx-type mechanism to convert arbitrary X to integer indexes in ANOVA models
 
 import numpy as np
@@ -31,9 +31,6 @@ from sklearn.linear_model import LinearRegression
 from patsy import DesignMatrix, dmatrix
 
 
-# =============================================================================
-# Neural information functions
-# =============================================================================
 def neural_info(X, y, method='pev', **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
@@ -63,11 +60,143 @@ def neural_info(X, y, method='pev', **kwargs):
     
     if method == 'pev':
         return pev(X,y,**kwargs)
+    elif method in ['dprime','d','cohensd']:
+        return dprime(X,y,**kwargs)
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
 
 
+
+# =============================================================================
+# d-prime (Cohen's d) analysis
+# =============================================================================
+def dprime(labels, data, axis=0, signed=True, groups=None):
+    """
+    Mass-univariate d' metric of difference between two data distributions
+
+    d = dprime(labels,data,axis=0,signed=True,groups=None)
+
+    Calculates d' (aka Cohen's d) metric of difference btwn two distributions, 
+    under (weak-ish) assumption they are IID normal, using formula:
+    d' = (mu1 - mu2) / sd_pooled
+
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+
+    Note: This is a wrapper around dPrimeTwoGroups(), which accepts the standard
+    two data distributions as arguments, and is faster.
+
+    ARGS
+    labels      (nObs,) array=like. List of group labels labelling observations from 
+                each group. Should be only two groups represented, unless sub-selecting 
+                two groups using <groups> argument.
+
+    data        (...,nObs,...) ndarray. Data values for both distributions to be compared.  
+
+    axis        Scalar. Axis of data array to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    signed      Bool. If True [default], returns signed d'. If False, returns absolute
+                value of d', corresponding to finding "preferred" distribution for each
+                data series (non-trial dims). 
+                
+                NOTE: absolute d' is a biased metric--its expected value is > 0 even 
+                for identical data distributions. You might want to use resampling
+                methods estimate the bias and correct for it.
+
+    groups      (2,) array-like. Which group labels from <labels> to use. 
+                Useful for enforcing a given order to groups (sign to results d'), 
+                or for computing d' btwn pairs of groups in data with > 2 groups,
+                Default: unique(labels) (all distinct values in <labels>)
+
+    RETURNS
+    d           (...,nObs,...) ndarray.  d' btwn. groups along given axis. 
+
+    REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
+    """
+    # TODO Should we default <groups> to be in alphanumeric order or in order of appearance in <labels>?
+    
+    # Find set of unique group labels in <labels>
+    if groups is None: groups = np.unique(labels)
+
+    assert len(groups) == 2, \
+        "dprime: d' computation only supported for 2 groups (%d given)" % len(groups)
+
+    # Split data into 2 groups and use dprime_2groups() to actually do computation
+    return dprime_2groups(data.compress(labels == groups[0], axis=axis),
+                          data.compress(labels == groups[1], axis=axis), 
+                          axis=axis, signed=signed)
+
+def dprime_2groups(data1, data2, axis=0, signed=True):
+    """
+    Mass-univariate d' metric of difference between two data distributions
+    
+    d = dprime_2groups(data1,data2,axis=0,signed=True)
+
+    Calculates d' (aka Cohen's d) metric of difference btwn two distributions, 
+    under (weak-ish) assumption they are IID normal, using formula:
+    d' = (mu1 - mu2) / sd_pooled
+    
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+    
+    Note: For convenience, dprime() is also provided as a wrapper around this
+    function that accepts standard data,label arguments.
+    
+    ARGS
+    data1/2     (...,nObs1/nObs2,...) ndarrays of arbitary size except for <axis>. 
+                Sets of values for each of two distributions to be compared.  
+
+    axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    OPTIONAL INPUT  Additional optional parameters, given as name/value pairs in varargin:
+    signed      Bool. If True [default], returns signed d'. If False, returns absolute
+                value of d', corresponding to finding "preferred" distribution for each
+                data series (non-trial dims).
+
+                NOTE: absolute d' is a biased metric--its expected value is > 0 even 
+                for identical data distributions. You might want to use resampling
+                methods estimate the bias and correct for it.
+
+    RETURNS
+    d           (...,nObs,...) ndarray.  d' btwn. data1 and data2 along given axis. 
+
+    REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
+    """
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
+    
+    assert (n1 != 0) and (n2 != 0), \
+        "dprime: Data contains no observations (trials) for one or more groups"
+
+    # Compute difference of group means
+    d= data1.mean(axis=axis,keepdims=True) - data2.mean(axis=axis,keepdims=True)
+
+    # Compute group std dev's
+    sd1	= data1.std(axis=axis,ddof=1,keepdims=True)
+    sd2	= data2.std(axis=axis,ddof=1,keepdims=True)
+    # Compute pooled standard deviation across two groups, using standard formula
+    sdPooled = np.sqrt( ((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2) )
+
+    d = d / sdPooled
+
+    # Deal w/ special case of mu1-mu2 = 0 and both SD's = 0 
+    # (identical distributions for 2 cond's) -> d' = 0
+    d[np.isnan(d)] = 0
+
+    # Return unsigned (absolute) d', if requested
+    if not signed: d = np.abs(d)
+
+    return d
+  
+  
+# =============================================================================
+# Percent explained variance (PEV) and specific linear model functions for PEV analysis
+# =============================================================================
 def pev(X, y, axis=0, model=None, as_pct=True, return_stats=False, **kwargs):
     """
     Mass-univariate percent explained variance (PEV) analysis.
@@ -148,9 +277,6 @@ percent_explained_variance = pev
 """ Aliases function pev as percent_explained_variance """
 
 
-# =============================================================================
-# Specific model functions
-# =============================================================================
 def anova1(X, y, axis=0, omega=True, gm_method='mean_of_obs',
            as_pct=True, return_stats=False):
     """
@@ -648,7 +774,7 @@ def regress(X, y, axis=0, X_terms=None, constant=True, total=False,
 
 
 # =============================================================================
-# Deisgn matrix-related functions
+# Design matrix-related functions
 # =============================================================================
 def patsy_terms_to_columns(X):
     """
@@ -684,7 +810,7 @@ def patsy_terms_to_columns(X):
 
 
 # =============================================================================
-# PEV computation functions
+# Low-level PEV computation functions
 # =============================================================================
 def R_squared(SS_model, SS_total):
     """
@@ -925,6 +1051,8 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
         
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
+        
+    method_ = method
             
     # Deal with special-case linear models -- funnel into pev function 
     if method in ['pev','regress','anova1','anova2','anovan']:
@@ -932,9 +1060,10 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
         # For PEV, additional argument to neural_info() specifying linear model to use
         if method == 'pev': kwargs.update({'model':'anova1'})
         else:               kwargs.update({'model':method})
-    else:
-        method_ = method 
-        
+    # For d', reverse default grouping (bc in stimulated rates group1 > group0)    
+    elif method in ['dprime','d','cohensd']:
+        if 'groups' not in kwargs: kwargs.update({'groups':[1,0]})
+                 
     info = np.empty((len(values),n_reps))
         
     for i,value in enumerate(values):        
@@ -945,7 +1074,7 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
             # For regression model, convert labels list -> design matrix, append intercept term 
             if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
                             
-            info[i,seed] =  neural_info(rates,labels,method=method_,**kwargs)            
+            info[i,seed] =  neural_info(labels,rates,method=method_,**kwargs)            
             
     # Compute mean and std dev across different reps of simulation            
     sd = info.std(axis=1,ddof=0)
@@ -955,7 +1084,8 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
         plt.figure()
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
         plt.errorbar(values, info, sd, marker='o')
-        plt.xlabel(test)
+        xlabel = 'n' if test == 'bias' else test
+        plt.xlabel(xlabel)
         plt.ylabel("Information (%s)" % method_)
         
     # Determine if test actually produced the expected values
