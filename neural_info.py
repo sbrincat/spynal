@@ -62,11 +62,171 @@ def neural_info(X, y, method='pev', **kwargs):
         return pev(X,y,**kwargs)
     elif method in ['dprime','d','cohensd']:
         return dprime(X,y,**kwargs)
+    elif method in ['auroc','roc','aucroc','auc']:
+        return auroc(X,y,**kwargs)
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
 
+# =============================================================================
+# Area under ROC curve (AUROC) analysis
+# =============================================================================
+def auroc(labels, data, axis=0, signed=True, groups=None):
+    """
+    Mass-univariate area-under-ROC-curve metric of discriminability
+    between two data distributions
+    
+    roc = auroc(labels,data,axis=0,signed=True,groups=None)
 
+    Calculates area under receiver operating characteristic curve (AUROC)
+    relating hits to false alarms in a binary classification/discrimination
+
+    AUROC = 0.5 indicates no difference between distributions, and 
+    AUROC = 1 indicates data distributions are completely discriminable.
+
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+
+    Note: This is a wrapper around auroc_2groups(), which accepts
+    two data distributions as arguments, and is faster.
+
+    ARGS
+    labels      (nObs,) array=like. List of group labels labelling observations from 
+                each group. Should be only two groups represented, unless sub-selecting 
+                two groups using <groups> argument.
+
+    data        (...,nObs,...) ndarray. Data values for both distributions to be compared.  
+
+    axis        Scalar. Axis of data array to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    signed      Bool. If True [default], returns signed AUROC. If False, returns absolute
+                value of AUROC, corresponding to finding "preferred" distribution for each
+                data series (non-trial dims). 
+                
+                NOTE: absolute AUROC is a biased metric--its expected value is > 0 even 
+                for identical data distributions. You might want to use resampling
+                methods estimate the bias and correct for it.
+
+    groups      (2,) array-like. Which group labels from <labels> to use. 
+                Useful for enforcing a given order to groups (sign to results AUROC), 
+                or for computing AUROC btwn pairs of groups in data with > 2 groups,
+                Default: unique(labels) (all distinct values in <labels>)
+
+    RETURNS
+    roc         (...,nObs,...) ndarray.  AUROC btwn. groups along given axis. 
+    """
+    # TODO Should we default <groups> to be in alphanumeric order or in order of appearance in <labels>?
+    
+    # Find set of unique group labels in <labels>
+    if groups is None: groups = np.unique(labels)
+
+    assert len(groups) == 2, \
+        "auroc: computation only supported for 2 groups (%d given)" % len(groups)
+
+    # Split data into 2 groups and use auroc_2groups() to actually do computation
+    return auroc_2groups(data.compress(labels == groups[0], axis=axis),
+                         data.compress(labels == groups[1], axis=axis), 
+                         axis=axis, signed=signed)
+
+def auroc_2groups(data1, data2, axis=0, signed=True):
+    """
+    Mass-univariate area-under-ROC-curve metric of discriminability
+    between two data distributions
+        
+    roc_area = auroc_2groups(data1,data2,axis=0,signed=True)
+
+    Calculates area under receiver operating characteristic curve (AUROC)
+    relating hits to false alarms in a binary classification/discrimination
+
+    AUROC = 0.5 indicates no difference between distributions, and 
+    AUROC = 1 indicates data distributions are completely discriminable.
+    
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+    
+    Note: For convenience, auroc() is also provided as a wrapper around this
+    function that accepts standard data,label arguments.
+    
+    ARGS
+    data1/2     (...,nObs1/nObs2,...) ndarrays of arbitary size except for <axis>. 
+                Sets of values for each of two distributions to be compared.  
+
+    axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    OPTIONAL INPUT  Additional optional parameters, given as name/value pairs in varargin:
+    signed      Bool. If True [default], returns signed AUROC using given order of data1/2,
+                giving a measure which can be < 0.5 if data2 is "preferred". 
+                If false, rectifies AUROC around 0.5: ROCunsigned = abs(ROC-0.5)+0.5,
+                essentially giving an unsigned/absolute measure of neural information 
+                (ie, returning the same value whether data1 > data2 or vice versa).
+        
+                NOTE: unsigned AUROC is a biased metric--its expected value is > 0 even 
+                for identical data distributions. You might want to use resampling
+                methods estimate the bias and correct for it.
+
+    RETURNS
+    roc_area    (...,nObs,...) ndarray.  AUROC btwn. data1 and data2 along given axis. 
+
+    """
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
+    
+    assert (n1 != 0) and (n2 != 0), \
+        "auroc: Data contains no observations (trials) for one or more groups"
+
+    # Reshape data arrays -> (n_observations,n_data_series) matrix
+    data1, data1_shape = _reshape_data(data1,axis)
+    data2, data2_shape = _reshape_data(data2,axis)
+
+    n1 = data1.shape[0]
+    n2 = data2.shape[0]
+    
+    if data1.ndim > 1:
+        n_series = data1.shape[1]
+                    
+        assert data1.shape[1] == data2.shape[1], \
+            "auroc: Data distributions to compare must have same number of data series (timepts,freqs,channels,etc.) \
+             (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
+    else:
+        n_series = 1
+        
+    roc_area = np.empty((1,n_series))        
+  
+    for i_series in range(n_series):    
+        data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
+        data2_series = data2[:,i_series] if n_series > 1 else data2.squeeze()
+
+        # Criterion values are all unique values in full set of both distributions
+        criteria    = np.flip(np.unique(np.hstack((data1_series, data2_series))))
+        n_crit      = len(criteria)
+
+        # Calculate hit and false alarm rates for each criterion value
+        # False alarm rate = proportion of data2 values "incorrectly" > each tested criterion value
+        # Hit rate = proportion of data1 values "correctly" > each tested criterion value
+        # For each, concatenate in the trivial end point where FA = hit rate = 1
+        fa_rate  	= np.ones((n_crit+1,))
+        hit_rate    = np.ones((n_crit+1,))
+        for i_crit,crit in enumerate(criteria):
+            fa_rate[i_crit]     = (data2_series > crit).sum()
+            hit_rate[i_crit]    = (data1_series > crit).sum()
+        
+        fa_rate[0:-1]   = fa_rate[0:-1] / n2
+        hit_rate[0:-1]  = hit_rate[0:-1] / n1
+
+        # Calculate area under ROC curve (FA rate x hit_rate) by discrete integration
+        roc_area[i_series] = (np.diff(fa_rate) * (hit_rate[:-1] + hit_rate[1:])/2).sum()
+  
+    # If desired, calculate absolute/unsigned area under ROC metric
+    if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
+  
+    roc_area = _unreshape_data(roc_area,data1_shape,axis=axis)
+        
+    return roc_area
+  
 
 # =============================================================================
 # d-prime (Cohen's d) analysis
@@ -81,11 +241,15 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     under (weak-ish) assumption they are IID normal, using formula:
     d' = (mu1 - mu2) / sd_pooled
 
+    d' = 0 indicates no difference between distribution means. d' is unbounded, and
+    increases monotonically with the difference btwn group means and inversely with
+    the pooled std deviation.
+
     Computation is performed over trial/observation <axis>, in mass-univariate 
     fashion across data series in all other data dimensions (channels, time points, 
     frequencies, etc.).
 
-    Note: This is a wrapper around dPrimeTwoGroups(), which accepts the standard
+    Note: This is a wrapper around dprime_2groups(), which accepts
     two data distributions as arguments, and is faster.
 
     ARGS
@@ -139,6 +303,10 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
     under (weak-ish) assumption they are IID normal, using formula:
     d' = (mu1 - mu2) / sd_pooled
     
+    d' = 0 indicates no difference between distribution means. d' is unbounded, and
+    increases monotonically with the difference btwn group means and inversely with
+    the pooled std deviation.
+    
     Computation is performed over trial/observation <axis>, in mass-univariate 
     fashion across data series in all other data dimensions (channels, time points, 
     frequencies, etc.).
@@ -174,7 +342,7 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
         "dprime: Data contains no observations (trials) for one or more groups"
 
     # Compute difference of group means
-    d= data1.mean(axis=axis,keepdims=True) - data2.mean(axis=axis,keepdims=True)
+    d = data1.mean(axis=axis,keepdims=True) - data2.mean(axis=axis,keepdims=True)
 
     # Compute group std dev's
     sd1	= data1.std(axis=axis,ddof=1,keepdims=True)
@@ -1060,9 +1228,14 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
         # For PEV, additional argument to neural_info() specifying linear model to use
         if method == 'pev': kwargs.update({'model':'anova1'})
         else:               kwargs.update({'model':method})
-    # For d', reverse default grouping (bc in stimulated rates group1 > group0)    
-    elif method in ['dprime','d','cohensd']:
+        
+    # For these signed binary methods, reverse default grouping bc in stimulated rates,
+    # group1 > group0, but signed info assumes opposite preference
+    elif method in ['dprime','d','cohensd', 'auroc','roc','aucroc','auc']:
         if 'groups' not in kwargs: kwargs.update({'groups':[1,0]})
+       
+    # Expected baseline value for no btwn-condition = 0.5 for AUROC, 0 for other methods
+    baseline = 0.5 if method in ['auroc','roc','aucroc','auc'] else 0
                  
     info = np.empty((len(values),n_reps))
         
@@ -1099,9 +1272,9 @@ def test_info(method, test='gain', values=None, plot=False, n_reps=100, **kwargs
         assert info.ptp() < sd.max(), \
             AssertionError("Information has larger than expected range across n's (likely biased by n)")
         
-    # 'bias': Test if information is not > 0 if gain = 0, for varying n
+    # 'bias': Test if information is not > baseline if gain = 0, for varying n
     elif test == 'bias':
-        assert (info < sd).all(), \
-            AssertionError("Information is non-zero for 0 rate difference between conditions")
+        assert ((info - baseline) < sd).all(), \
+            AssertionError("Information is above baseline for no rate difference between conditions")
          
     return info, sd
