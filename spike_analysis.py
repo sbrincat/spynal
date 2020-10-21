@@ -899,8 +899,7 @@ def test_rate(method, plot=False, rates=(5,10,20,40), n_trials=1000, **kwargs):
     Generates synthetic spike train data with given underlying rates,
     estimates rate using given function, and compares estimated to expected.
     
-    means,sems = test_rate(method,plot=False,
-                            rates=(5,10,20,40),n_trials=1000, **kwargs)
+    means,sems = test_rate(method,plot=False,rates=(5,10,20,40),n_trials=1000, **kwargs)
                               
     INPUTS
     method  String. Name of rate estimation function to test:

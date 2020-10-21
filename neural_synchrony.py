@@ -70,7 +70,6 @@ Created on Thu Oct  4 15:28:15 2018
 # TODO  Also option fixed-width vs variable width tapers (cf Fieldtrip)
 # TODO  Also option output signal type to ***Spectrum/ogram func's (complex/power/phase)?
 #       Same for synchrony funcs or stick with return_phase option?
-# TODO  Code general synchrony() wrapper func analogous to spectrogram()
 # TODO  Add Hanning tapers as another spectral analysis option
 # TODO  Build in ability to compute more than just pairwise sync measures?
 
@@ -78,6 +77,7 @@ from math import floor,ceil,log2,pi,sqrt
 from collections import OrderedDict
 from multiprocessing import cpu_count
 import numpy as np
+import matplotlib.pyplot as plt
 
 from scipy.interpolate import interp1d
 from scipy.signal.windows import dpss
@@ -149,7 +149,7 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
 
     if method.lower() == 'multitaper':  spec_fun = multitaper_spectrum
     else:
-        raise ValueError("Unsupported value set for <method>: %s" % method)
+        raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
     spec,freqs = spec_fun(data,smp_rate,axis=axis,signal=signal, **kwargs)
 
@@ -168,7 +168,7 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
                 Arbitrary shape; spectral analysis is computed along axis <axis>.
 
-    smp_rate     Scalar. Data sampling rate (Hz)
+    smp_rate    Scalar. Data sampling rate (Hz)
 
     axis        Int. Axis of <data> to do spectral analysis on
                 (usually time dimension). Default: 0
@@ -202,7 +202,7 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
     elif method.lower() == 'multitaper':    spec_fun = multitaper_spectrogram
     elif method.lower() == 'bandfilter':    spec_fun = bandfilter_spectrogram
     else:
-        raise ValueError("Unsupported value set for <method>: %s" % method)
+        raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
     spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,signal=signal, **kwargs)
 
@@ -996,6 +996,55 @@ def set_filter_params(bands, smp_rate, filt, order=4, form='ba',
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================
+def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwargs):    
+    """
+    Computes pairwise synchrony between pair of channels of continuous raw or
+    spectral (time-frequency) data, using given estimation method
+
+    sync,freqs,timepts= synchrony(data1,data2,axis=0,method='PPC',
+                                  spec_method='wavelet',**kwargs)
+                                  
+    Convenience wrapper function around specific synchrony estimation functions
+    coherence, phase_locking_value, pairwise_phase_consistency
+
+    ARGS
+    data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
+            Can be given as raw LFPs or complex-valued time-frequency transform.
+
+            For raw data, axis corresponding to time must be given in <time_axis>.
+            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+
+            Other than those constraints, data can have arbitrary shape, with
+            analysis performed in mass-bivariate fashion independently
+            along each dimension other than observation <axis> (eg different
+            frequencies, timepoints, conditions, etc.)
+
+    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+
+    method  String. Synchrony estimation method. Options: 'PPC' [default] | 'PLV' | 'coherence'
+            
+    **kwargs    All other kwargs passed as-is to synchrony estimation function;=.
+            See there for details.
+
+    RETURNS
+    sync    ndarray. Synchrony between data1 and data2.
+            If data is spectral, this has shape as data, but with <axis> removed.
+            If data is raw, this has same shape with <axis> removed and a new
+            frequency axis inserted immediately before <time_axis>.
+
+    freqs   (n_freqs,). List of frequencies in coh (only for raw data)
+    timepts (n_timepts,). List of timepoints in coh (only for raw data)
+
+    """
+    if method.lower() in ['ppc','pairwise_phase_consistency']:  sync_fun = pairwise_phase_consistency
+    elif method.lower() in ['plv','phase_locking_value']:       sync_fun = phase_locking_value
+    elif method.lower() in ['coh','coherence']:                 sync_fun = coherence
+    else:
+        raise ValueError("Unsupported value set for <method>: '%s'" % method)
+    
+    return sync_fun(data1, data2, axis=axis, method=spec_method, **kwargs)
+    
+        
 def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
               method='wavelet', data_type=None, smp_rate=None, time_axis=None,
               **kwargs):
@@ -1097,21 +1146,10 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
 
     # Standard across-trial coherence estimator
     if single_trial is None:
-        # Compute cross spectrum and auto-spectra, average across trials
-        # Compute abs() to convert complex coherency -> coherence magnitude
-        # Note: .real deals with floating point error, converts complex dtypes to float
-        S12 = np.mean(data1*data2.conj(), axis=reduce_axes)
-        S1  = np.mean(data1*data1.conj(), axis=reduce_axes).real
-        S2  = np.mean(data2*data2.conj(), axis=reduce_axes).real
-
-        # Calculate coherence as cross-spectrum / product of spectra
-        # Note: .real deals with floating point error, converts complex dtypes to float
-        coh = S12/np.sqrt(S1*S2)
-
-        if return_phase: dphi = np.angle(coh)
-
-        # Absolute value converts complex coherency -> coherence
-        coh = np.abs(np.abs(coh)).real
+        if return_phase:
+            coh,dphi = _spec_to_coh_with_phase(data1, data2, axis=reduce_axes)
+        else:
+            coh = _spec_to_coh(data1, data2, axis=reduce_axes)
         
         if ztransform: coh = ztransform_coherence(coh,df)
 
@@ -1124,9 +1162,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
         n = data1.shape[0]
 
         # Compute cross spectrum and auto-spectra for each observation/trial
-        S12 = data1.conj()*data2
-        S1  = data1.conj()*data1
-        S2  = data2.conj()*data2
+        S12,S1,S2 = _spec_to_csd(data1,data2)
 
         coh = np.zeros_like(data1,dtype=float)
 
@@ -1178,6 +1214,44 @@ def ztransform_coherence(coh, df, beta=23/20):
     return beta*(np.sqrt(-(df-2)*np.log(1-coh**2)) - beta)
 
 
+def _spec_to_coh(data1, data2, axis=0):
+    """ Compute coherence from a pair of spectra/spectrograms """
+    # Compute cross spectrum and auto-spectra, average across trials/tapers
+    # Note: .real deals with floating point error, converts complex dtypes to float        
+    S12 = np.abs(np.mean(data1*data2.conj(), axis=axis)).real
+    S1  = np.mean(data1*data1.conj(), axis=axis).real
+    S2  = np.mean(data2*data2.conj(), axis=axis).real
+
+    # Calculate coherence as cross-spectrum / product of spectra
+    # Note: absolute value of cross-spectrum computed above
+    return S12 / np.sqrt(S1*S2)
+    
+        
+def _spec_to_coh_with_phase(data1, data2, axis=0):
+    """ Compute coherence, relative phase angle from a pair of spectra/spectrograms """
+    # Compute cross spectrum and auto-spectra, average across trials/tapers
+    S12 = np.mean(data1*data2.conj(), axis=axis)
+    S1  = np.mean(data1*data1.conj(), axis=axis).real
+    S2  = np.mean(data2*data2.conj(), axis=axis).real
+
+    # Calculate complex coherency as cross-spectrum / product of spectra
+    coherency = S12 / np.sqrt(S1*S2)
+
+    # Absolute value converts complex coherency -> coherence
+    # Angle extracts mean coherence phase angle
+    # Note: .real deals with floating point error, converts complex dtypes to float
+    return np.abs(coherency).real, np.angle(coherency)        
+
+
+def _spec_to_csd(data1, data2):
+    """ Compute cross spectrum, auto-spectra from a pair of spectra/spectrograms """
+    S12 = data1*data2.conj()
+    S1  = data1*data1.conj()
+    S2  = data2*data2.conj()
+    
+    return S12, S1, S2
+      
+        
 def _csd_to_coh(S12, S1, S2, axis=0):
     """ Compute coherence from cross spectrum, auto-spectra """
     # Average cross and individual spectra across observations/trials
@@ -1186,7 +1260,7 @@ def _csd_to_coh(S12, S1, S2, axis=0):
     S2  = np.mean(S2, axis=axis).real
 
     # Calculate coherence as cross-spectrum / product of spectra
-    return S12/np.sqrt(S1*S2)
+    return S12 / np.sqrt(S1*S2)
 
 
 def phase_locking_value(data1, data2, axis=0, return_phase=False,
@@ -2348,6 +2422,8 @@ def network_simulation(simulation='DhamalaFig3'):
 
     RETURNS
     data        (n_timepts,n_trials,n_channels) ndarray. Simulated data
+    
+    smp_rate    Int. Sampling rate of simulated data (Hz)
 
     REFERENCES
     Dhamala, M., Rangarajan, G., and Ding, M. (2008). Analyzing information flow in
@@ -2385,9 +2461,215 @@ def network_simulation(simulation='DhamalaFig3'):
         data  = simulate_mvar(coeffs,cov=cov,
                               n_timepts=n_timepts,n_trials=n_trials,burnin=burnin)
 
+    else:
+        raise ValueError("%s simulation is not (yet) supported" % simulation)
+    
     return data,smp_rate
 
 
+def test_power(method, plot=False, simulation='DhamalaFig3', n_trials=1000, **kwargs):
+    """
+    Basic testing for functions estimating time-frequency spectral power 
+    
+    Generates synthetic LFP data using given network simulation,
+    estimates spectrogram using given function, and compares estimated to expected.
+    
+    means,sems = test_power(method,plot=False,simulation='DhamalaFig3',n_trials=1000, **kwargs)
+                              
+    INPUTS
+    method  String. Name of time-frequency spectral estimation function to test
+            
+    plot    Bool. Set=True to plot test results. Default: False
+    
+    simulation  String. Name of canned simulation to generate. Default: 'DhamalaFig3'
+            See network_simulation() for details
+            
+    n_trials Int. Number of trials to include in simulated data. Default: 1000
+
+    **kwargs All other keyword args passed to spectral estimation function given by <method>.
+    
+    RETURNS
+    means   (n_freqs,n_timepts,n_channels) ndarray. Estimated mean spectrogram
+    sems    (n_freqs,n_timepts,n_channels) ndarray. SEM of mean spectrogram
+    
+    ACTION
+    Throws an error if any estimated power value is too far from expected value
+    If <plot> is True, also generates a plot summarizing expected vs estimated power
+    """
+    # Set expected peak frequency for given simulation
+    if simulation == 'DhamalaFig3':     peak_freq = 40
+    
+    # Generate simulated LFP data -> (n_timepts,n_trials,n_channels)
+    data,smp_rate = network_simulation(simulation=simulation)    
+    
+    # Compute time-frequency/spectrogram representation of data 
+    # -> (n_freqs,n_timepts,n_trials,n_channels)
+    spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,**kwargs)
+    
+    # Compute across-trial mean and SEM of time-frequency data
+    # -> (n_freqs,n_timepts,n_channels)
+    means = spec.mean(axis=2)
+    sems  = spec.std(axis=2,ddof=0) / sqrt(n_trials)
+
+    # Compute mean across all timepoints and channels -> (n_freqs,) frequency marginal
+    marginal_means = means.mean(axis=(2,1))
+    marginal_sems = sems.mean(axis=(2,1))    
+    
+    # For wavelets, evaluate and plot frequency on log scale
+    if method == 'wavelet':
+        freqs_eval      = np.log2(freqs)
+        peak_freq_eval  = np.log2(peak_freq)
+        fMin            = ceil(log2(freqs[0]))
+        fMax            = floor(log2(freqs[-1]))    
+        freqTicks       = np.arange(fMin,fMax+1)
+        freqTickLabels  = 2**np.arange(fMin,fMax+1)
+        
+    # For other spectral analysis, evaluate and plot frequency on linear scale        
+    else:
+        freqs_eval      = freqs
+        peak_freq_eval  = peak_freq
+        fMin            = ceil(freqs[0]/10.0)*10.0
+        fMax            = floor(freqs[-1]/10.0)*10.0                
+        freqTicks       = np.arange(fMin,fMax+1,10).astype(int)
+        freqTickLabels  = freqTicks        
+            
+    if plot:
+        plt.figure()
+        plt.subplot(2,1,1)    
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+        dt = np.diff(timepts).mean()
+        df = np.diff(freqs_eval).mean()
+        xlim = [timepts[0]-dt/2, timepts[-1]+dt/2]
+        ylim = [freqs_eval[0]-df/2, freqs_eval[-1]+df/2]
+        plt.plot(xlim, [peak_freq_eval,peak_freq_eval], '-', color='r')
+        plt.imshow(means[:,:,0], aspect='auto', origin='lower',extent=[*xlim,*ylim])
+        plt.yticks(freqTicks,freqTickLabels)
+        
+        plt.subplot(2,1,2)    
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.errorbar(freqs_eval, marginal_means, 3*marginal_sems, marker='o')                
+        plt.plot([peak_freq_eval,peak_freq_eval], plt.ylim(), '-', color='r')        
+        plt.xticks(freqTicks,freqTickLabels)
+        
+    ## Determine if test actually produced the expected values
+    # Absolute difference of each sampled frequeny from expected peak frequency
+    dist_from_peak = np.abs(freqs_eval - peak_freq_eval)    
+    # Indexes needed to sort spectrum by distance from expected peak
+    sortIdxs = np.argsort(dist_from_peak)
+    sorted_means = marginal_means[sortIdxs]
+    pct_max = 100.0 * sorted_means[0:-1]/sorted_means.max()
+    
+    # Does power decrease monotonically from expected peak frequency (for values > 5% of max)
+    assert not ((np.diff(sorted_means) > 0) & (pct_max >= 5.0)).any(), \
+        AssertionError("Power does not decrease monotonically from expected peak frequency (%d)" % peak_freq)
+                
+    return means,sems
+    
+    
+def test_synchrony(method, spec_method='wavelet', plot=False, simulation='DhamalaFig3', n_trials=1000, **kwargs):
+    """
+    Basic testing for functions estimating bivariate time-frequency synchrony/coherence 
+    
+    Generates synthetic LFP data using given network simulation,
+    estimates t-f synchrony using given function, and compares estimated to expected.
+    
+    means,sems = test_synchrony(method,spec_method='wavelet',plot=False,
+                                simulation='DhamalaFig3',n_trials=1000, **kwargs)
+                              
+    INPUTS
+    method  String. Name of synchrony estimation function to test:
+            'PPC' | 'PLV' | 'coherence'
+
+    spec_method  String. Name of spectral estimation function to use to 
+            generate time-frequency representation to input into synchrony function
+            
+    plot    Bool. Set=True to plot test results. Default: False
+    
+    simulation  String. Name of canned simulation to generate. Default: 'DhamalaFig3'
+            See network_simulation() for details
+            
+    n_trials Int. Number of trials to include in simulated data. Default: 1000
+
+    **kwargs All other keyword args passed to synchrony estimation function given by <method>.
+            Can also include args to time-frequency spectral estimation function given by <spec_method>.
+    
+    RETURNS
+    sync    (n_freqs,n_timepts) ndarray. Estimated synchrony
+    
+    ACTION
+    Throws an error if any estimated synchrony value is too far from expected value
+    If <plot> is True, also generates a plot summarizing expected vs estimated synchrony
+    """    
+    # Set expected peak frequency for given simulation
+    if simulation == 'DhamalaFig3':     peak_freq = 40
+    
+    # Generate simulated LFP data -> (n_timepts,n_trials,n_channels)
+    data,smp_rate = network_simulation(simulation=simulation)    
+    
+    # Compute time-frequency/spectrogram representation of data and
+    # bivariate measure of synchrony -> (n_freqs,n_timepts)
+    sync,freqs,timepts = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
+                                   spec_method=spec_method, smp_rate=smp_rate,
+                                   time_axis=0, **kwargs)
+    
+    # Compute mean across all timepoints -> (n_freqs,) frequency marginal
+    marginal_sync = sync.mean(axis=1)
+    
+    # For wavelets, evaluate and plot frequency on log scale
+    if spec_method == 'wavelet':
+        freqs_eval      = np.log2(freqs)
+        peak_freq_eval  = np.log2(peak_freq)
+        fMin            = ceil(log2(freqs[0]))
+        fMax            = floor(log2(freqs[-1]))    
+        freqTicks       = np.arange(fMin,fMax+1)
+        freqTickLabels  = 2**np.arange(fMin,fMax+1)
+        
+    # For other spectral analysis, evaluate and plot frequency on linear scale        
+    else:
+        freqs_eval      = freqs
+        peak_freq_eval  = peak_freq
+        fMin            = ceil(freqs[0]/10.0)*10.0
+        fMax            = floor(freqs[-1]/10.0)*10.0                
+        freqTicks       = np.arange(fMin,fMax+1,10).astype(int)
+        freqTickLabels  = freqTicks        
+            
+    if plot:
+        plt.figure()
+        plt.subplot(2,1,1)    
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+        dt = np.diff(timepts).mean()
+        df = np.diff(freqs_eval).mean()
+        xlim = [timepts[0]-dt/2, timepts[-1]+dt/2]
+        ylim = [freqs_eval[0]-df/2, freqs_eval[-1]+df/2]
+        plt.plot(xlim, [peak_freq_eval,peak_freq_eval], '-', color='r')
+        plt.imshow(sync, aspect='auto', origin='lower',extent=[*xlim,*ylim])
+        plt.yticks(freqTicks,freqTickLabels)
+        
+        plt.subplot(2,1,2)    
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.plot(freqs_eval, marginal_sync)                
+        plt.plot([peak_freq_eval,peak_freq_eval], plt.ylim(), '-', color='r')        
+        plt.xticks(freqTicks,freqTickLabels)
+        
+    ## Determine if test actually produced the expected values
+    # Absolute difference of each sampled frequeny from expected peak frequency
+    dist_from_peak = np.abs(freqs_eval - peak_freq_eval)
+    # Does synchrony peak at expected value?
+    assert marginal_sync.argmax() == dist_from_peak.argmin(), \
+        AssertionError("Synchrony does not peak at frequency (%d)" % peak_freq)        
+    
+    # # Indexes needed to sort spectrum by distance from expected peak
+    # sortIdxs = np.argsort(dist_from_peak)
+    # sorted_sync = marginal_sync[sortIdxs]
+    # pct_max = 100.0 * sorted_sync[0:-1]/sorted_sync.max()
+        
+    # Does synchrony decrease monotonically from expected peak frequency (for values > 5% of max)
+    # assert not ((np.diff(sorted_sync) > 0) & (pct_max >= 5.0)).any(), \
+    #     AssertionError("Synchrony does not decrease monotonically from expected peak frequency (%d)" % peak_freq)
+                
+    return sync   
+    
+        
 # =============================================================================
 # Data reshaping helper functions
 # =============================================================================
@@ -2633,7 +2915,7 @@ def _freq_to_scale(freqs, wavelet='morlet', wavenumber=6):
     if wavelet.lower() == 'morlet':
         return (wavenumber + sqrt(2 + wavenumber**2)) / (4*pi*freqs)
     else:
-        raise ValueError("Unsupported value set for <wavelet>: %s" % wavelet)
+        raise ValueError("Unsupported value set for <wavelet>: '%s'" % wavelet)
 
 
 def _interp1(x, y, xinterp, **kwargs):
