@@ -27,6 +27,8 @@ bandfilter_spectrogram Complex band-filtered, Hilbert-transformed time-freq(band
 set_filter_params   Sets filter coefficients for use in band-filtered analysis
 
 ### Field-field synchrony ###
+synchrony           Synchrony between pair of channels using given method
+
 coherence           Time-frequency coherence between pair of channels
 ztransform_coherence Z-transform coherence so ~ normally distributed
 
@@ -2656,7 +2658,7 @@ def test_synchrony(method, spec_method='wavelet', plot=False, simulation='Dhamal
     dist_from_peak = np.abs(freqs_eval - peak_freq_eval)
     # Does synchrony peak at expected value?
     assert marginal_sync.argmax() == dist_from_peak.argmin(), \
-        AssertionError("Synchrony does not peak at frequency (%d)" % peak_freq)        
+        AssertionError("Synchrony does not peak at expected frequency (%d)" % peak_freq)        
     
     # # Indexes needed to sort spectrum by distance from expected peak
     # sortIdxs = np.argsort(dist_from_peak)
