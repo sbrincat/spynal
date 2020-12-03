@@ -4,8 +4,7 @@ A module for basic analyses of neural spiking activity
 
 FUNCTIONS
 ## Rate analysis ##
-bin_count/rate      Computes spike counts/rates in series of time bins
-epoch_count/rate    Computes spike counts/rates in non-continuous time epochs
+bin_rate            Computes spike counts/rates in series of time bins (regular or not)
 density             Computes spike density (smoothed rate) with given kernel
 
 ## Preprocessing ##
@@ -28,7 +27,7 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
-# TODO  Generalize basic functions (count,2bool,etc.) to arbitrary shape of spike_times array?
+# TODO  Generalize basic functions (2bool,etc.) to arbitrary shape of spike_times array?
 # TODO  Add ISI/autocorrelation stats?
 
 from math import isclose, ceil, sqrt
@@ -44,183 +43,133 @@ from scipy.stats import poisson, bernoulli, norm
 # =============================================================================
 # Spike count/rate computation functions
 # =============================================================================
-def bin_count(spike_times, bins=None, width=50e-3, lim=None, dtype='uint16'):
+def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False):
     """
-    Computes spike count within given sequence of time bins
+    Computes spike rate/count within given sequence of time bins
+    
+    Use <lims,width,step> to set standard-width sliding window bins or
+    use <bins> to set any arbitrary custom time bins
 
-    counts,centers = bin_count(spike_times,bins=None,width=50e-3,lim=None,
-                               dtype='uint16')
+    rates,bins = bin_rate(data,lims=None,width=50e-3,bins=None,count=False)
 
     INPUTS
-    spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be same time units as bins/width/lim.
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
 
-    bins        (n_bins+1,) array-like. Edges of all time bins, as you would
-                input to np.histogram(). Can be different width, but must be
-                monotonically increasing.
-                Default: np.arange(lim[0],lim[1]+width,width)
-
-    width       Float. Bin width. Only used if <bins> not input. Default: 50 ms
-
-    lim         (2,) array-like. Full time range of analysis.
-                Only used if <bins> not input.
-
-    dtype       String | dtype object. Variable types of elements of <counts>.
-                Default: uint16. (Note: this implies limit of 65536 spikes/bin;
-                anything greater will overflow and alias to smaller numbers)
-
-    RETURNS
-    counts      (n_rows,n_cols,n_bins) ndarray of <dtype>. Spike counts within
-                each time bin (and usually for each trial and unit).
-
-    centers     (n_bins,) ndarray. Center of each time bin.
-    """
-    # Set histogram bins if not input
-    if bins is None:  bins = _default_time_bins(lim,width)
-
-    n_bins = len(bins) - 1
-    if spike_times.ndim == 1: spike_times = spike_times[:,np.newaxis]
-    n_rows,n_cols = spike_times.shape
-
-    counts = np.zeros((n_rows,n_cols,n_bins),dtype=dtype)
-
-    # For each spike train in <spike_times> compute count w/in each hist bin
-    for row in range(n_rows):
-        for col in range(n_cols):
-            counts[row,col,:] = np.histogram(spike_times[row,col],bins)[0]
-
-    # Compute center of each bin
-    centers = bins[0:-1] + (np.diff(bins)/2.0)
-
-    return counts, centers
-
-
-def bin_rate(spike_times, bins=None, width=50e-3, lim=None):
-    """
-    Computes spike rate within given sequence of time bins
-
-    rates,centers = bin_rate(spike_times,bins=None,width=50e-3,lim=None)
-
-    INPUTS
-    spike_times  (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same units as bins/width/lim.
-
-    bins        (n_bins+1,) array-like. Edges of all time bins, as you would input
-                to np.histogram(). Default: np.arange(lim[0],lim[1]+width,width)
-
-    width       Float. Bin width. Only used if <bins> not input. Default: 50 ms
-
-    lim         (2,) array-like. Full time range of analysis.
-                Only used if <bins> not input.
+    lims        (2,) array-like. Full time range of analysis ([start,end] in s).
+                Must input a value (unless explicitly setting custom <bins>)
+                
+    width       Scalar. Full width of each time bin (s). Default: 50 ms
+    
+    step        Scalar. Spacing between successive time bins (s). 
+                Default: <width> (each bin starts at end of previous bin)
+                
+    count       Bool. If True, returns integer-valued spike counts, rather than rates.
+                Default: False (computes rates)               
+                
+    *** Alternatively, any custom time bins may be explicitly input using <bins> arg ***
+    
+    bins        (n_bins,2) array-like. [start,end] of each custom time bin (in s).
+                Bins can have any arbitrary width and spacing.
+                Default: bins with given <width,step>, ranging from lims[0] to lims[1]
 
     RETURNS
-    rates       (n_rows,n_cols,n_bins) ndarray of floats. Spike rate within each
-                time bin (and usually for each trial and unit)
+    rates       (...,n_bins) ndarray. Spike rates (in spk/s) or spike counts 
+                in each time bin (and for each trial/unit/etc. in <data>). 
+                Same shape as <data>, with time-bin axis appended to end.
+                If only a single spike train is input, output is (n_bins,) vector.
+                dtype is uint16 if <count> is True, float otherwise.
 
-    centers     (n_bins,) ndarray. Center of each time bin.
+    bins        (n_bins,2) ndarray. [start,end] of each time bin (in s).
+    
+    NOTES
+    Spikes are counted within each bin including the start, but *excluding* the end
+    of the bin. That is each bin is defined as [start,end).
+    """    
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(data,list) or (data.dtype != object)
+        
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: data = _enclose_in_object_array(np.asarray(data))  
+                    
+    # If bins not explicitly input, set them based on limits,width,step
+    if bins is None:
+        assert lims is not None, \
+            ValueError("Must input <lims> = full time range of analysis (or set custom <bins>)")
+            
+        bins = setup_sliding_windows(width,lims,step=step)
+    else:    
+        bins = np.asarray(bins)
+    
+    assert (bins.ndim == 2) and (bins.shape[1] == 2), \
+        ValueError("bins must be given as (n_bins,2) array of bin [start,end] times")
+        
+    n_bins  = bins.shape[0]        
+    widths  = np.diff(bins,axis=1).squeeze()
+    
+    # Are bins "standard"? : equal-width, with start of each bin = end of previous bin
+    std_bins = np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1])
+    
+    # For standard bins, can use histogram algorithm
+    if std_bins:
+        # Convert bins to format expected by np.histogram = edges of all bins in 1 series
+        bins = np.hstack((bins[:,0],bins[-1,-1]))
+        count_spikes = _histogram_count
+    # Otherwise, need algorithm to enumerate and count spikes in each bin
+    else:        
+        count_spikes = _custom_bin_count
+        
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    data_flat = data.flat
+    
+    # Create array to hold counts/rates. Same shape as data, with bin axis appended.
+    # dtype is int if computing counts, float if computing rates
+    dtype = 'uint16' if count else float
+    rates = np.empty((*data.shape,n_bins),dtype=dtype)
+    
+    for _ in range(data.size):
+        # Multidim coordinates into data array
+        coords = data_flat.coords
+        
+        # Count spikes within each bin
+        rates[(*coords,slice(None))] = count_spikes(data[coords],bins)
 
-    Also aliased as psth()
-    """
-    if bins is None:  bins = _default_time_bins(lim,width)
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        next(data_flat)        
+                    
+    # Normalize all spike counts by bin widths to get spike rates
+    if not count: rates = rates / widths         
+        
+    # If only a single spike train was input, squeeze out singleton axis 0
+    if single_train: rates = rates.squeeze(axis=0)
+    
+    return rates, bins
+    
+    
+def _histogram_count(data, bins):
+    """ Count spikes in equal-width, disjoint bins """
+    return np.histogram(data,bins)[0]
 
-    # For each spike train in <spike_times> compute count w/in each hist bin
-    rates,centers = bin_count(spike_times,bins,dtype=float)
 
-    # Normalize by bin widths to get spike rates (don't assume same-width bins)
-    rates  = rates / np.diff(bins)
-
-    return rates, centers
-
+def _custom_bin_count(data, bins):
+    """ Count spikes in any arbitrary custom bins """
+    return np.asarray([((start <= data) & (data < end)).sum() 
+                       for (start,end) in bins], dtype='uint16')
+                    
+    
 psth = bin_rate
 """ Aliases function bin_rate as psth """
 
 
-def epoch_count(spike_times, epochs, dtype='uint16'):
-    """
-    Computes spike count within given series of arbitrary time epochs
-
-    counts = epoch_count(spike_times,epochs,dtype='uint16')
-
-    INPUTS
-    spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same time units as epochs.
-
-    epochs      (n_epochs,2) array-like. [start,end] of all time epochs.
-
-    dtype       String | dtype object. Variable types of elements of <counts>.
-                Default: uint16. (Note: this implies a limit of 65536 spikes per
-                bin; anything greater will overflow and alias to smaller numbers)
-
-    RETURNS
-    counts      (n_rows,n_cols,n_epochs) ndarray of <dtype>. Spike counts within
-                each time epoch (and usually for each trial and unit).
-    """
-    assert isinstance(epochs,list) or \
-           (isinstance(epochs,np.ndarray) and (epochs.shape[1] == 2)), \
-           ValueError("<epochs> must be given as list of tuples or (n_epochs,2) Numpy array")
-
-    if isinstance(epochs,list): epochs = np.asarray(epochs)
-
-    n_epochs     = epochs.shape[0]
-    n_rows,n_cols = spike_times.shape
-
-    counts = np.zeros((n_rows,n_cols,n_epochs),dtype=dtype)
-
-    # For each spike train in <spike_times> compute count w/in each time epoch
-    for row in range(n_rows):
-        for col in range(n_cols):
-            for i_epoch,epoch in enumerate(epochs):
-                counts[row,col,i_epoch] = \
-                np.sum(epoch[0] <= spike_times[row,col] <= epoch[1])
-
-    return counts
-
-
-def epoch_rate(spike_times, epochs, dtype='uint16'):
-    """
-    Computes spike rate within given series of arbitrary time epochs
-
-    rates = epoch_rate(spike_times,epochs,dtype='uint16')
-
-    INPUTS
-    spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same time units as epochs.
-
-    epochs      (n_epochs,2) array-like. [start,end] of all time epochs.
-
-    dtype       String | dtype object. Variable types of elements of <counts>.
-                Default: uint16. (Note: this implies a limit of 65536 spikes per
-                bin; anything greater will overflow and alias to smaller numbers)
-
-    RETURNS
-    rates       (n_rows,n_cols,n_epochs) ndarray of <dtype>. Spike rates (spks/s)
-                within each time epoch (and usually for each trial and unit).
-    """
-    # For each spike train in <spike_times> compute count w/in each time epoch
-    rates = epoch_rate(spike_times,epochs,dtype=dtype)
-
-    # Normalize by epoch widths to get spike rates (don't assume same-width bins)
-    for i_epoch,epoch in enumerate(epochs):
-        rates[:,:,i_epoch] = rates[:,:,i_epoch] / (epoch[1] - epoch[0])
-
-    return rates
-
-
 def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
-            lim=None, buffer=None, downsmp=1, **kwargs):
+            lims=None, buffer=None, downsmp=1, **kwargs):
     """
     Computes spike density function via convolution with given kernel/width
 
     spike_density,t = density(spike_times,t=None,kernel='gaussian',width=50e-3,
-                              smp_rate=1000,lim=None,buffer=None,downsmp=1,
+                              smp_rate=1000,lims=None,buffer=None,downsmp=1,
                               **kwargs)
 
     INPUTS
@@ -244,12 +193,12 @@ def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
 
     t           (n_timepts,) array-like. Desired time sampling vector for
                 spike density, before any downsampling. Input either <t> OR
-                <lim> and <smp_rate> to set time sampling.
+                <lims> and <smp_rate> to set time sampling.
 
     smp_rate    Scalar. Sampling rate (Hz; 1/sample period) for spike density
                 Only used if <t> not input. Default: 1000 Hz
 
-    lim         (2,) array-like. Full time range of analysis.
+    lims        (2,) array-like. Full time range of analysis.
                 Only used if <t> not input.
 
     buffer      Float. Length (in s) of symmetric buffer to add to each end
@@ -280,8 +229,11 @@ def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
 
     # Set time sampling, either directly from input t, or indirectly from smp_rate,lims
     if t is None:
-        if buffer != 0: lim = [lim[0]-buffer,lim[1]+buffer]
-        args = {'width':1.0/smp_rate, 'lim':lim}
+        assert lims is not None, \
+            ValueError("Must input <lims> = full time range of analysis (or set custom time sampling <t>)")
+        
+        if buffer != 0: lims = [lims[0]-buffer,lims[1]+buffer]
+        args = {'lims':lims, 'width':1.0/smp_rate}
     else:
         dt   = np.mean(np.diff(t))
         if buffer != 0:
@@ -345,6 +297,7 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     if ylabel is not None:  plt.ylabel(ylabel)
 
     plt.show()
+
 
 def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
     """ PLots single line of raster plot """
@@ -557,9 +510,8 @@ def bool_to_times(spike_bool, bins):
     spike_times (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
                 Usually n_rows=n_trials,n_cols=n_units.
                 Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same units as bins/width/lim.
+                within-trial event. Must be in same units as bins/width/lims.
     """
-
     bins = np.asarray(bins)
 
     n_rows,n_cols,_ = spike_bool.shape
@@ -574,47 +526,57 @@ def bool_to_times(spike_bool, bins):
     return spike_times
 
 
-def times_to_bool(spike_times, bins=None, width=1e-3, lim=None):
+def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     """
     Converts spike timestamps to boolean (binary) spike train representaton
     Inverse function of bool_to_times()
 
-    spike_bool,bins = times_to_bool(spike_times,bins=None,width=1e-3,lim=None)
+    spike_bool,timepts = times_to_bool(spike_times,lims=None,width=1e-3,bins=None)
 
     INPUTS
-    spike_times  (n_rows,n_cols) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same units as bins/width/lim.
+    spike_times (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.  
+    
+    lims        (2,) array-like. Full time range of analysis ([start,end] in s).
+                Must input a value (unless explicitly setting custom <bins>)
 
-    bins        (n_bins+1,) array-like. Edges of all time bins, as you would input
-                to np.histogram(). Default: np.arange(lim[0],lim[1]+width,width)
+    width       Float. Width of bin used to discretize spike times (s). 
+                Usually 1 ms [default]
 
-    width       Float. Bin width. Only used if <bins> not input. Default: 1 ms
-
-    lim         (2,) array-like. Full time range of analysis.
-                Only used if <bins> not input.
+    *** Alternatively, time bins may be explicitly input using <bins> arg ***
+    
+    bins        (n_bins,2) array-like. [start,end] of each custom time bin (in s).
+                Bins can have any arbitrary width and spacing, but really you would
+                always want width = spacing, so each bin starts at end of last bin
+                Default: bins with given <width,step>, ranging from lims[0] to lims[1]
 
     RETURNS
-    spike_bool  (n_rows,n_cols,n_bins) ndarray of bool. Binary spike trains,
-                where 1 indicates >= 1 spike in time bin, 0 indicates no spikes.
-
-    bins        (n_bins,) ndarray. Center of each time bin.
+    spike_bool  (...,n_bins) ndarray of bools. Binary spike trains, where
+                 1/True indicates >= 1 spike in time bin, 0/False indicates no spikes.
+                    
+    timepts     (n_bins,) ndarray. Time sampling vector (in s). Center of each time bin
+                used to compute binary spike data.
     """
+    # If bins is not given explicitly, set it based on width,lims
     if bins is None:
-        if lim is None:
-            raise ValueError('If <bins> not given, must input value for <lim>')
+        assert lims is not None, \
+            ValueError("Must input <lims> = full time range of analysis (or set custom <bins>)")
 
-        # KLUDGE If width = 1 ms, extend lims by 0.5 ms, so bins end up centered
-        #   on whole ms values, as we typically want for binary spike trains
-        if isclose(width,1e-3): lim = [lim[0] - 0.5e-3, lim[1] + 0.5e-3]
-        bins = _default_time_bins(lim,width)
+        # If width = 1 ms, extend lims by 0.5 ms, so bins end up centered
+        # on whole ms values, as we typically want for binary spike trains
+        if isclose(width,1e-3): lims = [lims[0] - 0.5e-3, lims[1] + 0.5e-3]
+        bins = setup_sliding_windows(width,lims=lims,step=width)
 
+    timepts = bins.mean(axis=1)
+    
     # For each spike train in <spike_times> compute count w/in each hist bin
     # Note: Setting dtype=bool implies any spike counts > 0 will be True
-    spike_bool,bins = bin_count(spike_times,bins=bins,dtype=bool)
+    spike_bool,bins = bin_rate(spike_times,bins=bins)
+    spike_bool = spike_bool.astype(bool)
 
-    return spike_bool, bins
+    return spike_bool, timepts
 
 
 def pool_electrode_units(spike_data, electrodes, elec_set=None,
@@ -632,7 +594,7 @@ def pool_electrode_units(spike_data, electrodes, elec_set=None,
     INPUTS
     spike_data  (n_trials,n_units) object ndarray of (n_spikes[row,col],) ndarrays
                 of spike timestamp data or
-                (n_trials,n_units,nTimePoints) ndarray of floats/ints of spike
+                (n_trials,n_units,n_timepts) ndarray of floats/ints of spike
                 rate data
 
     electrodes  (n_units,) array-like. List of electrode numbers of each unit
@@ -646,7 +608,7 @@ def pool_electrode_units(spike_data, electrodes, elec_set=None,
 
     RETURNS
     spike_data  (n_trials,n_elecs) object ndarray of spike timestamps or
-                (n_trials,n_elecs,nTimePoints) ndarray of spike rates pooled
+                (n_trials,n_elecs,n_timepts) ndarray of spike rates pooled
                 across all units on each electrode
 
     elec_idxs   (n_elecs,) ndarray of ints. Indexes of 1st occurrence of each
@@ -719,11 +681,82 @@ def pool_electrode_units_spike_times(spike_times_sua, electrodes, elec_set=None,
         return spike_times_mua
 
 
+def setup_sliding_windows(width, lims, step=None, reference=None,
+                          force_int=False, exclude_end=None):
+    """
+    Generates set of sliding windows using given parameters
+
+    windows = setup_sliding_windows(width,lims,step=None,
+                                    reference=None,force_int=False,exclude_end=None)
+
+    ARGS
+    width       Scalar. Full width of each window. Required arg.
+
+    lims        (2,) array-like. [start end] of full range of domain you want
+                windows to sample. Required.
+
+    step        Scalar. Spacing between start of adjacent windows
+                Default: step = width (ie, perfectly non-overlapping windows)
+
+    reference   Bool. Optionally sets a reference value at which one window
+                starts and the rest of windows will be determined from there.
+                eg, set = 0 to have a window start at x=0, or
+                    set = -width/2 to have a window centered at x=0
+                Default: None = just start at lims[0]
+
+    force_int   Bool. If True, rounds window starts,ends to integer values.
+                Default: False (don't round)
+
+    exclude_end Bool. If True, excludes the endpoint of each (integer-valued)
+                sliding win from the definition of that win, to prevent double-sampling
+                (eg, the range for a 100 ms window is [1 99], not [1 100])
+                Default: True if force_int==True, otherwise default=False
+
+    OUTPUT
+    windows     (n_wins,2) ndarray. Sequence of sliding window [start end]'s
+    """
+    # Default: step is same as window width (ie windows perfectly disjoint)
+    if step is None: step = width
+    # Default: Excluding win endpoint is default for integer-valued win's,
+    #  but not for continuous wins
+    if exclude_end is None:  exclude_end = True if force_int else False
+
+    # Standard sliding window generation
+    if reference is None:
+        if exclude_end: win_starts = _iarange(lims[0], lims[-1]-width+1, step)
+        else:           win_starts = _iarange(lims[0], lims[-1]-width, step)
+
+    # Origin-anchored sliding window generation
+    #  One window set to start at given 'reference', position of rest of windows
+    #  is set around that window
+    else:
+        if exclude_end:
+            # Series of windows going backwards from ref point (flipped to proper order),
+            # followed by Series of windows going forwards from ref point
+            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
+                                        _iarange(reference+step, lims[-1]-width+1, step))
+
+        else:
+            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
+                                        _iarange(reference+step, lims[-1]-width, step))
+
+    # Set end of each window
+    if exclude_end: win_ends = win_starts + width - 1
+    else:           win_ends = win_starts + width
+
+    # Round window starts,ends to nearest integer
+    if force_int:
+        win_starts = np.round(win_starts)
+        win_ends   = np.round(win_ends)
+
+    return np.stack((win_starts,win_ends),axis=1)
+
+
 #==============================================================================
 # Synthetic data generation and testing functions
 #==============================================================================
-def simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
-                         window=1.0,seed=None):
+def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
+                         window=1.0, seed=None):
     """
     Simulates Poisson spike rates across multiple conditions/groups
     with given condition effect size
@@ -757,7 +790,7 @@ def simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO  Add support for muliple units w/ varying effect probability or size?
+    # TODO  Add support for multiple units w/ varying effect probability or size?
 
     if seed is not None: np.random.seed(seed)
 
@@ -788,8 +821,8 @@ def simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
     return rates, labels
 
 
-def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
-                          window=1.0,seed=None,out_type='timestamp'):
+def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
+                          window=1.0, seed=None, out_type='timestamp'):
     """
     Simulates Poisson spike trains across multiple conditions/groups
     with given condition effect size
@@ -812,8 +845,7 @@ def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
 
     n_trials Int. Number of trials/observations to simulate. Default: 1000
 
-    window  Scalar. Time window to count simulated spikes over. Can set = 1
-            if you want spike *counts*, rather than rates. Default: 1.0 s
+    window  Scalar. Time window to simulate spike train over. Default: 1.0 s
 
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for actual random numbers.
@@ -830,7 +862,7 @@ def simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,n_trials=1000,
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO  Add support for muliple units w/ varying effect probability or size?
+    # TODO  Add support for multiple units w/ varying effect probability or size?
 
     if seed is not None: np.random.seed(seed)
 
@@ -931,7 +963,7 @@ def test_rate(method, plot=False, rates=(5,10,20,40), n_trials=1000, **kwargs):
         n_timepts = 1001
         # HACK For spike density method, remove edges, which are influenced by boundary artifacts
         t         = np.arange(0,1.001,0.001)
-        tbool     = (t > 0.1) & (t < 0.9)
+        tbool     = (t > 0.1) & (t < 0.9)        
     else:
         raise ValueError("Unsupported option '%s' given for <method>. \
                          Should be 'bin_rate'|'density'" % method)
@@ -946,9 +978,10 @@ def test_rate(method, plot=False, rates=(5,10,20,40), n_trials=1000, **kwargs):
         trains,_ = simulate_spike_trains(gain=0.0,offset=float(rate),
                                          n_conds=1,n_trials=n_trials,seed=0)
         
-        spike_rates,t = rate_func(trains, lim=[0,1], **kwargs)
+        spike_rates,t = rate_func(trains, lims=[0,1], **kwargs)
+        if rate_func == bin_rate: t = t.mean(axis=1)  # bins -> centers
         # Take average across timepoints -> (n_trials,)
-        spike_rates = spike_rates[:,:,tbool].mean(axis=2).squeeze(axis=1)
+        spike_rates = spike_rates[:,tbool].mean(axis=1)
         
         # Compute mean and SEM across trials
         means[i] = spike_rates.mean(axis=0)
@@ -1011,53 +1044,23 @@ def _unsorted_unique(x):
     return x[np.sort(idxs)]
 
 
-def _default_time_bins(lim=None, width=50e-3):
+def _iarange(start=0, stop=0, step=1):
     """
-    Helper function for bin_count()/bin_rate().
-    Generates default bins for computing spike counts/rates,
-    using given bin width and time epoch.
+    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
+    output, except ends at stop, not stop - 1 (or more generally stop - step)
 
-    Note: If width = 1 ms (0.001), lims will be automatically extended by +/-
-    0.5 ms, so they end up centered on whole-millisecond values, as we
-    typically want when generating binary spike trains at 1 ms sampling
-
-    bins = _default_time_bins(lim,width=50e-3)
-
-    INPUTS
-    lim         (2,) array-like. Full time range of analysis.
-    width       Float. Bin width. Default: 50 ms
-
-    RETURNS
-    bins        (n_bins+1,) ndarray. Edges of all time bins, as you would input
-                to np.histogram().
+    r = _iarange(start=0,stop=0,step=1)
     """
-    if lim is None:
-        raise ValueError('If <bins> not given, must input value for <lim>')
-
-    # Extend arange() <stop> by a bit to ensure that you get final point=lim[1]
-    # when width divides evenly (avoiding effects of any floating point error)
-    if isinstance(width,int):   return np.arange(lim[0],lim[1]+1,width)
-    else:                       return np.arange(lim[0],lim[1]+1e-12,width)
+    # TODO  Generalize to deal w/ different input configs (eg iarange(stop))
+    if isinstance(step,int):    return np.arange(start,stop+1,step)
+    else:                       return np.arange(start,stop+1e-12,step)
 
 
-def _default_time_sampling(lim, smp_rate=1000):
-    """
-    Generates default time sampling for computing spike density function,
-    using given time epoch and sampling period. Helper function for density().
-
-    bins = _default_time_sampling(lim,smp_rate=1000)
-
-    INPUTS
-    lim         (2,) array-like. Full time range of analysis.
-    width       Float. Bin width. Default: 50 ms
-
-    RETURNS
-    t           (n_timepts,) ndarray. Time sampling vector for spike density
-    """
-    if lim is None:
-        raise ValueError('If time sampling vector <t> not given, must input value for <lim>')
-
-    return np.arange(lim[0], lim[1]+1, 1.0/smp_rate)
+def _enclose_in_object_array(data):
+    """ Enclose array within an object array """
+    out = np.empty((1,),dtype=object)
+    out[0] = data
+    return out
 
 
 def _remove_buffer(data, buffer, axis=-1):
@@ -1083,19 +1086,6 @@ def _remove_buffer(data, buffer, axis=-1):
     else:
         return (data.swapaxes(-1,axis)[...,buffer:-buffer]
                     .swapaxes(axis,-1))
-
-
-def _str_to_distribution(distribution):
-    """ Converts string specifier to scipy.stats distribution function """
-    if isinstance(distribution,str):  distribution = distribution.lower()
-
-    if callable(distribution):                  return distribution
-    elif distribution == 'poisson':             return poisson
-    elif distribution == 'bernoulli':           return bernoulli
-    elif distribution in ['normal','gaussian']: return norm
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <distribution>' %
-                         distribution)
 
 
 def _str_to_kernel(kernel, width, **kwargs):
