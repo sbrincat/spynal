@@ -5,9 +5,18 @@ neural_info     A module for computing measures of neural information about
                 univariate across channels (units/LFPs/etc.).
 
 FUNCTIONS
-neural_info     Computes neural information using given method
-pev             Computes neural info as percent explained variance
+neural_info     Wrapper function computes neural information using any given method
 
+### Area under receiver operating characteristic curve-related functions ###
+auroc           Computes neural info as area under ROC curve
+auroc_2groups   Computes area under ROC with two data distributions as args
+
+### D-prime/Cohen's d-related functions ###
+dprime          Computes neural information as d-prime
+dprime_2groups  Computes d-rime with two data distributions as args
+
+### Percent explained variance-related functions ###
+pev             Computes neural info as percent explained variance
 anova1          Computes PEV and stats using 1-way ANOVA
 anova2          Computes PEV and stats using 2-way ANOVA
 regress         Computes PEV and stats using 2-way linear regression
@@ -20,8 +29,8 @@ Created on Mon Sep 17 00:05:25 2018
 
 @author: sbrincat
 """
-# TODO  Actually implement other info metrics -- mutual info, AUC-ROC, etc.
 # TODO  Group2idx-type mechanism to convert arbitrary X to integer indexes in ANOVA models
+# TODO  Should we default <groups> to be in alphanumeric order or in order of appearance in <labels>?
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -64,10 +73,255 @@ def neural_info(X, y, method='pev', **kwargs):
         return dprime(X,y,**kwargs)
     elif method in ['auroc','roc','aucroc','auc']:
         return auroc(X,y,**kwargs)
+    elif method in ['mutual_information','mutual_info']:
+        return mutual_information(X,y,**kwargs)
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
 
+# =============================================================================
+# Mutual information analysis
+# =============================================================================
+def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
+    """
+    Mass-univariate mutual information between set of responses 
+    and binary "stimulus" (ie, 2 contrasted experimental conditions)
+    
+    info = mutual_information(labels,data,axis=0,resp_entropy=None,groups=None)
+
+    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
+    I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
+
+    where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
+    distribution, and p(r|s) is conditional probability of response given stimulus
+
+    info = 0 indicates no mutual information between responses and experimental conditions
+    info = 1 indicates maximum possible information btwn responses and conditions
+    
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+
+    Note: This is a wrapper around mutual_information_2groups(), which accepts
+    two data distributions as arguments, and is faster.
+
+    ARGS
+    labels      (n_obs,) array-like. List of group labels labelling observations from 
+                each group. Should be only two groups represented, unless sub-selecting 
+                two groups using <groups> argument.
+
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
+
+    axis        Scalar. Axis of data array to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    resp_entropy   (...,1,...). Total response entropy. Can optionally compute and input
+                this to save repeated calculations (eg for distinct contrasts on same data)
+
+    groups      (2,) array-like. Which group labels from <labels> to use. 
+                Useful for computing info btwn pairs of groups in data with > 2 groups,
+                Default: unique(labels) (all distinct values in <labels>)
+
+    RETURNS
+    info        (...,1,...) ndarray. Mutual information between responses 
+                and experimental conditions (in bits). 
+                
+    REFERENCE     Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1                
+    """
+    # TODO  Recode for > 2 groups
+    labels = np.asarray(labels)
+    
+    # Find set of unique group labels in <labels>
+    if groups is None: groups = np.unique(labels)
+
+    assert len(groups) == 2, \
+        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)
+
+    # Reshape data array -> (n_observations,n_data_series) matrix
+    data, data_shape = _reshape_data(data,axis)
+    if resp_entropy is not None:
+        resp_entropy,_ = _reshape_data(resp_entropy,axis)
+    
+    n_series = data.shape[1] if data.ndim > 1 else 1
+
+    # Remove any observations not represented in <groups>
+    idxs = (labels == groups[0]) | (labels == groups[1])
+    if idxs.sum() != data.shape[0]:
+        labels  = labels[idxs]
+        data    = data[idxs,:]
+
+    idxs1 = labels == groups[0]
+    idxs2 = labels == groups[1]
+    n1 = idxs1.sum()
+    n2 = idxs2.sum()
+    N  = n1 + n2
+
+    assert (n1 != 0) and (n2 != 0), \
+        "mutual_information: Data contains no observations (trials) for one or more groups"
+
+    # Stimulus probabilities
+    Ps1 = n1/N                  # P(stimulus==s1)
+    Ps2 = n2/N                  # P(stimulus==s2)
+            
+    info = np.empty((1,n_series))
+  
+    for i_series in range(n_series):    
+        data_series = data[:,i_series] if n_series > 1 else data.squeeze()
+
+        # Compute total response entropy H (if not input)
+        if resp_entropy is None:            
+            # Response probability distributions
+            _,counts    = np.unique(data_series, return_counts=True)
+            Pr          = counts / N            # P(response==r)
+
+            # Response entropy (Dayan & Abbott, eqn. 4.3)
+            H   = _entropy(Pr)
+
+        else:
+            H   = resp_entropy[i_series]
+        
+        # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
+        # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
+        _,counts    = np.unique(data_series[idxs1], return_counts=True)
+        Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
+        _,counts    = np.unique(data_series[idxs2], return_counts=True)
+        Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
+        
+        # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
+        Hs1     = _entropy(Prs1)
+        Hs2     = _entropy(Prs2)
+    
+        # Noise entropy (Dayan & Abbott, eqn. 4.6)
+        Hnoise  = Ps1*Hs1 + Ps2*Hs2
+
+        # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
+        info[i_series] = H - Hnoise
+
+    info = _unreshape_data(info,data_shape,axis=axis)
+        
+    return info
+
+
+    # Split data into 2 groups and use auroc_2groups() to actually do computation
+    # return mutual_information_2groups(data.compress(labels == groups[0], axis=axis),
+    #                      data.compress(labels == groups[1], axis=axis), 
+    #                      axis=axis, signed=signed)
+
+
+def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
+    """
+    Mass-univariate mutual information between set of responses 
+    and binary "stimulus" (ie, 2 contrasted experimental conditions)
+        
+    info = mutual_information_2groups(data1,data2,axis=0,resp_entropy=None)
+
+    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
+    I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
+
+    where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
+    distribution, and p(r|s) is conditional probability of response given stimulus
+
+    info = 0 indicates no mutual information between responses and experimental conditions
+    info = 1 indicates maximum possible information btwn responses and conditions
+    
+    Computation is performed over trial/observation <axis>, in mass-univariate 
+    fashion across data series in all other data dimensions (channels, time points, 
+    frequencies, etc.).
+    
+    Note: For convenience, mutual_information() is also provided as a wrapper around this
+    function that accepts standard data,label arguments.
+    
+    ARGS
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
+                Sets of values for each of two distributions to be compared.  
+
+    axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
+                to trials/observations. Default: first non-singleton dimension
+
+    resp_entropy  (...,1,...). Total response entropy. Can optionally compute and input
+                this to save repeated calculations (eg for distinct contrasts on same data)
+
+
+    RETURNS
+    info        (...,1,...) ndarray. Mutual information between responses 
+                and experimental conditions (in bits). 
+                
+    REFERENCE     Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
+    """
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
+    N  = n1 + n2
+
+    assert (n1 != 0) and (n2 != 0), \
+        "mutual_information: Data contains no observations (trials) for one or more groups"
+
+    # Reshape data arrays -> (n_observations,n_data_series) matrix
+    data1, data1_shape = _reshape_data(data1,axis)
+    data2, data2_shape = _reshape_data(data2,axis)
+    if resp_entropy is not None:
+        resp_entropy,_ = _reshape_data(resp_entropy,axis)
+
+    if data1.ndim > 1:
+        n_series = data1.shape[1]
+                    
+        assert data1.shape[1] == data2.shape[1], \
+            "mutual_information: Data distributions to compare must have same number of data series (timepts,freqs,channels,etc.) \
+             (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
+    else:
+        n_series = 1
+        
+    # Stimulus probabilities
+    Ps1 = n1/N                  # P(stimulus==s1)
+    Ps2 = n2/N                  # P(stimulus==s2)
+            
+    info = np.empty((1,n_series))
+  
+    for i_series in range(n_series):    
+        data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
+        data2_series = data2[:,i_series] if n_series > 1 else data2.squeeze()
+
+        # Compute total response entropy H (if not input)
+        if resp_entropy is None:
+            # Concatenate data from both conditions together, and find all unique data values
+            data_pooled = np.hstack((data1_series, data2_series))
+            
+            # Response probability distributions
+            _,counts    = np.unique(data_pooled, return_counts=True)
+            Pr          = counts / N            # P(response==r)
+
+            # Response entropy (Dayan & Abbott, eqn. 4.3)
+            H   = _entropy(Pr)
+
+        else:
+            H   = resp_entropy[i_series]
+        
+        # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
+        # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
+        _,counts    = np.unique(data1, return_counts=True)
+        Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
+        _,counts    = np.unique(data2, return_counts=True)
+        Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
+                
+        # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
+        Hs1     = _entropy(Prs1)
+        Hs2     = _entropy(Prs2)
+    
+        # Noise entropy (Dayan & Abbott, eqn. 4.6)
+        Hnoise  = Ps1*Hs1 + Ps2*Hs2
+
+        # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
+        info[i_series] = H - Hnoise
+
+    info = _unreshape_data(info,data1_shape,axis=axis)
+        
+    return info
+  
+  
+def _entropy(P):
+    """ Computes entropy from probabilty density P """
+    return -(P * np.log2(P)).sum()  
+  
+  
 # =============================================================================
 # Area under ROC curve (AUROC) analysis
 # =============================================================================
@@ -92,11 +346,11 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     two data distributions as arguments, and is faster.
 
     ARGS
-    labels      (nObs,) array=like. List of group labels labelling observations from 
+    labels      (n_obs,) array-like. List of group labels labelling observations from 
                 each group. Should be only two groups represented, unless sub-selecting 
                 two groups using <groups> argument.
 
-    data        (...,nObs,...) ndarray. Data values for both distributions to be compared.  
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: first non-singleton dimension
@@ -110,14 +364,14 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
                 methods estimate the bias and correct for it.
 
     groups      (2,) array-like. Which group labels from <labels> to use. 
-                Useful for enforcing a given order to groups (sign to results AUROC), 
-                or for computing AUROC btwn pairs of groups in data with > 2 groups,
+                Useful for enforcing a given order to groups (eg sign to signed AUROC), 
+                or for computing info btwn pairs of groups in data with > 2 groups,
                 Default: unique(labels) (all distinct values in <labels>)
 
     RETURNS
-    roc         (...,nObs,...) ndarray.  AUROC btwn. groups along given axis. 
+    roc         (...,1,...) ndarray.  AUROC btwn. groups along given axis. 
     """
-    # TODO Should we default <groups> to be in alphanumeric order or in order of appearance in <labels>?
+    labels = np.asarray(labels)
     
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
@@ -129,6 +383,7 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     return auroc_2groups(data.compress(labels == groups[0], axis=axis),
                          data.compress(labels == groups[1], axis=axis), 
                          axis=axis, signed=signed)
+
 
 def auroc_2groups(data1, data2, axis=0, signed=True):
     """
@@ -151,7 +406,7 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     function that accepts standard data,label arguments.
     
     ARGS
-    data1/2     (...,nObs1/nObs2,...) ndarrays of arbitary size except for <axis>. 
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
                 Sets of values for each of two distributions to be compared.  
 
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
@@ -169,7 +424,7 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
                 methods estimate the bias and correct for it.
 
     RETURNS
-    roc_area    (...,nObs,...) ndarray.  AUROC btwn. data1 and data2 along given axis. 
+    roc_area    (...,1,...) ndarray.  AUROC btwn. data1 and data2 along given axis. 
 
     """
     n1 = data1.shape[axis]
@@ -253,11 +508,11 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     two data distributions as arguments, and is faster.
 
     ARGS
-    labels      (nObs,) array=like. List of group labels labelling observations from 
+    labels      (n_obs,) array-like. List of group labels labelling observations from 
                 each group. Should be only two groups represented, unless sub-selecting 
                 two groups using <groups> argument.
 
-    data        (...,nObs,...) ndarray. Data values for both distributions to be compared.  
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: first non-singleton dimension
@@ -276,11 +531,11 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
                 Default: unique(labels) (all distinct values in <labels>)
 
     RETURNS
-    d           (...,nObs,...) ndarray.  d' btwn. groups along given axis. 
+    d           (...,1,...) ndarray.  d' btwn. groups along given axis. 
 
     REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
     """
-    # TODO Should we default <groups> to be in alphanumeric order or in order of appearance in <labels>?
+    labels = np.asarray(labels)
     
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
@@ -292,6 +547,7 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     return dprime_2groups(data.compress(labels == groups[0], axis=axis),
                           data.compress(labels == groups[1], axis=axis), 
                           axis=axis, signed=signed)
+
 
 def dprime_2groups(data1, data2, axis=0, signed=True):
     """
@@ -315,7 +571,7 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
     function that accepts standard data,label arguments.
     
     ARGS
-    data1/2     (...,nObs1/nObs2,...) ndarrays of arbitary size except for <axis>. 
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
                 Sets of values for each of two distributions to be compared.  
 
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
@@ -331,7 +587,7 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
                 methods estimate the bias and correct for it.
 
     RETURNS
-    d           (...,nObs,...) ndarray.  d' btwn. data1 and data2 along given axis. 
+    d           (...,1,...) ndarray.  d' btwn. data1 and data2 along given axis. 
 
     REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
     """
@@ -403,7 +659,7 @@ def pev(X, y, axis=0, model=None, as_pct=True, return_stats=False, **kwargs):
     **kwargs Passed directly to model function. See those for details.
 
     RETURNS
-    exp_var     (...,n_terms,...). Percent (or proportion) of variance in y explained by X
+    exp_var (...,n_terms,...). Percent (or proportion) of variance in y explained by X
             Shape is same as y, with observation axis reduced to length = n_terms.
 
     stats   Dict. If <return_stats> set, statistics on each fit also returned.
@@ -646,7 +902,7 @@ def anova2(X, y, axis=0, interact=None, omega=True, partial=False, total=False,
     REFERENCE   Zar _Biostatistical Analysis_ 4th ed.
     """
     # TODO Add <groups> arg with list of group labels to use
-    # Reshape data array y -> (nObservation,n_data_series) matrix
+    # Reshape data array y -> (n_observation,n_data_series) matrix
     y, y_shape  = _reshape_data(y,axis)
     n_obs,n_series= y.shape
 
