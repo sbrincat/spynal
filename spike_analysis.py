@@ -3,22 +3,22 @@
 A module for basic analyses of neural spiking activity
 
 FUNCTIONS
-## Rate analysis ##
+### Rate analysis ###
 bin_rate            Computes spike counts/rates in series of time bins (regular or not)
 density             Computes spike density (smoothed rate) with given kernel
 
-## Preprocessing ##
+### Preprocessing ###
 realign_spike_times Realigns spike timestamps to new t=0
 times_to_bool       Converts spike timestamps to binary spike trains
 bool_to_times       Converts binary spike train to timestamps
 pool_electrode_units Pools all units on each electrode into a multi-unit
 
-## Plotting ##
+### Plotting ###
 plot_raster         Generates a raster plot
 plot_mean_waveforms Plots mean spike waveforms from one/more units
 plot_waveform_heatmap Plots heatmap (2d histogram) of spike waveforms
 
-## Synthetic data generation ##
+### Synthetic data generation ###
 simulate_spike_rates    Generates sythetic Poisson rates
 simulate_spike_trains   Generates sythetic Poisson process spike trains
 
@@ -27,8 +27,8 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
-# TODO  Generalize basic functions (2bool,etc.) to arbitrary shape of spike_times array?
-# TODO  Add ISI/autocorrelation stats?
+# TODO  Generalize basic functions (bin_rate,density) to spike_bool inputs?
+# TODO  Add ISI/autocorrelation stats
 
 from math import isclose, ceil, sqrt
 import numpy as np
@@ -52,7 +52,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False):
 
     rates,bins = bin_rate(data,lims=None,width=50e-3,bins=None,count=False)
 
-    INPUTS
+    ARGS
     data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
@@ -114,14 +114,16 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False):
     
     # For standard bins, can use histogram algorithm
     if std_bins:
-        # Convert bins to format expected by np.histogram = edges of all bins in 1 series
-        bins = np.hstack((bins[:,0],bins[-1,-1]))
         count_spikes = _histogram_count
+        # Convert bins to format expected by np.histogram = edges of all bins in 1 series
+        bins_ = np.hstack((bins[:,0],bins[-1,-1]))
     # Otherwise, need algorithm to enumerate and count spikes in each bin
     else:        
         count_spikes = _custom_bin_count
+        bins_ = bins
         
     # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
     data_flat = data.flat
     
     # Create array to hold counts/rates. Same shape as data, with bin axis appended.
@@ -134,7 +136,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False):
         coords = data_flat.coords
         
         # Count spikes within each bin
-        rates[(*coords,slice(None))] = count_spikes(data[coords],bins)
+        rates[(*coords,slice(None))] = count_spikes(data[coords],bins_)
 
         # Iterate to next element (list of spike times for trial/unit/etc.) in data 
         next(data_flat)        
@@ -163,22 +165,20 @@ psth = bin_rate
 """ Aliases function bin_rate as psth """
 
 
-def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
+def density(data, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
             lims=None, buffer=None, downsmp=1, **kwargs):
     """
     Computes spike density function via convolution with given kernel/width
 
-    spike_density,t = density(spike_times,t=None,kernel='gaussian',width=50e-3,
-                              smp_rate=1000,lims=None,buffer=None,downsmp=1,
-                              **kwargs)
+    rates,t = density(data,t=None,kernel='gaussian',width=50e-3,
+                      smp_rate=1000,lims=None,buffer=None,downsmp=1,
+                      **kwargs)
 
-    INPUTS
-    spike_times Arbitrary-shape (...) object ndarray of (n_spikes[row,col],) ndarrays.
-                Usually n_rows=n_trials,n_cols=n_units.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event. Must be in same time units as epochs.
-                Can be given for multiple neurons,trials; output will be same
-                size with extra time axis appended.
+    ARGS
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
 
     kernel      String. Name of convolution kernel to use:
                 'gaussian' [default] | 'hanning'
@@ -211,10 +211,13 @@ def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
     (any additional kwargs passed directly to kernel function)
 
     RETURNS
-    spike_density (...,n_timepts) ndarray. Same shape as spike_times, with
-                time axis (len=n_timepts) appended to end. Spike density function.
-
-    t           (n_timepts,) ndarray. Time sampling vector for spike_density
+    rates       (...,n_timepts) ndarray. Spike density function -- smoothed
+                spike rates (in spk/s) estimated at each timepoint (and for each
+                trial/unit/etc. in <data>). 
+                Same shape as <data>, with time axis appended to end.
+                If only a single spike train is input, output is (n_bins,) vector.
+                    
+    t           (n_timepts,) ndarray. Time sampling vector for rates
     """
     # Set default buffer based on overlap of kernel used
     if buffer is None:
@@ -243,37 +246,63 @@ def density(spike_times, t=None, kernel='gaussian', width=50e-3, smp_rate=1000,
         bins = np.arange(t[0] - dt/2, t[-1] + dt/2 + 1e-12, dt)
         args = {'bins':bins}
 
-    # Convert spike times to binary spike trains -> (n_rows,n_cols,n_timepts)
-    spike_bool,t = times_to_bool(spike_times,**args)
+    # Convert spike times to binary spike trains -> (...,n_timepts)
+    spike_bool,t = times_to_bool(data,**args)
 
+    # Ensure kernel broadcasts against spike_bool
+    slicer = tuple([np.newaxis]*(spike_bool.ndim-1) + [slice(None)])
+    
     # Compute density as convolution of spike trains with kernel
-    spike_density = convolve(spike_bool,kernel[np.newaxis,np.newaxis,:],mode='same')
+    # Note: 1d kernel implies 1d convolution across multi-d array spike_bool
+    rates = convolve(spike_bool,kernel[slicer],mode='same')
 
-    # Remove any time buffer from spike density and time sampling veotor
+    # Remove any time buffer from spike density and time sampling vector
+    # (also do same for spike_bool bc of 0-fixing bit below)
     if buffer != 0:
-        dt   = np.mean(np.diff(t))
-        buffer = int(round(buffer/dt))  # Convert buffer from time units -> samples
-        spike_density = _remove_buffer(spike_density,buffer,axis=-1)
-        t = _remove_buffer(t,buffer,axis=-1)
+        dt          = np.mean(np.diff(t))
+        buffer      = int(round(buffer/dt))  # Convert buffer from time units -> samples
+        spike_bool  = _remove_buffer(spike_bool,buffer,axis=-1)
+        rates       = _remove_buffer(rates,buffer,axis=-1)
+        t           = _remove_buffer(t,buffer,axis=-1)
+        
+    # Implement any temporal downsampling of rates    
     if downsmp != 1:
-        spike_density = spike_density[...,0:-1:downsmp]
-        t = t[...,0:-1:downsmp]
+        spike_bool  = spike_bool[...,0:-1:downsmp]        
+        rates       = rates[...,0:-1:downsmp]
+        t           = t[...,0:-1:downsmp]
 
-    # KLUDGE Sometime trials/neurons w/ 0 spikes end up with tiny non-0 values
+    # KLUDGE Sometime trials/neurons/etc. w/ 0 spikes end up with tiny non-0 values
     # due to floating point error in fft routines. Fix by setting = 0.
-    no_spike_idxs = ~spike_bool.any(axis=2,keepdims=True)
-    spike_density[np.tile(no_spike_idxs,(1,1,spike_density.shape[-1]))] = 0
-
-    return spike_density, t
+    no_spike_idxs   = ~spike_bool.any(axis=-1,keepdims=True)
+    shape           = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])    
+    rates[np.tile(no_spike_idxs,shape)] = 0    
+    
+    return rates, t
 
 
 #==============================================================================
-# PLOTTING FUNCTIONS
+# Plotting functions
 #==============================================================================
 def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
                 xlabel=None, ylabel=None):
     """
-    Plots rasters (TODO more documentation)
+    Plots rasters.  Currently super slow, needs to be optimized (TODO)
+    
+    ARGS
+    spike_times (n_spikes,) array-like | (n_trains,) object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array. Unlike other functions,
+                here object array must be 1d.                
+    
+    ax          Axes object. Axis to plot into. Default: plt.gca()
+    xlim        (2,) array-like. x-axis limits of plot. Default: (auto-set)
+    color       Color specifier. Color to plot all spikes in. Default: '0.25' (dark gray)
+    height      Float. Height of each plotted spike (in fraction of distance btwn spike trains)
+                Default: 1.0 (each spike height is full range for its row in raster)
+    x/ylabel    String. x/y-axis labels for plot. Default: (no label)
+    
+    ACTION      Plots raster plot from spike time data
     """
     if ax is None: ax = plt.gca()
 
@@ -300,7 +329,7 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
 
 
 def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
-    """ PLots single line of raster plot """
+    """ Plots single line of raster plot """
     # Extract only spike w/in plotting time window
     if xlim is not None:
         spike_times = spike_times[(spike_times >= xlim[0]) &
@@ -320,7 +349,7 @@ def plot_mean_waveforms(spike_waves, t=None, sd=True,
     ax = plot_mean_waveforms(spike_waves,t=None,sd=True,
                              ax=None,plot_colors=None)
 
-    INPUTS
+    ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
                 Spike waveforms for one or more units
 
@@ -376,7 +405,7 @@ def plot_waveform_heatmap(spike_waves, t=None, wf_range=None,
     ax = plot_waveform_heatmap(spike_waves,t=None,wf_range=None,
                                ax=None,cmap=None)
 
-    INPUTS
+    ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
                 Spike waveforms for one or more units
 
@@ -440,7 +469,7 @@ def realign_spike_times(spike_times, align_times):
 
     spike_times = realign_spike_times(spike_times,align_times)
 
-    INPUTS
+    ARGS
     spike_times (n_trials,n_units) object ndarray of (n_spikes[trial,unit],) ndarrays.
                 Spike timestamps, usually in seconds referenced to some
                 within-trial event.
@@ -472,7 +501,7 @@ def realign_spike_times_on_event(spike_times, event_data, event):
 
     spike_times = realign_spike_times_on_event(spike_times,event_data,event)
 
-    INPUTS
+    ARGS
     spike_times (n_trials,n_units) object ndarray of (n_spikes[trial,unit],) ndarrays.
                 Spike timestamps, usually in seconds referenced to some
                 within-trial event.
@@ -500,7 +529,7 @@ def bool_to_times(spike_bool, bins):
 
     spike_times = bool_to_times(spike_bool,bins)
 
-    INPUTS
+    ARGS
     spike_bool  (n_rows,n_cols,n_bins) ndarray of bools. Binary spike trains,
                 where 1 indicates >= 1 spike in time bin, 0 indicates no spikes.
 
@@ -533,7 +562,7 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
 
     spike_bool,timepts = times_to_bool(spike_times,lims=None,width=1e-3,bins=None)
 
-    INPUTS
+    ARGS
     spike_times (n_spikes,) array-like | object array of (n_spikes,) arrays.
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
@@ -591,7 +620,7 @@ def pool_electrode_units(spike_data, electrodes, elec_set=None,
     spike_data,elec_idxs = pool_electrode_units(spike_data,electrodes,
                                                 elec_set=None,return_idxs=False)
 
-    INPUTS
+    ARGS
     spike_data  (n_trials,n_units) object ndarray of (n_spikes[row,col],) ndarrays
                 of spike timestamp data or
                 (n_trials,n_units,n_timepts) ndarray of floats/ints of spike
@@ -764,7 +793,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     rates,labels = simulate_spike_rates(gain=5.0,offset=5.0,n_conds=2,
                                         n_trials=1000,window=1.0,seed=None)
 
-    INPUTS
+    ARGS
     gain    Scalar | (n_conds,) array-like. Spike rate gain (in spk/s) for
             each condition, which sets effect size.
             Scalar : spike rate difference between each successive condition
@@ -790,8 +819,6 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO  Add support for multiple units w/ varying effect probability or size?
-
     if seed is not None: np.random.seed(seed)
 
     # Is gain scalar-valued or array-like?
@@ -831,7 +858,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
                                           n_trials=1000,window=1.0,seed=None,
                                           out_type='timestamp')
 
-    INPUTS
+    ARGS
     gain    Scalar | (n_conds,) array-like. Spike rate gain (in spk/s) for
             each condition, which sets effect size.
             Scalar : spike rate difference between each successive condition
@@ -862,8 +889,6 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO  Add support for multiple units w/ varying effect probability or size?
-
     if seed is not None: np.random.seed(seed)
 
     assert out_type in ['timestamp','boolean'], \
@@ -933,7 +958,7 @@ def test_rate(method, plot=False, rates=(5,10,20,40), n_trials=1000, **kwargs):
     
     means,sems = test_rate(method,plot=False,rates=(5,10,20,40),n_trials=1000, **kwargs)
                               
-    INPUTS
+    ARGS
     method  String. Name of rate estimation function to test:
             'bin_rate' | 'density'
             
@@ -1048,10 +1073,11 @@ def _iarange(start=0, stop=0, step=1):
     """
     Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
     output, except ends at stop, not stop - 1 (or more generally stop - step)
+    
+    Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)
 
     r = _iarange(start=0,stop=0,step=1)
     """
-    # TODO  Generalize to deal w/ different input configs (eg iarange(stop))
     if isinstance(step,int):    return np.arange(start,stop+1,step)
     else:                       return np.arange(start,stop+1e-12,step)
 
@@ -1070,7 +1096,7 @@ def _remove_buffer(data, buffer, axis=-1):
 
     data = _remove_buffer(data,buffer,axis=-1)
 
-    INPUTS
+    ARGS
     data    Data array where a buffer has been appended on both ends of time
             dimension. Can be any arbitrary size, typically
             (n_trials,nNeurons,n_timepts+2*buffer).
