@@ -44,16 +44,18 @@ spike_field_phase_locking_value Spike-field PLV between a spike/LFP pair
 spike_field_pairwise_phase_consistency Spike-field PPC between a spike/LFP pair
 
 ### Preprocessing ###
-remove_dc           Removes constant DC component of signals
-remove_evoked       Removes phase-locked evoked potentials from signals
-
 get_freq_sampling   Frequency sampling vector for a given FFT-based computation
 setup_sliding_windows Generates set of sliding windows from given parameters
+cut_trials          Cut LFPs/continuous data into trial segments
+
+remove_dc           Removes constant DC component of signals
+remove_evoked       Removes phase-locked evoked potentials from signals
 
 ### Postprocesssing ###
 pool_freq_bands     Averages spectral data within set of frequency bands
 pool_time_epochs    Averages spectral data within set of time epochs
-
+one_sided_to_two_sided Converts 1-sided Fourier transform output to 2-sided equivalent
+    
 ### Simulation/testing ###
 simulate_mvar        Simulates network activity with given connectivity
 network_simulation   Canned network simulations
@@ -77,6 +79,8 @@ Created on Thu Oct  4 15:28:15 2018
 # TODO  Add Hanning tapers as another spectral analysis option
 # TODO  Build in ability to compute more than just pairwise sync measures?
 
+import os
+import time
 from math import floor,ceil,log2,pi,sqrt
 from collections import OrderedDict
 from multiprocessing import cpu_count
@@ -86,6 +90,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.signal.windows import dpss
 from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression
 from pyfftw.interfaces.scipy_fftpack import fft,ifft # ~ 46/16 s on benchmark
 
@@ -115,7 +120,7 @@ _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
 # General spectral analysis functions
 # =============================================================================
 def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
-             **kwargs):
+             removeDC=True, **kwargs):
     """
     Computes complex frequency spectrum of data using given method
 
@@ -136,6 +141,9 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
 
     signal      String. Type of signal in data: 'lfp' [default] or 'spike'
 
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
     **kwargs    All other kwargs passed directly to method-specific
                 spectrum function. See there for details.
 
@@ -155,18 +163,18 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
-    spec,freqs = spec_fun(data,smp_rate,axis=axis,signal=signal, **kwargs)
+    spec,freqs = spec_fun(data,smp_rate,axis=axis,signal=signal,removeDC=removeDC, **kwargs)
 
     return spec, freqs
 
 
 def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
-                **kwargs):
+                removeDC=True, **kwargs):
     """
     Computes complex time-frequency transform of data using given method
 
     spec,freqs,timepts = spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                     signal='lfp',**kwargs)
+                                     signal='lfp',removeDC=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -183,6 +191,9 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
                 'bandfilter' :  Band-pass filtering and Hilbert transform
 
     signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
 
     **kwargs    All other kwargs passed directly to method-specific
                 spectrogram function. See there for details.
@@ -208,7 +219,7 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
-    spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,signal=signal, **kwargs)
+    spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,signal=signal,removeDC=removeDC, **kwargs)
 
     return spec, freqs, timepts
 
@@ -257,12 +268,12 @@ def power_spectrum(data, smp_rate, axis=0, method='multitaper', **kwargs):
     return spec, freqs
 
 
-def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
+def power_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, **kwargs):
     """
     Computes power of time-frequency transform of data using given method
 
     spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                          **kwargs)
+                                           removeDC=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -278,6 +289,9 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
 
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
     **kwargs    All other kwargs passed directly to method-specific
                 spectrogram function. See there for details.
 
@@ -294,9 +308,9 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
     # Compute full complex spectrogram
     spec,freqs,timepts = spectrogram(data,smp_rate,axis=axis,method=method,
-                                     **kwargs)
+                                     removeDC=removeDC,**kwargs)
 
-    # Compute power from complex spectral data (.real fixe small float errors)
+    # Compute power from complex spectral data (.real fixes small float errors)
     spec = (spec*spec.conj()).real
 
     # Compute mean across tapers for multitaper method (taper axis = <axis>+1)
@@ -305,12 +319,12 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     return spec, freqs, timepts
 
 
-def phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs):
+def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, **kwargs):
     """
     Computes phase of time-frequency transform of data using given method
 
     spec,freqs,timepts = phase_spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                          **kwargs)
+                                           removeDC=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -326,6 +340,9 @@ def phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs):
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
 
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
     **kwargs    All other kwargs passed directly to method-specific
                 spectrogram function. See there for details.
 
@@ -341,7 +358,7 @@ def phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs):
     timepts     (n_timepts,...) ndarray. List of time points / time window centers
                 for each time index in <spec>
     """
-    spec,freqs,timepts = spectrogram(data,smp_rate,axis=axis,method=method, **kwargs)
+    spec,freqs,timepts = spectrogram(data,smp_rate,axis=axis,method=method,removeDC=removeDC, **kwargs)
 
     # Compute phase angle of spectrogram
     spec = np.angle(spec)
@@ -355,15 +372,14 @@ def phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs):
 # =============================================================================
 # Multitaper spectral analysis functions
 # =============================================================================
-def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
-                        tapers=None, pad=True, **kwargs):
+def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, removeDC=True,
+                        freq_width=4, n_tapers=None, tapers=None, pad=True, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP)
     or point process (eg spike) data
 
-    spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,signal='lfp',
-                                    freq_range=None,tapers=None,pad=True,
-                                    **kwargs)
+    spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,signal='lfp',freq_range=None,removeDC=True,
+                                     freq_width=4,n_tapers=None,tapers=None,pad=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -379,10 +395,20 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     freq_range  (2,) array-like | Scalar. Range of frequencies to keep in output,
                 either given as an explicit [low,high] range or just a scalar
                 giving the highest frequency to return.
-                Default: all frequencies from FFT
+                Default: all frequencies from FFT                
+    
+    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
+                Note: Time bandwidth 'T' is set to full length of data.
+    
+    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
+                the max number of spectrally delimited tapers. Default: 2TW-1                
 
-    tapers      (n_samples,n_tapers). Computed tapers (as computed by
-                compute_tapers())
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
+    tapers      (n_samples,n_tapers). Precomputed tapers (as computed by compute_tapers()).
+                Input either (freq_width, n_tapers) -or- tapers.
+                Default: computed from (time range, freq_width, n_tapers)
 
     pad         Bool. If True [default], zero-pads data to next power of 2 length
 
@@ -405,7 +431,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     if (signal == 'spike') and (_spike_data_type(data) == 'timestamp'):
         data,_ = times_to_bool(data,**kwargs)
         axis = data.ndim
-
+    
     # If observation axis != 0, permute axis to make it so
     if axis != 0: data = np.moveaxis(data,axis,0)
 
@@ -416,10 +442,12 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     # Set frequency sampling vector
     freqs,fbool = get_freq_sampling(smp_rate,n_fft,freq_range=freq_range)
 
-    # Reshape tapers to (n_timepts,n_tapers) (if not already)
-    assert tapers is not None, \
-        "Must input taper functions in <tapers>. Use compute_tapers()"
+    # Compute DPSS taper functions (if not precomputed)
+    if tapers is None:
+        tapers = compute_tapers(smp_rate,time_width=n_timepts/smp_rate,
+                                freq_width=freq_width,n_tapers=n_tapers)
 
+    # Reshape tapers to (n_timepts,n_tapers) (if not already)
     if (tapers.ndim == 2) and (tapers.shape[1] == n_timepts): tapers = tapers.T
     assert tapers.shape[0] == n_timepts, \
         ValueError("tapers must have same length (%d) as number of timepoints in data (%d)"
@@ -439,6 +467,8 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     # Reshape tapers and data to have appropriate shapes to broadcast together
     if data.ndim > 1:  tapers = np.reshape(tapers,taper_shape)
 
+    if removeDC: data = remove_dc(data,axis=0)
+    
     # Insert dimension for tapers in data axis 1 -> (n_timepts,1,...)
     data    = data[:,np.newaxis,...]
 
@@ -449,7 +479,8 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     spec    = fft(data,n=n_fft,axis=0)/smp_rate
 
     # Subtract off the DC component (average spike rate) for point process signals
-    if signal == 'spike':  spec = data - taper_fft*n_spikes
+    # TODO How does this interact with DC removal above -- prolly only do once, no? Can we just do it on raw instead?
+    # if signal == 'spike':  spec = data - taper_fft*n_spikes
 
     # Extract desired set of frequencies
     spec    = spec[fbool,...]
@@ -460,17 +491,17 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None,
     return spec, freqs
 
 
-def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp',
-                           freq_range=None, window=0.5, spacing=None,
+def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp', freq_range=None, removeDC=True, 
+                           time_width=0.5, freq_width=4, n_tapers=None, spacing=None,
                            tapers=None, pad=True, **kwargs):
     """
     Multitaper time-frequency spectrogram computation for continuous (eg LFP)
     or point process (eg spike) data
 
-    spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,
-                                               signal='lfp',freq_range=None,
-                                               window=0.5,spacing=None,
-                                               tapers=None,pad=True,**kwargs)
+    spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,signal='lfp',
+                                                freq_range=None,removeDC=True,
+                                                time_width=0.5,freq_width=4,n_tapers=None,
+                                                spacing=None,tapers=None,pad=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -488,13 +519,23 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp',
                 giving the highest frequency to return.
                 Default: all frequencies from FFT
 
-    window      Scalar. Width of sliding time window (s) [default: 0.5 s].
-                Should have same size as tapers (ie smp_rate*window = tapers.shape[0])
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                    
+    time_width  Scalar. Time bandwidth 'T' (s). Width of sliding time window is
+                set equal to this. Default: 0.5 (500 ms)
+    
+    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
+    
+    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
+                the max number of spectrally delimited tapers. Default: 2TW-1                
 
     spacing     Scalar. Spacing between successive sliding time windows (s).
                 Default: Set = window width (so each window exactly non-overlapping)
 
-    tapers      (nPerWin,n_tapers). Computed tapers (as computed by compute_tapers()).
+    tapers      (n_win_samples,n_tapers). Precomputed tapers (as computed by compute_tapers()).
+                Input either (time_width, freq_width, n_tapers) -or- tapers.
+                Default: computed from (time_width, freq_width, n_tapers)
 
     pad         Bool. If True [default], zero-pads data to next power of 2 length
 
@@ -523,8 +564,11 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp',
     if axis != 0: data = np.moveaxis(data,axis,0)
     n_timepts = data.shape[0]
 
+    window = time_width
     if spacing is None: spacing = window
-    if tapers is None:  tapers = compute_tapers(smp_rate,T=window,W=4,n_tapers=3)
+    # Compute DPSS taper functions (if not precomputed)
+    if tapers is None:
+        tapers = compute_tapers(smp_rate,time_width=time_width,freq_width=freq_width,n_tapers=n_tapers)
 
     # Set up parameters for data time windows
     # Set window starts to range from time 0 to time n - window width (1e-12 for fp err)
@@ -532,13 +576,16 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp',
     # Set sampled timepoint vector = center of each window
     timepts     = win_starts + window/2.0
 
-    # Extract time-windowed version of data -> (nWinTimePts,n_wins,nDataSeries)
+    # Extract time-windowed version of data -> (nWinTimePts,n_wins,n_dataseries)
     data = _extract_triggered_data(data,smp_rate,win_starts,[0,window])
 
+    if removeDC: data = remove_dc(data,axis=0)
+    
     # Do multitaper analysis on windowed data
+    # Note: Set removeDC=False bc already done above
     spec, freqs = multitaper_spectrum(data,smp_rate,axis=0,signal=signal,
                                       freq_range=freq_range,tapers=tapers,pad=pad,
-                                      **kwargs)
+                                      removeDC=False,**kwargs)
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
     if axis != 0: data = np.moveaxis(data,[0,1,2],[axis,axis+1,axis+2])
@@ -546,77 +593,66 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp',
     return spec, freqs, timepts
 
 
-def compute_tapers(smp_rate,T=None,W=None,TW=None,n_tapers=None):
+def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     """
     Computes Discrete Prolate Spheroidal Sequence (DPSS) tapers for use in
     multitaper spectral analysis.
 
     Uses scipy.signal.windows.dpss, but arguments are different here
 
-    tapers = compute_tapers(smp_rate,T=None,W=None,TW=None,n_tapers=None)
+    tapers = compute_tapers(smp_rate,time_width=0.5,freq_width=4,n_tapers=None)
+    
     ARGS
-    smp_rate Scalar. Data sampling rate (Hz)
+    smp_rate    Scalar. Data sampling rate (Hz)
 
-    Note: Must input at least 2 of 3 args from set T,W,TW. The 3rd is computed
-          using TW = T*W. If values for all 3 arg's given, must have TW = T*W.
-
-    T       Scalar. Time bandwidth (s). Should match data window length (in s).
-    W       Scalar. Frequency bandwidth (Hz)
-    TW      Scalar. Time-frequency bandwidth product.
-
-    n_tapers Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
-            the max number of spectrally delimited tapers. Default: 2TW-1
+    time_width  Scalar. Time bandwidth 'T' (s). Should match data window length.
+                Default: 0.5 (500 ms)
+    
+    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
+    
+    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
+                the max number of spectrally delimited tapers. Default: 2TW-1
 
     RETURNS
-    tapers (n_samples,n_tapers). Computed tapers (n_samples = T*smp_rate)
+    tapers (n_samples,n_tapers) ndarray. Computed dpss taper functions (n_samples = T*smp_rate)
 
     SOURCE  Adapted from Cronux function dpsschk.m
     """
-    n_args = (T is not None) + (W is not None) + (TW is not None)
-    assert n_args >= 2, ValueError("At least 2/3 arguments from set T,W,TW must be given")
-
-    # If all 3 arg's are set, make sure they are consistent
-    if n_args == 3:
-        assert TW == T*W, \
-            ValueError("If all arg's are given, T (%1f) * W (%.1f) must = TW (%.1f)"
-                       % (T,W,TW))
-    # If 2 arg's are set, set the 3rd one appopriately
-    elif TW is None:    TW  = T*W
-    elif T is None:     T   = TW/W
-    elif W is None:     W   = TW/T
-
-    # Up to 2TW-1 tapers are bounded; this is both the default and max value for n_tapers
+    # Time-frequency bandwidth product 'TW' (s*Hz)
+    TW  = time_width*freq_width
+    
+    # Up to 2TW-1 tapers are bounded; this is both the default and max value for n_tapers    
     n_tapers_max = floor(2*TW - 1)
-    if n_tapers is None:     n_tapers = n_tapers_max
-    else:
-        assert n_tapers <= n_tapers_max, \
-            ValueError("For TW = %.1f, %d tapers are tightly bounded in" \
-                       "frequency (n_tapers set = %d)" \
-                       % (TW,n_tapers_max,n_tapers))
+    if n_tapers is None: n_tapers = n_tapers_max
+    
+    assert n_tapers <= n_tapers_max, \
+        ValueError("For TW = %.1f, %d tapers are tightly bounded in" \
+                    "frequency (n_tapers set = %d)" \
+                    % (TW,n_tapers_max,n_tapers))
 
     # Convert time bandwidth from s to window length in number of samples
-    M = int(round(T*smp_rate))
+    n_samples = int(round(time_width*smp_rate))
 
     # Compute the tapers for given window length and time-freq product
     # Note: dpss() normalizes by sum of squares; x sqrt(smp_rate)
     #       converts this to integral of squares (see Chronux function dpsschk())
     # Note: You might imagine you'd want sym=False, but sym=True gives same values
     #       as Chronux dpsschk() function...
-    return dpss(M, TW, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
+    return dpss(n_samples, TW, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
 
 
 # =============================================================================
 # Wavelet analysis functions
 # =============================================================================
 def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
-                        freqs=2**np.arange(1,7.5,0.25), wavelet='morlet',
-                        wavenumber=6, pad=False, buffer=0, downsmp=1):
+                        freqs=2**np.arange(1,7.5,0.25), removeDC=True,
+                        wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1):
     """
     Computes continuous wavelet transform of given data signal at given frequencies.
 
 
     spec,freqs,timepts = wavelet_spectrogram(data,smp_rate,axis=0,signal='lfp',
-                                            freqs=2**np.arange(1,7.5,0.25),
+                                            freqs=2**np.arange(1,7.5,0.25),removeDC=True,
                                             wavelet='morlet',wavenumber=6,
                                             pad=True,buffer=0,downsmp=1)
 
@@ -634,6 +670,9 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
                 Default: 2**np.irange(1,7.5,0.25) (log sampled in 1/4 octaves from 2-128)
 
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
     wavelet     String. Name of wavelet type. Default: 'morlet'
 
     wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
@@ -642,9 +681,8 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
     pad         Bool. If True, zero-pads data to next power of 2 length. Default: False
 
-    buffer      Int. Length (number of samples in original sampling rate) of
-                buffer to trim off each end of time dimension of data. Removes
-                symmetric buffer previously added (outside of here) to prevent
+    buffer      Float. Time (s) to trim off each end of time dimension of data. 
+                Removes symmetric buffer previously added (outside of here) to prevent
                 edge effects. Default: 0 (no buffer)
 
     downsmp     Int. Factor to downsample time sampling by (after spectral analysis).
@@ -665,7 +703,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     # Convert buffer from s -> samples
     if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
 
-    # Reshape data array -> (n_timepts_in,nDataSeries) matrix
+    # Reshape data array -> (n_timepts_in,n_dataseries) matrix
     data, data_shape = _reshape_data(data,axis)
     n_timepts_in = data.shape[0]
 
@@ -683,6 +721,8 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     else:
         wavelets_fft = wavelet
 
+    if removeDC: data = remove_dc(data,axis=0)
+    
     # Compute FFT of data
     data = fft(data, n=n_fft,axis=0, **_FFTW_KWARGS_DEFAULT)
     
@@ -867,8 +907,8 @@ def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
 # Band-pass filtering analysis functions
 # =============================================================================
 def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
-                           freqs=((2,8),(10,32),(40,100)), filt='butter',
-                           params=None, buffer=0, downsmp=1, **kwargs):
+                           freqs=((2,8),(10,32),(40,100)), removeDC=True,
+                           filt='butter', params=None, buffer=0, downsmp=1, **kwargs):
     """
     Computes zero-phase band-filtered and Hilbert-transformed signal from data
     for given frequency band(s).
@@ -899,6 +939,9 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
                 Default: ((2,8),(10,32),(40,100)) (~theta, alpha/beta, gamma)
                 ** Only used if filter <params> not explitly given **
 
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
+                
     filt        String. Name of filter to use. Default: 'butter' (Butterworth)
                 ** Only used if filter <params> not explitly given **
 
@@ -912,10 +955,9 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
         z,p,k   Zeros, poles, and system gain of the IIR filter transfer function
 
-    buffer      Int. Length (number of samples in original sampling rate) of
-                buffer to trim off each end of time dimension of data. Removes
-                previously-appended (external to this function) symmetric buffer 
-                to prevent edge effects. Default: 0 (no buffer)
+    buffer      Float. Time (s) to trim off each end of time dimension of data. 
+                Removes symmetric buffer previously added (outside of here) to prevent
+                edge effects. Default: 0 (no buffer)
 
     downsmp     Int. Factor to downsample time sampling by (after spectral analysis).
                 eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
@@ -934,6 +976,9 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
     timepts     (n_timepts_out,...) ndarray. List of timepoints (indexes into original
                 data time series) in <spec>.
     """
+    # Convert buffer from s -> samples
+    if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
+    
     if signal == 'spike':
         raise ValueError("bandfilter for spike signals not supported (yet)") # TODO
 
@@ -966,11 +1011,12 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
             n_freqs = len(params['b'])
 
     # Compute center freq of each band, to have uniform output w/ other func's
+    # TODO Do we really want to do this or return actual bands?
     if freqs is not None:
         freqs[freqs > smp_rate/2] = smp_rate/2
         freqs = freqs.mean(axis=1)
 
-    # Reshape data array -> (n_timepts_in,nDataSeries) matrix
+    # Reshape data array -> (n_timepts_in,n_dataseries) matrix
     data, data_shape = _reshape_data(data,axis)
     if data.ndim == 1:  n_timepts_in,n_series = data.shape[0],1
     else:               n_timepts_in,n_series = data.shape
@@ -979,6 +1025,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
     timepts_out     = np.arange(buffer,n_timepts_in-buffer,downsmp)
     n_timepts_out   = len(timepts_out)
 
+    if removeDC: data = remove_dc(data,axis=0
+                                  )
     spec = np.empty((n_freqs,n_timepts_out,n_series),dtype=complex)
 
     # For each frequency band, band-filter raw signal and
@@ -1217,7 +1265,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         
     # Compute mean,SD of each frequency band across all trials and timepoints within given time window
     else:        
-        tbool = (timepts >= window[0]) & (timepts <= window[1])
+        tbool = (timepts >= window[0]) & (timepts <= window[1])        
         mean = data.compress(tbool,axis=axis).mean(axis=(axis,trial_axis), keepdims=True)
         sd   = data.compress(tbool,axis=axis).std(axis=(axis,trial_axis), ddof=0, keepdims=True)
                                
@@ -1403,6 +1451,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     assert (single_trial is None) or (single_trial in ['pseudo','richter']), \
         ValueError("Parameter <single_trial> must be = None, 'pseudo', or 'richter'")
 
+    # print('raw', data1.shape, axis, time_axis)
     if data_type is None: data_type = _infer_data_type(data1)
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
@@ -1413,15 +1462,18 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
                                           method=method,signal='lfp',**kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp',**kwargs)
-        if axis >= time_axis: axis += 1   # Account for new frequency axis
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
     else:
         freqs = []
         timepts = []
 
     # For multitaper, compute means across trials, tapers; df = 2*n_trials*n_tapers
     if method == 'multitaper':
-        reduce_axes = (axis,time_axis+1)
-        df = 2*data1.shape[axis]*data1.shape[time_axis+1]
+        reduce_axes = (axis,time_axis-1)
+        df = 2*data1.shape[axis]*data1.shape[time_axis-1]
     # Otherwise, just compute means across trials; df = 2*n_trials (TODO is this true?)
     else:
         reduce_axes = axis
@@ -1629,19 +1681,27 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
                                           method=method,signal='lfp', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
-        if axis >= time_axis: axis += 1   # Account for new frequency axis
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
     else:
         freqs = []
         timepts = []
 
+    # For multitaper, compute means across trials, tapers
+    if method == 'multitaper':  reduce_axes = (axis,time_axis-1)
+    # Otherwise, just compute means across trials
+    else:                       reduce_axes = axis
+        
     # Standard across-trial PLV estimator
     if single_trial is None:
         if return_phase:
-            plv,dphi = _spec_to_plv_with_phase(data1,data2,axis=axis)
+            plv,dphi = _spec_to_plv_with_phase(data1,data2,axis=reduce_axes)
             return  plv, freqs, timepts, dphi
 
         else:
-            plv = _spec_to_plv(data1,data2,axis=axis)
+            plv = _spec_to_plv(data1,data2,axis=reduce_axes)
             return  plv, freqs, timepts
 
     # Single-trial PLV estimator using jackknife resampling method
@@ -1649,10 +1709,10 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
         # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
         jackfunc = lambda data1,data2: _spec_to_plv(data1,data2,axis=0)
         # Jackknife resampling of PLV statistic (this is the 'richter' estimator)
-        plv = two_sample_jackknife(jackfunc,data1,data2,axis=axis)
+        plv = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
         # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
         if single_trial == 'pseudo':
-            plv_full = _spec_to_plv(data1,data2,axis=axis,keepdims=True)
+            plv_full = _spec_to_plv(data1,data2,axis=reduce_axes,keepdims=True)
             plv = jackknife_to_pseudoval(plv_full,plv,n_obs)
 
         return  plv, freqs, timepts
@@ -1771,19 +1831,27 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
                                           method=method,signal='lfp', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
                                           method=method,signal='lfp', **kwargs)
-        if axis >= time_axis: axis += 1   # Account for new frequency axis
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
     else:
         freqs = []
         timepts = []
 
+    # For multitaper, compute means across trials, tapers
+    if method == 'multitaper':  reduce_axes = (axis,time_axis-1)
+    # Otherwise, just compute means across trials
+    else:                       reduce_axes = axis
+    
     # Standard across-trial PPC estimator
     if single_trial is None:
         if return_phase:
-            ppc,dphi = _spec_to_ppc_with_phase(data1,data2,axis=axis)
+            ppc,dphi = _spec_to_ppc_with_phase(data1,data2,axis=reduce_axes)
             return ppc, freqs, timepts, dphi
 
         else:
-            ppc = _spec_to_ppc(data1,data2,axis=axis)
+            ppc = _spec_to_ppc(data1,data2,axis=reduce_axes)
             return ppc, freqs, timepts
 
     # Single-trial PPC estimator using jackknife resampling method
@@ -1791,10 +1859,10 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
         # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
         jackfunc = lambda data1,data2: _spec_to_ppc(data1,data2,axis=0)
         # Jackknife resampling of PPC statistic (this is the 'richter' estimator)
-        ppc = two_sample_jackknife(jackfunc,data1,data2,axis=axis)
+        ppc = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
         # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
         if single_trial == 'pseudo':
-            ppc_full = _spec_to_ppc(data1,data2,axis=axis,keepdims=True)
+            ppc_full = _spec_to_ppc(data1,data2,axis=reduce_axes,keepdims=True)
             ppc = jackknife_to_pseudoval(ppc_full,ppc,n_obs)
 
         return ppc, freqs, timepts
@@ -1802,13 +1870,15 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
 
 def _spec_to_ppc(data1, data2, axis=0, keepdims=False):
     """ Compute PPC from a pair of spectra/spectrograms """
-    n = data1.shape[axis]
+    if np.isscalar(axis):   n = data1.shape[axis]
+    else:                   n = np.prod([data1.shape[ax] for ax in axis])
     return plv_to_ppc(_spec_to_plv(data1,data2,axis=axis,keepdims=keepdims), n)
 
 
 def _spec_to_ppc_with_phase(data1, data2, axis=0, keepdims=False):
     """ Compute PPC and mean relative phase from a pair of spectra/spectrograms """
-    n = data1.shape[axis]
+    if np.isscalar(axis):   n = data1.shape[axis]
+    else:                   n = np.prod([data1.shape[ax] for ax in axis])    
     plv,dphi = _spec_to_plv_with_phase(data1,data2,axis=axis,keepdims=keepdims)
     return plv_to_ppc(plv,n), dphi
 
@@ -1920,7 +1990,10 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None,
                                             **kwargs)
         # Frequency axis always inserted just before time axis, so if
         # observation/trial axis is later, must increment it
-        if axis >= time_axis: axis += 1
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
     else:
         freqs = []
         timepts = []
@@ -2022,8 +2095,11 @@ def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False
 
         # Frequency axis always inserted just before time axis, so if
         # observation/trial axis is later, must increment it
-        if axis >= time_axis: axis += 1
-
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
+        
         # Insert singleton dimension into spkdata to match freq dim in lfpdata
         spkdata = spkdata[np.newaxis,:,:]
 
@@ -2254,16 +2330,57 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
     return np.stack((win_starts,win_ends),axis=1)
 
 
-def _iarange(start=0, stop=0, step=1):
+def cut_trials(data, trial_lims, smp_rate, axis=0):
     """
-    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
-    output, except ends at stop, not stop - 1 (or more generally stop - step)
-
-    r = _iarange(start=0,stop=0,step=1)
+    Cuts continuous (eg LFP) data into trials
+    
+    cut_data = cut_trials(data, trial_lims, smp_rate, axis=0)
+    
+    ARGS
+    data        (...,n_timepts,...) array. Continuous data unsegmented into trials.
+                Arbitrary dimensionality, could include multiple channels, etc.
+                
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s) 
+                to use to cut data.
+                
+    smp_rate    Scalar. Sampling rate of data (Hz).
+    
+    axis        Int. Axis of data array corresponding to time samples. Default: 0                
+                
+    RETURNS
+    cut_data    (...,n_trial_timepts,...,n_trials) array.
+                Continuous data segmented into trials.
+                Trial axis is appended to end of all axes in input data.          
     """
-    # TODO  Generalize to deal w/ different input configs (eg iarange(stop))
-    if isinstance(step,int):    return np.arange(start,stop+1,step)
-    else:                       return np.arange(start,stop+1e-12,step)
+    trial_lims = np.asarray(trial_lims)    
+    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
+        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
+    n_trials = trial_lims.shape[0]
+        
+    # Convert trial_lims in s -> indices into continuous data samples
+    trial_idxs = np.round(smp_rate*trial_lims).astype(int)
+    assert np.allclose(np.diff(np.diff(trial_idxs,axis=1)),0), \
+        ValueError("Variable-length trials are unsupported. All trials in trial_lims must have same length")
+    assert trial_idxs.min() >= 0, ValueError("trial_lims are attempting to index before start of data")
+    assert trial_idxs.max() < data.shape[axis], ValueError("trial_lims are attempting to index beyond end of data")
+                    
+    # Samples per trial = end - start + 1        
+    n_smp_per_trial = int(round((trial_idxs[:,1] - trial_idxs[:,0]).mean())) + 1
+        
+    # Create array to hold trial-cut data. Same shape as data, with time sample axis
+    # reduced to n_samples_per_trial and trial axis appended.
+    cut_shape = [*data.shape,n_trials]
+    cut_shape[axis] = n_smp_per_trial
+    cut_data = np.empty(tuple(cut_shape),dtype=data.dtype)
+    
+    # Extract segment of continuous data for each trial
+    for trial,lim in enumerate(trial_idxs):
+        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
+        
+        # Note: The following is several orders of magnitude slower (mainly bc need to form explicit index):
+        # cut_data[...,trial] = data.take(np.arange(lim[0],lim[1]+1), axis=axis)
+                
+    return cut_data
 
 
 def remove_dc(data, axis=None):
@@ -2519,6 +2636,38 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
     return epoch_data
 
 
+def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
+    """
+    Converts a one-sided Fourier or wavelet transform output to the equivalent
+    two-sided output, assuming conjugate symmetry across positive and negative
+    frequencies (as is the case when the original signals were real).  Also
+    extrapolates values for f=0, as is necessary for wavelet transforms.
+    """
+    assert np.isclose(freqs[-1],smp_rate/2), \
+        "Need to have sampling up to 1/2 sampling rate (Nyquist freq=%d Hz)" % (smp_rate/2)
+
+    # If f=0 is not in data, numerically extrapolate values for it
+    if not np.isclose(freqs,0).any():
+        f0 = _interp1(freqs,data,0,axis=freq_axis,kind='cubic',fill_value='extrapolate')
+        f0 = np.expand_dims(f0,freq_axis)
+        data = np.concatenate((f0,data),axis=freq_axis)
+        freqs = np.concatenate(([0],freqs))
+
+    # Convert values at Nyquist freq to complex conjugate at negative frequency
+    slices = _axis_slices(freq_axis,-1,data.ndim)
+    data[slices] = data[slices].conj()
+    freqs[-1] *= -1
+
+    # Replicate values for all freqs (s.t. 0 < f < nyquist)
+    # as complex conjugates at negative frequencies
+    idxs    = slice(-2,1,-1)
+    slices  = _axis_slices(freq_axis,idxs,data.ndim)
+    data    = np.concatenate((data, data[slices].conj()), axis=freq_axis)
+    freqs   = np.concatenate((freqs, -freqs[idxs]))
+
+    return data,freqs
+
+
 # =============================================================================
 # Helper functions for circular and complex data (phase) analsysis
 # =============================================================================
@@ -2598,16 +2747,17 @@ def jackknife_to_pseudoval(x, xjack, n):
 # =============================================================================
 # Data simulation and testing functions
 # =============================================================================
-def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, 
-                         n_trials=1000, window=1.0, burst_rate=0, burst_sd=None, seed=None):
+def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=1000,
+                         freq_sd=0, amp_sd=0, phase_sd=0,
+                         smp_rate=1000, window=1.0, burst_rate=0, burst_width=4, seed=None):
     """
-    Generates synthetic data with oscillation at given amplitude,frequency,phase.
+    Generates synthetic data with oscillation at given parameters.
     
     Generates multiple trials with constant oscillatory signal +  
     random additive Gaussian noise.
     
-    data = simulate_oscillation(frequency,amplitude=5.0,phase=0,noise=1.0, 
-                                n_trials=1000,window=1.0,burst_rate=0,burst_sd=None,seed=None)
+    data = simulate_oscillation(frequency,amplitude=5.0,phase=0,noise=1.0,n_trials=1000,
+                                smp_rate=1000,window=1.0,burst_rate=0,burst_width=4,seed=None)
     
     ARGS
     frequency   Scalar. Frequency to simulation oscillation at (Hz)
@@ -2619,32 +2769,60 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0,
     noise       Scalar. Amplitude of additive Gaussian noise (a.u). Default: 1.0
     
     n_trials    Int. Number of trials/observations to simulate. Default: 1000
+    
+    freq/amp/phase_sd Scalar. Inter-trial variation in frequency/amplitude/phase,
+                given as Gaussian SD (same units as base parameters, which are used
+                as Gaussian mean). Default: 0 (no inter-trial variation)
 
-    window      Scalar. Time window to simulate spike train over (s). Default: 1.0
+    smp_rate    Int. Sampling rate for simulate data (Hz). Default: 1000
+    
+    window      Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    
+    burst_rate  Scalar. Oscillatory burst rate (bursts/trial). Set=0 to simulate 
+                constant, non-bursty oscillation. Default: 0 (not bursty)
+    
+    burst_width Scalar. Half-width of oscillatory bursts (Gaussian SD, in cycles). Default: 4
     
     seed        Int. Random generator seed for repeatable results.
-                Set=None [default] for actual random numbers.
+                Set=None [default] for fully random numbers.
     
     RETURNS
     data        (n_timepts,n_trials) ndarray. Simulated data                
     """        
     if seed is not None: np.random.seed(seed)
     
-    # Set burst parameters if simulating bursty oscillations
+    def _randn(*args):
+        """ 
+        Generates unit normal random variables in a way that reproducibly matches output of Matlab (with same seed != 0)
+        (np.random.randn() does not work here for unknown reasons)
+        stackoverflow.com/questions/3722138/is-it-possible-to-reproduce-randn-of-matlab-with-numpy?noredirect=1&lq=1
+        """
+        return norm.ppf(np.random.rand(*args))
+
+    # Set per-trial frequency, amplitude, phase from base parameter + any spread
+    freq    = frequency if freq_sd == 0 else frequency + freq_sd*_randn(1,n_trials)
+    amp     = amplitude if amp_sd == 0 else amplitude + amp_sd*_randn(1,n_trials)
+    phi     = phase if phase_sd == 0 else phase + phase_sd*_randn(1,n_trials)
+    
+    # Simulate oscillatory bursts if burst_rate is set != 0
     bursty = burst_rate > 0
-    if burst_sd is None: burst_sd = (1/frequency) * 4
+    # Convert burst width from cycles to s
+    burst_sd = burst_width/freq
     
     # Set time sampling vector (in s)
-    smp_rate = 1000
     n_timepts = round(window * smp_rate)
     t = np.arange(n_timepts) / smp_rate
 
-    # Generate oscillatory signal = sin wave at given amplitude,frequency,phase
-    data = np.tile((amplitude * np.sin(2*pi*frequency*t + phase))[:,np.newaxis], (1,n_trials))
-
+    # Generate oscillatory signal = sinusoid wave at given amplitude(s),frequency(s),phase(s)
+    if np.isscalar(amp) and np.isscalar(freq) and np.isscalar(phi):
+        data = np.tile((amp * np.cos(2*pi*freq*t + phi))[:,np.newaxis], (1,n_trials))
+    else:
+        data = amp * np.cos(2*pi*freq*t[:,np.newaxis] + phi)
+    
+    # Make oscillations bursty, if requested
     if bursty:
         # Function to generate unit-height Gaussian function with given mean,SD
-        def gaussian(mu,sd,t):
+        def _gaussian(mu,sd,t):
             z = (t - mu)/sd
             return np.exp(-0.5*(z**2))
         
@@ -2653,18 +2831,18 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0,
         
         # Generate random burst times within full time range of data
         burst_times = np.empty((n_trials,))
-        burst_times[burst_trials] = np.random.rand(burst_trials.sum()) * t[-1]
+        burst_times[burst_trials] = t[0] + (t[-1]-t[0]) * np.random.rand(burst_trials.sum())
         
         # Weight current trial by random Gaussian envelope if it has a burst
         # otherwise, remove signal from non-burst trials
         for trial in range(n_trials):
             if burst_trials[trial]:
-                data[:,trial] *= gaussian(burst_times[trial],burst_sd,t)
+                data[:,trial] *= _gaussian(burst_times[trial],burst_sd,t)
             else:
                 data[:,trial] *= 0
           
     # Generate additive Gaussian noise of given amplitude
-    if noise != 0:  data += noise * np.random.randn(n_timepts,n_trials)    
+    if noise != 0:  data += noise * _randn(n_timepts,n_trials)    
 
     return data
 
@@ -2792,18 +2970,21 @@ def network_simulation(simulation='DhamalaFig3'):
     return data,smp_rate
 
     
-def test_power(method, test='frequency', values=None, plot=False,
-               n_trials=1000, seed=None, **kwargs):
+def test_power(method, test='frequency', values=None, plot=False, plot_dir=None, seed=1,
+               amp=5.0, freq=32, phi=0, noise=0.5, n=1000, win=3.0, smp_rate=1000, burst_rate=0,  **kwargs):
     """
     Basic testing for functions estimating time-frequency spectral power 
     
     Generates synthetic LFP data using given network simulation,
     estimates spectrogram using given function, and compares estimated to expected.
     
-    means,sems = test_power(method,plot=False,simulation='DhamalaFig3',n_trials=1000, **kwargs)
+    means,sems = test_power(method,test='frequency',value=None,plot=False,plot_dir=None,seed=1,
+                            amp=5.0,freq=32,phi=0,noise=0.5,n=1000,win=3.0,smp_rate=1000,
+                            burst_rate=0,**kwargs)
                               
     ARGS
-    method  String. Name of time-frequency spectral estimation function to test
+    method  String. Name of time-frequency spectral estimation function to test:
+            'wavelet' | 'multitaper' | 'bandfilter'
             
     test    String. Type of test to run. Default: 'frequency'. Options:
             'frequency' Tests multiple simulated oscillatory frequencies
@@ -2811,7 +2992,9 @@ def test_power(method, test='frequency', values=None, plot=False,
             'amplitude' Tests multiple simulated amplitudes at same freq
                         Checks for monotonic increase of amplitude
             'n'         Tests multiple values of number of trials (n)
-                        Checks that power doesn't greatly vary with n.                    
+                        Checks that power doesn't greatly vary with n.
+            'burst_rate' Checks that oscillatory burst rate increases
+                        as it's increased in simulated data.
 
     values  (n_values,) array-like. List of values to test. 
             Interpretation and defaults are test-specific:
@@ -2820,14 +3003,27 @@ def test_power(method, test='frequency', values=None, plot=False,
             'n'         Trial numbers. Default: [25,50,100,200,400,800]
 
     plot    Bool. Set=True to plot test results. Default: False
-                
-    n_trials Int. Number of trials to include in simulated data. Default: 1000
-
+          
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+          
+    seed    Int. Random generator seed for repeatable results.
+            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
+                           
+    - Following args set param's for simulation, may be overridden by <values> depending on test -
+    amp     Scalar. Simulated oscillation amplitude (a.u.) if test != 'amplitude'. Default: 5.0
+    freq    Scalar. Simulated oscillation frequency (Hz) if test != 'frequency'. Default: 32
+    phi     Scalar. Simulated oscillation phase (rad). Default: 0
+    noise   Scalar. Additive noise for simulated signal (a.u., same as amp). Default: 0.5
+    n       Int. Number of trials to simulate if test != 'n'. Default: 1000
+    win     Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
+    burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
+    
     **kwargs All other keyword args passed to spectral estimation function given by <method>.
     
     RETURNS
-    means   (n_freqs,n_timepts) ndarray. Estimated mean spectrogram
-    sems    (n_freqs,n_timepts) ndarray. SEM of mean spectrogram
+    means   (n_freqs,n_timepts,n_values) ndarray. Estimated mean spectrogram for each tested value.
+    sems    (n_freqs,n_timepts,n_values) ndarray. SEM of mean spectrogram for each tested value.
     
     ACTION
     Throws an error if any estimated power value is too far from expected value
@@ -2836,41 +3032,38 @@ def test_power(method, test='frequency', values=None, plot=False,
     method = method.lower()
     test = test.lower()
     
-    # Set defaults for simulation parameters
-    freq        = kwargs.pop('freq',32.0)
-    amp         = kwargs.pop('amp',5.0)
-    n           = kwargs.pop('n',1000)
-    window      = kwargs.pop('window',3.0)
-    burst_rate  = kwargs.pop('burst_rate',0.5)
-    
     # Set defaults for tested values and set up rate generator function depending on <test>
-    if test == 'frequency':
+    if test in ['frequency','freq']:
         values = [4,8,16,32,64] if values is None else values
-        gen_data = lambda freq: simulate_oscillation(freq,amplitude=amp,burst_rate=burst_rate,
-                                                     n_trials=n,window=window,seed=seed)
+        gen_data = lambda freq: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
+                                                     window=win,burst_rate=burst_rate,seed=seed)
         
-    elif test == 'amplitude':
+    elif test in ['amplitude','amp']:
         values = [1,2,5,10,20] if values is None else values
-        gen_data = lambda amp: simulate_oscillation(freq,amplitude=amp,burst_rate=burst_rate,
-                                                    n_trials=n,window=window,seed=seed)
+        gen_data = lambda amp: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
+                                                     window=win,burst_rate=burst_rate,seed=seed)
+        
+    elif test in ['phase','phi']:
+        values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
+        gen_data = lambda phi: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
+                                                    window=win,burst_rate=burst_rate,seed=seed)
         
     elif test in ['n','n_trials']:
         values = [25,50,100,200,400,800] if values is None else values
-        gen_data = lambda n: simulate_oscillation(freq,amplitude=amp,burst_rate=burst_rate,
-                                                  n_trials=n,window=window,seed=seed)
+        gen_data = lambda n: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
+                                                     window=win,burst_rate=burst_rate,seed=seed)
         
-    elif test == 'burst_rate':
+    elif test in ['burst_rate','burst']:
         values = [0.1,0.2,0.4,0.8] if values is None else values
-        gen_data = lambda rate: simulate_oscillation(freq,amplitude=amp,burst_rate=rate,
-                                                     n_trials=n,window=window,seed=seed)        
+        gen_data = lambda rate: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
+                                                     window=win,burst_rate=burst_rate,seed=seed)        
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
     
+    # Ensure hand-set values are sorted (ascending), as many tests assume it
+    values = sorted(values)
     n_values = len(values)
-    
-    smp_rate = 1000 # TODO How to set this properly?
-    
-    
+        
     # Set default parameters for each spectral estimation method
     do_burst = method in ['burst','burst_analysis']
     # Special case: oscillatory burst analysis
@@ -2885,16 +3078,17 @@ def test_power(method, test='frequency', values=None, plot=False,
     elif method == 'bandfilter':
         if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
             
-    for i,value in enumerate(values):
-        print(i,value)
-        # Simulate data with oscillation of given params in additive noise -> (n_timepts,n_trials)
-        data = gen_data(value)
+    if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
+    
+    spec_fun = burst_analysis if do_burst else power_spectrogram
                 
-        if not do_burst:
-            spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,buffer=1.0,**kwargs)
-        else:
-            spec,freqs,timepts = burst_analysis(data,smp_rate,axis=0,method=method,buffer=1.0,**kwargs)
-
+    for i,value in enumerate(values):
+        # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
+        
+        # Simulate data with oscillation of given params -> (n_timepts,n_trials)
+        data = gen_data(value)
+                        
+        spec,freqs,timepts = spec_fun(data,smp_rate,axis=0,method=method,**kwargs)
         n_freqs,n_timepts,n_trials = spec.shape
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
@@ -2913,7 +3107,7 @@ def test_power(method, test='frequency', values=None, plot=False,
              
     # For bandfilter, plot frequency bands in categorical fashion
     if do_burst or (method == 'bandfilter'):
-        freq_transform  = lambda x: x
+        freq_transform  = lambda x: np.argmin(np.abs(x - freqs))  # Index of closest sampled freq
         plot_freqs      = np.arange(n_freqs)
         freq_ticks      = np.arange(n_freqs)
         freq_tick_labels= freqs
@@ -2930,23 +3124,21 @@ def test_power(method, test='frequency', values=None, plot=False,
     # For multitaper, evaluate and plot frequency on linear scale        
     elif method == 'multitaper':
         freq_transform  = lambda x: x
-        plot_freqs      = freqs        
+        plot_freqs      = freqs
         fmin            = ceil(freqs[0]/10.0)*10.0
         fmax            = floor(freqs[-1]/10.0)*10.0                
         freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
         freq_tick_labels= freq_ticks        
             
     # For frequency test, find frequency with maximal power for each test
-    if test == 'frequency':
+    if test in ['frequency','freq']:
         idxs = np.argmax(marginal_means,axis=0)
         peak_freqs = freqs[idxs] if not(do_burst or (method == 'bandfilter')) else idxs
         
-    # For all other tests, find frequency in spectrogram closest to simulated frequency
-    else:
-        test_freq_idx   = np.argmin(np.abs(freq_transform(freq) - freq_transform(freqs)))
-        test_values     = marginal_means[test_freq_idx,:]
-        test_errors     = marginal_sems[test_freq_idx,:]
-    
+    # Find frequency in spectrogram closest to each simulated frequency
+    test_freq_idx   = np.argmin(np.abs(freq_transform(freq) - np.asarray([freq_transform(f) for f in freqs])))
+    test_values     = marginal_means[test_freq_idx,:]
+    test_errors     = marginal_sems[test_freq_idx,:]
     
     # Plot summary of test results                
     if plot:
@@ -2955,156 +3147,498 @@ def test_power(method, test='frequency', values=None, plot=False,
         df      = np.diff(plot_freqs).mean()
         flim    = [plot_freqs[0]-df/2, plot_freqs[-1]+df/2]
         
-        plt.figure()
-        n_subplots = [floor(n_values/2), ceil(n_values/floor(n_values/2))]        
-        for i,value in enumerate(values):
-            ax = plt.subplot(n_subplots[0],n_subplots[1],i+1)
-            plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
-            target_freq = freq_transform(value) if test == 'frequency' else freq_transform(freq)
-            if not (do_burst or (method == 'bandfilter')):
-                plt.plot(tlim, [target_freq,target_freq], '-', color='r', linewidth=0.5)
-            plt.imshow(means[:,:,i], extent=[*tlim,*flim], aspect='auto', origin='lower')
-            if i in [0,n_subplots[1]]:
-                plt.yticks(freq_ticks,freq_tick_labels)
-            else:
-                ax.set_xticklabels([])
-                plt.yticks(freq_ticks,[])
-            plt.title(value)
-            plt.colorbar()
+        # # Plot spectrogram for each tested value
+        # plt.figure()
+        # n_subplots = [floor(n_values/2), ceil(n_values/floor(n_values/2))]
+        # for i,value in enumerate(values):
+        #     ax = plt.subplot(n_subplots[0],n_subplots[1],i+1)
+        #     plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+        #     target_freq = freq_transform(value) if test in ['frequency','freq'] else freq_transform(freq)
+        #     if not (do_burst or (method == 'bandfilter')):
+        #         plt.plot(tlim, [target_freq,target_freq], '-', color='r', linewidth=0.5)
+        #     plt.imshow(means[:,:,i], extent=[*tlim,*flim], aspect='auto', origin='lower')
+        #     if i in [0,n_subplots[1]]:
+        #         plt.yticks(freq_ticks,freq_tick_labels)
+        #     else:
+        #         ax.set_xticklabels([])
+        #         plt.yticks(freq_ticks,[])
+        #     plt.title(np.round(value,decimal=2))
+        #     plt.colorbar()
+        # plt.show()
+        # if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-spectrogram-%s-%s-%s.png' % (method,test)))
         
+        # Plot time-averaged spectrum for each tested value
         plt.figure()
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        ylim = [0,1.05*marginal_means.max()]
+        for i,value in enumerate(values):
+            plt.plot(plot_freqs, marginal_means[:,i], '.-', color=colors[i], linewidth=1.5)
+            target_freq = freq_transform(value) if test in ['frequency','freq'] else freq_transform(freq)
+            if not (do_burst or (method == 'bandfilter')):
+                plt.plot([target_freq,target_freq], ylim, '-', color=colors[i], linewidth=0.5)
+            plt.text(0.9*flim[1], (0.95-i*0.05)*ylim[1], value, color=colors[i], fontweight='bold')
+        plt.xlim(flim)
+        plt.ylim(ylim)
+        plt.xticks(freq_ticks,freq_tick_labels)
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Power')
+        plt.title("%s %s test" % (method,test))
+        plt.show()
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-spectrum-%s-%s.png' % (method,test)))
+            
+        # Plot summary curve of power (or peak frequency) vs tested value
+        plt.figure()
+        ax = plt.subplot(1,1,1)
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
-        if test == 'frequency':
-            plt.plot(plot_freqs, freq_transform(peak_freqs), marker='o')
+        if test in ['frequency','freq']:
+            lim = (0,1.1*freq_transform(values[-1]))
+            plt.plot(lim, lim, color='k', linewidth=0.5)
+            if do_burst or (method == 'bandfilter'):
+                plt.plot([freq_transform(f) for f in values], peak_freqs, marker='o')
+            else:
+                plt.plot([freq_transform(f) for f in values], [freq_transform(f) for f in peak_freqs], marker='o')                
             plt.xticks(freq_ticks,freq_tick_labels)
             plt.yticks(freq_ticks,freq_tick_labels)
+            plt.xlim(lim)
+            plt.ylim(lim)            
+            ax.set_aspect('equal', 'box')
         else:
             plt.errorbar(values, test_values, 3*test_errors, marker='o')    
         plt.xlabel(test)
-        plt.ylabel('frequency' if test == 'frequency' else 'power')
-
+        plt.ylabel('frequency' if test in ['frequency','freq'] else 'power')
+        plt.title("%s %s test" % (method,test))
+        plt.show()
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-summary-%s-%s.png' % (method,test)))
+        
+        if plot_dir is not None: plt.close('all')   # If saving plots to file, close figs
         
     ## Determine if test actually produced the expected values
-    # frequency test: check if frequency of peak power matches target frequency
-    if test == 'frequency':
-        assert (np.sort(peak_freqs) == peak_freqs).all(), \
+    # frequency test: check if frequency of peak power matches simulated target frequency
+    if test in ['frequency','freq']:
+        assert (np.diff(peak_freqs) > 0).all(), \
             AssertionError("Estimated peak frequency does not increase monotonically with expected frequency")
             
-    elif test == 'amplitude':
-        assert (np.sort(test_values) == test_values).all(), \
+    # 'amplitude' : Test if power increases monotonically with simulated amplitude            
+    elif test in ['amplitude','amp']:
+        assert (np.diff(test_values) > 0).all(), \
             AssertionError("Estimated power does not increase monotonically with simulated oscillation amplitude")
 
-    elif test == 'burst_rate':
-        assert (np.sort(test_values) == test_values).all(), \
+    # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
+    elif test in ['n','n_trials']:
+        assert test_values.ptp() < test_errors.max(), \
+            AssertionError("Estimated power has larger than expected range across n's (likely biased by n)")
+    
+    # 'burst_rate': Test if measured burst rate increases monotonically with simulated burst rate
+    elif test in ['burst_rate','burst']:
+        assert (np.diff(test_values) > 0).all(), \
             AssertionError("Estimated burst rate does not increase monotonically with simulated oscillation burst rate")
 
-    # TODO Set up some test for n?
     return means,sems
     
     
-def test_synchrony(method, spec_method='wavelet', plot=False, simulation='DhamalaFig3', n_trials=1000, **kwargs):
+def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
+                       tests=['frequency','amplitude','n','burst_rate'], **kwargs):
+    """ 
+    Runs a battery of given tests on given oscillatory power computation methods
+    
+    power_test_battery(methods=['wavelet','multitaper','bandfilter'],
+                       tests=['frequency','amplitude','n','burst_rate'], **kwargs)
+    
+    ARGS
+    methods     Array-like. List of power computation methods to test.
+                Default: ['wavelet','multitaper','bandfilter'] (all supported methods)
+                
+    tests       Array-like. List of tests to run.
+                Default: ['frequency','amplitude','n','burst_rate'] (all supported tests)
+                
+    kwargs      Any other kwargs passed directly to test_power()
+    
+    ACTION
+    Throws an error if any estimated power value for any (method,test) is too far from expected value    
+    """
+    if isinstance(methods,str): methods = [methods]
+    if isinstance(tests,str): tests = [tests]
+    
+    for test in tests:
+        for method in methods:
+            print("Running %s test on %s spectral analysis" % (test,method))
+            t1 = time.time()
+            
+            test_power(method, test=test, **kwargs)
+            print('PASSED (test ran in %.1f s)' % (time.time()-t1))
+            
+                
+def test_synchrony(method, test='frequency', values=None, spec_method='wavelet', plot=False, plot_dir=None,
+                   seed=1, phi_sd=pi/4, dphi=0, damp=1, amp=5.0, freq=32, phi=0, noise=0.5,n=1000, win=3.0, 
+                   smp_rate=1000, burst_rate=0, **kwargs):    
     """
     Basic testing for functions estimating bivariate time-frequency synchrony/coherence 
     
     Generates synthetic LFP data using given network simulation,
     estimates t-f synchrony using given function, and compares estimated to expected.
     
-    means,sems = test_synchrony(method,spec_method='wavelet',plot=False,
-                                simulation='DhamalaFig3',n_trials=1000, **kwargs)
+    syncs,phases = test_synchrony(method,test='frequency',values=None,spec_method='wavelet',
+                                  plot=False,plot_dir=None,seed=1,
+                                  phi_sd=pi/4,dphi=0,damp=1,amp=5.0,freq=32,phi=0,noise=0.5,n=1000,win=3.0,
+                                  smp_rate=1000,burst_rate=0,**kwargs)
                               
     ARGS
     method  String. Name of synchrony estimation function to test:
             'PPC' | 'PLV' | 'coherence'
 
+    test    String. Type of test to run. Default: 'frequency'. Options:
+            'synchrony' Tests multiple values of strength of synchrony (by manipulating phase SD of one signal)
+                        Checks for monotonic increase of synchrony measure
+            'frequency' Tests multiple simulated oscillatory frequencies
+                        Checks for monotonic increase of peak freq
+            'relphase'  Tests multiple simulated btwn-signal relative phases (dphi)
+                        Checks that synchrony doesn't vary appreciably
+            'ampratio'  Test multiple btwn-signal amplitude ratios (damp)
+                        Checks that synchrony doesn't vary appreciably
+            'phase'     Tests multiple simulated absolute phases (phi)
+                        Checks that synchrony doesn't vary appreciably
+            'n'         Tests multiple values of number of trials (n)
+                        Checks that synchrony doesn't greatly vary with n.   
+                        
+    values  (n_values,) array-like. List of values to test. 
+            Interpretation and defaults are test-specific:
+            'synchrony' Relative phase SD's to test (~inverse of synchrony strength).
+                        Default: [pi,pi/2,pi/4,pi/8,0]
+            'frequency' Frequencies to test. Default: [4,8,16,32,64]                        
+            'relphase'  Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
+            'ampratio'  Amplitude ratios to test. Default: [1,2,4,8]
+            'amplitude' Oscillation amplitudes to test. Default: [1,2,5,10,20]
+            'phase'     Absolute phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
+            'n'         Trial numbers. Default: [25,50,100,200,400,800]
+                        
     spec_method  String. Name of spectral estimation function to use to 
             generate time-frequency representation to input into synchrony function
             
     plot    Bool. Set=True to plot test results. Default: False
     
-    simulation  String. Name of canned simulation to generate. Default: 'DhamalaFig3'
-            See network_simulation() for details
-            
-    n_trials Int. Number of trials to include in simulated data. Default: 1000
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+        
+    seed    Int. Random generator seed for repeatable results.
+            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
+          
+    - Following args set param's for simulation, may be overridden by <values> depending on test - 
+    phi_sd  Scalar. Gaussian SD (rad) for phase diff of 2 signals if test != 'synchrony'. Default: pi/2
+    dphi    Scalar. Phase difference (rad) of 2 simulated signals if test != 'relphase'. Default: 0
+    damp    Scalar. Amplitude ratio of 2 simulated signals. Default: 1 (same amplitude)
+    amp     Scalar. Simulated oscillation amplitude (a.u.) if test != 'amplitude'. Default: 5.0
+    freq    Scalar. Simulated oscillation frequency (Hz) if test != 'frequency'. Default: 32
+    phi     Scalar. Simulated oscillation phase (rad). Default: 0
+    noise   Scalar. Additive noise for simulated signal (a.u., same as amp). Default: 0.5    
+    n       Int. Number of trials to simulate if test != 'n'. Default: 1000
+    win     Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
+    burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
 
     **kwargs All other keyword args passed to synchrony estimation function given by <method>.
             Can also include args to time-frequency spectral estimation function given by <spec_method>.
     
     RETURNS
-    sync    (n_freqs,n_timepts) ndarray. Estimated synchrony
+    syncs   (n_freqs,n_timepts,n_values) ndarray. Estimated synchrony strength for each tested value
+     
+    phases  (n_freqs,n_timepts,n_values) ndarray. Estimated synchrony phase for each tested value
     
     ACTION
     Throws an error if any estimated synchrony value is too far from expected value
     If <plot> is True, also generates a plot summarizing expected vs estimated synchrony
-    """    
-    # Set expected peak frequency for given simulation
-    if simulation == 'DhamalaFig3':     peak_freq = 40
+    """
+    method = method.lower()
+    test = test.lower()
     
-    # Generate simulated LFP data -> (n_timepts,n_trials,n_channels)
-    data,smp_rate = network_simulation(simulation=simulation)    
+    # Set defaults for tested values and set up rate generator function depending on <test>
+    if test in ['synchrony','strength','coupling']:
+        values = [pi, pi/2, pi/4, 0]
+        gen_data = lambda phi_sd: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                                 n_trials=n,phase_sd=phi_sd*ch, noise=noise,window=win,
+                                                                 burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+        
+    elif test in ['relphase','rel_phase','dphi']:
+        values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
+        gen_data = lambda dphi: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                               burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+
+    elif test in ['ampratio','amp_ratio','damp']:
+        values = [1,2,4,8] if values is None else values
+        gen_data = lambda damp: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                               burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
     
-    # Compute time-frequency/spectrogram representation of data and
-    # bivariate measure of synchrony -> (n_freqs,n_timepts)
-    sync,freqs,timepts = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
-                                   spec_method=spec_method, smp_rate=smp_rate,
-                                   time_axis=0, **kwargs)
+    elif test in ['frequency','freq']:
+        values = [4,8,16,32,64] if values is None else values
+        gen_data = lambda freq: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                               burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+        
+    elif test in ['amplitude','amp']:
+        values = [1,2,5,10,20] if values is None else values
+        gen_data = lambda amp: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                              n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                              burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+        
+    elif test in ['phase','phi']:
+        values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
+        gen_data = lambda phi: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                              n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                              burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+                
+    elif test in ['n','n_trials']:
+        values = [25,50,100,200,400,800] if values is None else values
+        gen_data = lambda n: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
+                                                            n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
+                                                            burst_rate=burst_rate,seed=seed) 
+                                          for ch in range(2)), axis=2)
+        
+    else:
+        raise ValueError("Unsupported value '%s' set for <test>" % test)
     
+    # Ensure hand-set values are sorted (ascending), as many tests assume it
+    values = sorted(values,reverse=True) if test in ['synchrony','strength','coupling'] else sorted(values)
+    n_values = len(values)
+            
+    # Set default parameters for each spectral estimation method            
+    if spec_method == 'multitaper':
+        if 'freq_range' not in kwargs:  kwargs['freq_range'] = [1,100] 
+    elif spec_method == 'bandfilter':
+        if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
+                            
+    if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
+                        
+    for i,value in enumerate(values):
+        # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
+        
+        # Simulate data with oscillation of given params in additive noise -> (n_timepts,n_trials)
+        data = gen_data(value)
+                        
+        # Compute time-frequency/spectrogram representation of data and
+        # bivariate measure of synchrony -> (n_freqs,n_timepts)
+        sync,freqs,timepts,phase = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
+                                             spec_method=spec_method, smp_rate=smp_rate,
+                                             time_axis=0, return_phase=True, **kwargs)
+        n_freqs,n_timepts = sync.shape
+        
+        # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
+        if i == 0:
+            syncs = np.empty((n_freqs,n_timepts,n_values))
+            phases = np.empty((n_freqs,n_timepts,n_values))
+        
+        syncs[:,:,i] = sync
+        phases[:,:,i] = phase
+                
     # Compute mean across all timepoints -> (n_freqs,) frequency marginal
-    marginal_sync = sync.mean(axis=1)
-    
+    marginal_syncs = syncs.mean(axis=1)
+    marginal_phases = np.angle(amp_phase_to_complex(syncs,phases).mean(axis=1)) # weighted circular mean
+        
     # For wavelets, evaluate and plot frequency on log scale
     if spec_method == 'wavelet':
-        freqs_eval      = np.log2(freqs)
-        peak_freq_eval  = np.log2(peak_freq)
+        freq_transform  = np.log2
+        plot_freqs      = freq_transform(freqs)        
         fmin            = ceil(log2(freqs[0]))
         fmax            = floor(log2(freqs[-1]))    
-        freq_ticks       = np.arange(fmin,fmax+1)
-        freq_tick_labels  = 2**np.arange(fmin,fmax+1)
+        freq_ticks      = np.arange(fmin,fmax+1)
+        freq_tick_labels= 2**np.arange(fmin,fmax+1)
         
+    # For bandfilter, plot frequency bands in categorical fashion
+    elif spec_method == 'bandfilter':
+        freq_transform  = lambda x: np.argmin(np.abs(x - freqs))  # Index of closest sampled freq
+        plot_freqs      = np.arange(len(freqs))
+        freq_ticks      = np.arange(len(freqs))
+        freq_tick_labels= freqs
+                     
     # For other spectral analysis, evaluate and plot frequency on linear scale        
     else:
-        freqs_eval      = freqs
-        peak_freq_eval  = peak_freq
+        freq_transform  = lambda x: x
+        plot_freqs      = freqs        
         fmin            = ceil(freqs[0]/10.0)*10.0
         fmax            = floor(freqs[-1]/10.0)*10.0                
-        freq_ticks       = np.arange(fmin,fmax+1,10).astype(int)
-        freq_tick_labels  = freq_ticks        
-            
-    if plot:
-        plt.figure()
-        plt.subplot(2,1,1)    
-        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
-        dt = np.diff(timepts).mean()
-        df = np.diff(freqs_eval).mean()
-        xlim = [timepts[0]-dt/2, timepts[-1]+dt/2]
-        ylim = [freqs_eval[0]-df/2, freqs_eval[-1]+df/2]
-        plt.plot(xlim, [peak_freq_eval,peak_freq_eval], '-', color='r')
-        plt.imshow(sync, aspect='auto', origin='lower',extent=[*xlim,*ylim])
-        plt.yticks(freq_ticks,freq_tick_labels)
+        freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
+        freq_tick_labels= freq_ticks        
+                         
+    # For frequency test, find frequency with maximal power for each test
+    if test in ['frequency','freq']:
+        idxs = np.argmax(marginal_syncs,axis=0)
+        peak_freqs = freqs[idxs] if spec_method != 'bandfilter' else idxs
         
-        plt.subplot(2,1,2)    
-        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
-        plt.plot(freqs_eval, marginal_sync)                
-        plt.plot([peak_freq_eval,peak_freq_eval], plt.ylim(), '-', color='r')        
-        plt.xticks(freq_ticks,freq_tick_labels)
-        
-    ## Determine if test actually produced the expected values
-    # Absolute difference of each sampled frequeny from expected peak frequency
-    dist_from_peak = np.abs(freqs_eval - peak_freq_eval)
-    # Does synchrony peak at expected value?
-    assert marginal_sync.argmax() == dist_from_peak.argmin(), \
-        AssertionError("Synchrony does not peak at expected frequency (%d)" % peak_freq)        
-    
-    # # Indexes needed to sort spectrum by distance from expected peak
-    # sortIdxs = np.argsort(dist_from_peak)
-    # sorted_sync = marginal_sync[sortIdxs]
-    # pct_max = 100.0 * sorted_sync[0:-1]/sorted_sync.max()
-        
-    # Does synchrony decrease monotonically from expected peak frequency (for values > 5% of max)
-    # assert not ((np.diff(sorted_sync) > 0) & (pct_max >= 5.0)).any(), \
-    #     AssertionError("Synchrony does not decrease monotonically from expected peak frequency (%d)" % peak_freq)
+    # Find frequency in spectrogram closest to each simulated frequency
+    test_freq_idx   = np.argmin(np.abs(freq_transform(freq) - np.asarray([freq_transform(f) for f in freqs])))
+    test_syncs      = marginal_syncs[test_freq_idx,:]
+    test_phases     = marginal_phases[test_freq_idx,:]
                 
-    return sync   
+    if plot:
+        dt      = np.diff(timepts).mean()
+        tlim    = [timepts[0]-dt/2, timepts[-1]+dt/2]
+        df      = np.diff(plot_freqs).mean()
+        flim    = [plot_freqs[0]-df/2, plot_freqs[-1]+df/2]
+                
+        # # Plot synchrony/phase spectrogram for each tested value
+        # n_subplots = [floor(n_values/2), ceil(n_values/floor(n_values/2))]
+        # for i_vbl,variable in enumerate(['sync','phase']):
+        #     plot_vals = syncs if variable == 'sync' else phases
+        #     cmap = 'viridis' if variable == 'sync' else 'hsv'
+        #     plt.figure()
+        #     for i,value in enumerate(values):
+        #         clim = [plot_vals[:,:,i].min(),plot_vals[:,:,i].max()] if variable == 'sync' else [-pi,pi]
+        #         ax = plt.subplot(n_subplots[0],n_subplots[1],i+1)
+        #         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+        #         target_freq = freq_transform(value) if test in ['frequency','freq'] else freq_transform(freq)
+        #         plt.plot(tlim, [target_freq,target_freq], '-', color='r', linewidth=0.5)
+        #         plt.imshow(plot_vals[:,:,i], extent=[*tlim,*flim], vmin=clim[0], vmax=clim[1], 
+        #                    aspect='auto', origin='lower', cmap=cmap)
+        #         if i in [0,n_subplots[1]]:
+        #             plt.yticks(freq_ticks,freq_tick_labels)
+        #         else:
+        #             ax.set_xticklabels([])
+        #             plt.yticks(freq_ticks,[])
+        #         plt.title(np.round(value,decimal=2))
+        #         plt.colorbar()
+        #     plt.show()
+        # if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'synchrony-spectrogram-%s-%s-%s.png' % (method,test,spec_method)))
+        
+                
+        # Plot time-averaged synchrony/phase spectrum for each tested value
+        plt.figure()
+        colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        threshold_syncs = marginal_syncs > 0.1
+        for i_vbl,variable in enumerate(['sync','phase']):
+            plt.subplot(1,2,i_vbl+1)
+            plot_vals = marginal_syncs if variable == 'sync' else marginal_phases
+            ylim = [0,1.05*marginal_syncs.max()] if variable == 'sync' else [-pi,pi]         
+            for i,value in enumerate(values):
+                if variable == 'phase':
+                    plt.plot(plot_freqs, plot_vals[:,i], '-', color=colors[i], linewidth=1.5, alpha=0.33)                    
+                    plt.plot(plot_freqs[threshold_syncs[:,i]], plot_vals[threshold_syncs[:,i],i], '.-', 
+                             color=colors[i], linewidth=1.5)
+                else:
+                    plt.plot(plot_freqs, plot_vals[:,i], '.-', color=colors[i], linewidth=1.5)                                      
+                target_freq = freq_transform(value) if test in ['frequency','freq'] else freq_transform(freq)
+                plt.plot([target_freq,target_freq], ylim, '-', color=colors[i], linewidth=0.5)
+                plt.text(flim[1]-0.05*np.diff(flim), ylim[1]-(i+1)*0.05*np.diff(ylim), np.round(value,decimals=2),
+                         color=colors[i], fontweight='bold', horizontalalignment='right')
+            plt.xlim(flim)
+            plt.ylim(ylim)
+            plt.xticks(freq_ticks,freq_tick_labels)
+            plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+            plt.xlabel('Frequency (Hz)')
+            plt.ylabel(variable)
+            if i_vbl == 0: plt.title("%s %s %s test" % (spec_method,method,test), horizontalalignment='left')
+        plt.show()
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'synchrony-spectrum-%s-%s-%s.png' % (method,test,spec_method)))
+        
+        # Plot summary curve of synchrony (or peak frequency) vs tested value
+        plt.figure()
+        for i_vbl,variable in enumerate(['sync','phase']):        
+            ax = plt.subplot(1,2,i_vbl+1)
+            plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+            if test in ['frequency','freq'] and variable == 'sync':
+                lim = (0,1.1*freq_transform(values[-1]))
+                plt.plot(lim, lim, color='k', linewidth=0.5)
+                if spec_method == 'bandfilter':
+                    plt.plot([freq_transform(f) for f in values], peak_freqs, marker='o')
+                else:
+                    plt.plot([freq_transform(f) for f in values], [freq_transform(f) for f in peak_freqs], marker='o')                
+                plt.xticks(freq_ticks,freq_tick_labels)
+                plt.yticks(freq_ticks,freq_tick_labels)
+                plt.xlim(lim)
+                plt.ylim(lim)            
+                ax.set_aspect('equal', 'box')
+            else:
+                test_values = test_syncs if variable == 'sync' else test_phases
+                ylim = [0,1.05*test_syncs.max()] if variable == 'sync' else [-pi,pi]
+                plt.plot(values, test_values, marker='o')
+                plt.ylim(ylim)
+            plt.xlabel(test)
+            plt.ylabel('frequency' if test in ['frequency','freq'] else variable)
+            if i_vbl == 0: plt.title("%s %s %s test" % (spec_method,method,test), horizontalalignment='left')            
+        plt.show()
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'synchrony-summary-%s-%s-%s.png' % (method,test,spec_method)))
+        
     
+    ## Determine if test actually produced the expected values
+    # 'synchrony' : Test if synchrony strength increases monotonically with simulated synchrony
+    if test in ['synchrony','strength','coupling']:
+        assert (np.diff(test_syncs) > 0).all(), \
+            AssertionError("Estimated synchrony strength does not increase monotonically with simulated synchrony")
+        
+    # 'frequency' : check if frequency of peak power matches simulated target frequency
+    elif test in ['frequency','freq']:
+        assert (np.diff(peak_freqs) > 0).all(), \
+            AssertionError("Estimated peak frequency does not increase monotonically with expected frequency")
+            
+    # 'amplitude','phase','ampratio' : Test if synchrony is ~ same for all values      
+    elif test in ['amplitude','amp', 'phase','phi', 'ampratio','amp_ratio','damp']:
+        assert test_syncs.ptp() < 0.1, \
+            AssertionError("Estimated synchrony has larger than expected range across tested %s value" % test)
+
+    # 'relphase' : Test if synchrony strength is ~ same for all values, phase increases monotonically      
+    elif test in ['relphase','rel_phase','dphi']:
+        assert test_syncs.ptp() < 0.1, \
+            AssertionError("Estimated synchrony has larger than expected range across tested %s value" % test)
+        circ_subtract = lambda data1,data2: np.angle(np.exp(1j*data1) / np.exp(1j*data2))
+        circ_diff = lambda data: circ_subtract(data[1:],data[:-1])
+        assert (circ_diff(test_phases) > 0).all(), \
+            AssertionError("Estimated synchrony phase does not increase monotonically with simulated reslative phase")
+
+    # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
+    elif test in ['n','n_trials']:
+        assert test_syncs.ptp() < 0.1, \
+            AssertionError("Estimated synchrony has larger than expected range across n's (likely biased by n)")
+        
+    return syncs, phases
+    
+    
+def synchrony_test_battery(methods=['PPC','PLV','coherence'],
+                           tests=['synchrony','relphase','ampratio','frequency','amplitude','phase','n'],
+                           spec_methods=['wavelet','multitaper','bandfilter'], **kwargs):
+    """ 
+    Runs a battery of given tests on given oscillatory synchrony computation methods
+    
+    synchrony_test_battery(methods=['PPC','PLV','coherence'],
+                           tests=['synchrony','relphase','ampratio','frequency','amplitude','phase','n'],
+                           spec_methods=['wavelet','multitaper','bandfilter'], **kwargs)
+    
+    ARGS
+    methods     Array-like. List of synchrony computation methods to test.
+                Default: ['PPC','PLV','coherence'] (all supported methods)
+                
+    tests       Array-like. List of tests to run.
+                Note: certain combinations of methods,tests are skipped, as they are not expected to pass
+                (ie 'ampratio' tests skipped for coherence method)                
+                Default: ['synchrony','relphase','ampratio','frequency','amplitude','phase','n'] (all supported tests)
+                
+    spec_methods Array-like. List of underlying spectral analysis methods to test.                
+                Default: ['wavelet','multitaper','bandfilter'] (all supported methods)
+                
+    kwargs      Any other kwargs passed directly to test_synchrony()
+    
+    ACTION
+    Throws an error if any estimated synchrony or phase  value for any (method,test) is too far from expected value    
+    """
+    if isinstance(methods,str): methods = [methods]
+    if isinstance(tests,str): tests = [tests]
+    
+    for test in tests:
+        for method in methods:
+            for spec_method in spec_methods:
+                print("Running %s test on %s %s" % (test,spec_method,method))
+                t1 = time.time()
+                # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
+                if (test in ['ampratio','amp_ratio','damp']) and (method in ['coherence','coh']): continue
+                                
+                test_synchrony(method, test=test, spec_method=spec_method, **kwargs)
+                print('PASSED (test ran in %.1f s)' % (time.time()-t1))
+                plt.close('all') # TEMP
+                                
         
 # =============================================================================
 # Data reshaping helper functions
@@ -3120,7 +3654,7 @@ def _index_axis(data, axis, idxs):
     
     axis    Int. Axis of ndarray to index into.
     
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool.
+    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
             Indexing into given axis of array, given either as list of
             integer indexes or as boolean vector.
     
@@ -3144,7 +3678,7 @@ def _axis_slices(axis, idxs, ndim):
     ARGS
     axis    Int. Axis of ndarray to index into.
     
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool.
+    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
             Indexing into given axis of array, given either as list of
             integer indexes or as boolean vector.
     
@@ -3171,16 +3705,16 @@ def _reshape_data(data, axis=0):
     data, data_shape = _reshape_data(data,axis=0)
 
     ARGS
-    data    (n_obs,...) ndarray. Data array where axis 0 is observations (trials),
-            and rest of axis(s) are any independent data series.
+    data    (...,n,...) ndarray. Data array of arbitrary shape.
 
     axis    Int. Axis of data to move to axis 0 for subsequent analysis. Default: 0
 
     RETURNS
-    data    (n_obs,n_series) ndarray. Data array w/ all axes > 0 unwrapped into
-            single dimension, where n_series = prod(shape[1:])
+    data    (n,m) ndarray. Data array w/ <axis> moved to axis=0, 
+            and all axes > 0 unwrapped into single dimension, where 
+            m = prod(shape[1:])
 
-    data_shape Tuple. Original shape of data array
+    data_shape (data.ndim,) tuple. Original shape of data array
     """
     # Save original shape/dimensionality of <data>
     data_ndim  = data.ndim
@@ -3199,8 +3733,9 @@ def _reshape_data(data, axis=0):
         last_dim = data_ndim - 1
         if axis != last_dim: data = np.moveaxis(data,axis,last_dim)
 
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix
+        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
         if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T
+        else:               data = data.T
 
     return data, data_shape
 
@@ -3213,29 +3748,31 @@ def _unreshape_data(data, data_shape, axis=0):
     data = _unreshape_data(data,data_shape,axis=0)
 
     ARGS
-    data    (axis_len,n_series) ndarray. Data array w/ all axes > 0 unwrapped into
-            single dimension, where n_series = prod(shape[1:])
+    data    (axis_len,m) ndarray. Data array w/ <axis> moved to axis=0, 
+            and all axes > 0 unwrapped into single dimension, where 
+            m = prod(shape[1:])
 
-    data_shape Tuple. Original shape of data array
+    data_shape (data.ndim,) tuple. Original shape of data array
 
-    axis    Int. Axis of original data corresponding to distinct observations,
-            which has become axis 0, but will be permuted back to original axis.
-            Default: 0
+    axis    Int. Axis of original data moved to axis 0, which will be shifted 
+            back to original axis.. Default: 0
 
     RETURNS
-    data       (axis_len,...) ndarray. Data array reshaped back to original shape
+    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
     """
     data_shape  = np.asarray(data_shape)
 
     data_ndim   = len(data_shape) # Number of dimensions in original data
-    axis_len     = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
+    axis_len    = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
 
     # If data array data had > 2 dims, reshape matrix back into ~ original shape
     # (but with length of dimension <axis> = <axis_length>)
     if data_ndim > 2:
         # Reshape data -> (axis_len,<original shape w/o <axis>>)
         shape = (axis_len,*data_shape[np.arange(data_ndim) != axis])
-        data = np.reshape(data,shape,order='F')
+        # Note: I think you want the order to be 'F' regardless of memory layout
+        # TODO test this!!!
+        data  = np.reshape(data,shape,order='F')
 
     # If observation axis wasn't 0, permute axis back to original position
     if axis != 0: data = np.moveaxis(data,0,axis)
@@ -3252,8 +3789,8 @@ def _unreshape_data_newaxis(data,data_shape,axis=0):
     data = _unreshape_data_newaxis(data,data_shape,axis=0)
 
     ARGS
-    data    (axis_len,n_series) ndarray. Data array w/ all axes > 0 unwrapped into
-            single dimension, where n_series = prod(shape[1:])
+    data    (axis_len,m) ndarray. Data array w/ all axes > 0 unwrapped into
+            single dimension, where m = prod(shape[1:])
 
     data_shape Tuple. Original shape of data array
 
@@ -3294,7 +3831,7 @@ def _remove_buffer(data, buffer, axis=1):
     ARGS
     data    Data array where a buffer has been appended on both ends of time dimension.
             Can be any arbitrary size, typically (n_freqs,n_timepts+2*buffer,...).
-    buffer  Scalar. Length (number of samples) of buffer appended to each end.
+    buffer  Int. Length (number of samples) of buffer appended to each end.
     axis    Int. Array axis to remove buffer from (ie time dim). Default: 1
 
     RETURNS
@@ -3309,37 +3846,6 @@ def _remove_buffer(data, buffer, axis=1):
         return (data.swapaxes(0,axis)[buffer:-buffer,...]
                     .swapaxes(axis,0))
 
-def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
-    """
-    Converts a one-sided Fourier or wavelet transform output to the equivalent
-    two-sided output, assuming conjugate symmetry across positive and negative
-    frequencies (as is the case when the original signals were real).  Also
-    extrapolates values for f=0, as is necessary for wavelet transforms.
-    """
-    assert np.isclose(freqs[-1],smp_rate/2), \
-        "Need to have sampling up to 1/2 sampling rate (Nyquist freq=%d Hz)" % (smp_rate/2)
-
-    # If f=0 is not in data, numerically extrapolate values for it
-    if not np.isclose(freqs,0).any():
-        f0 = _interp1(freqs,data,0,axis=freq_axis,kind='cubic',fill_value='extrapolate')
-        f0 = np.expand_dims(f0,freq_axis)
-        data = np.concatenate((f0,data),axis=freq_axis)
-        freqs = np.concatenate(([0],freqs))
-
-    # Convert values at Nyquist freq to complex conjugate at negative frequency
-    slices = _axis_slices(freq_axis,-1,data.ndim)
-    data[slices] = data[slices].conj()
-    freqs[-1] *= -1
-
-    # Replicate values for all freqs (s.t. 0 < f < nyquist)
-    # as complex conjugates at negative frequencies
-    idxs    = slice(-2,1,-1)
-    slices  = _axis_slices(freq_axis,idxs,data.ndim)
-    data    = np.concatenate((data, data[slices].conj()), axis=freq_axis)
-    freqs   = np.concatenate((freqs, -freqs[idxs]))
-
-    return data,freqs
-
 
 # =============================================================================
 # Other helper functions
@@ -3348,6 +3854,19 @@ def _infer_data_type(data):
     """ Infers type of data signal given -- 'raw' (real) | 'spectral' (complex) """
     if np.isrealobj(data):  return 'raw'
     else:                   return 'spectral'
+
+
+def _iarange(start=0, stop=0, step=1):
+    """
+    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
+    output, except ends at stop, not stop - 1 (or more generally stop - step)
+
+    r = _iarange(start=0,stop=0,step=1)
+    
+    Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)    
+    """
+    if isinstance(step,int):    return np.arange(start,stop+1,step)
+    else:                       return np.arange(start,stop+1e-12,step)
 
 
 def _next_power_of_2(n):

@@ -40,7 +40,7 @@ Created on Mon Sep 17 00:05:25 2018
 
 @author: sbrincat
 """
-
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -1507,18 +1507,18 @@ def _unsorted_unique(x):
 #==============================================================================
 # Testing functions
 #==============================================================================
-def test_info(method, test='gain', values=None, arg_type='label',
-              plot=False, n_reps=100, **kwargs):
+def test_info(method, test='gain', values=None, arg_type='label', n_reps=100,
+              plot=False, plot_dir=None, **kwargs):
     """
     Basic testing for functions estimating neural information.
     
     Generates synthetic spike rate data, estimates information using given method,
     and compares estimated to expected values.
     
-    info,sd = test_info(method,test='gain',values=None,arg_type='label',
-                        plot=False,n_reps=20, **kwargs)
+    info,sd = test_info(method,test='gain',values=None,arg_type='label',n_reps=100,
+                        plot=False,plot_dir=None, **kwargs)
                               
-    INPUTS
+    ARGS
     method  String. Name of information function to test:
             'pev' | 'anova1' | 'anova2' | 'regress'
             
@@ -1540,11 +1540,13 @@ def test_info(method, test='gain', values=None, arg_type='label',
     arg_type String. Which input-argument version of info computing function to use:
             'label'     : Standard version with labels,data arguments [default]
             '2groups'   : Binary contrast version with data1,data2 arguments
+    
+    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
             
     plot    Bool. Set=True to plot test results. Default: False
     
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
-    
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+        
     **kwargs All other keyword args passed to information estimation function
     
     RETURNS
@@ -1552,7 +1554,7 @@ def test_info(method, test='gain', values=None, arg_type='label',
     sd      (n_values,) ndarray. Across-run SD of information for each tested value
     
     ACTION
-    Throws an error if any estimated information is too far from expected value
+    Throws an error if any estimated information value is too far from expected value
     If <plot> is True, also generates a plot summarizing estimated information
     """    
     from spike_analysis import simulate_spike_rates
@@ -1644,11 +1646,12 @@ def test_info(method, test='gain', values=None, arg_type='label',
         xlabel = 'n' if test == 'bias' else test
         plt.xlabel(xlabel)
         plt.ylabel("Information (%s)" % method_)
-        
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'info-summary-%s-%s' % (method,test)))
+       
     # Determine if test actually produced the expected values
     # 'gain' : Test if information increases monotonically with gain
     if test == 'gain':
-        assert (np.sort(info) == info).all(), \
+        assert (np.diff(info) > 0).all(), \
             AssertionError("Information does not increase monotonically with between-condition rate difference")
                                 
     # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
@@ -1665,14 +1668,34 @@ def test_info(method, test='gain', values=None, arg_type='label',
 
 
 def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs):
-    """ Runs a battery of given tests on given info methods """
+    """ 
+    Runs a battery of given tests on given neural information computation methods
+    
+    info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs)
+    
+    ARGS
+    methods     Array-like. List of neural information methods to test.
+                Default: ['pev','dprime','auroc','mutual_information'] (all supported methods)
+                
+    tests       Array-like. List of tests to run.
+                Note: certain combinations of methods,tests are skipped, as they are not expected to pass
+                (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
+                Default: ['gain','n','bias'] (all supported tests)
+                
+    kwargs      Any other kwargs passed directly to test_info()
+    
+    ACTION
+    Throws an error if any estimated information value for any (method,test) is too far from expected value    
+    """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
     
     for test in tests:
         for method in methods:
+            print("Running %s test on %s" % (test,method))
             # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
             if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']): continue
             
             test_info(method, test=test, **kwargs)
+            print('PASSED')
             
