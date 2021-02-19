@@ -1889,307 +1889,124 @@ def plv_to_ppc(plv, n):
 
 
 # =============================================================================
-# Spike-Field Synchrony functions
+# Plotting functions
 # =============================================================================
-def spike_field_coupling(spkdata, lfpdata, method='PPC', **kwargs):
+def plot_spectrum(freqs, data, ylim=None, color=None, **kwargs):
     """
-    Wrapper around all spike-field coupling functions
+    Plots frequency spectrum as a line plot.
 
-    ARGS
-    method  String. Spike-field coupling method to use.
-            Options: 'PPC' [default] | 'PLV' | 'coherence'
+    plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
 
-    All other arguments passed directly to specific spike-field coupling function.
-    See those functions for rest of arguments
-    """
-    method = method.lower()
+    ARGS    
+    freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
+            May be linearly or logarithmically sampled; we deal appropriately.
+                        
+    data    (n_freqs,) ndarray. Frequency spectrum data.
 
-    if method.lower() == 'ppc':
-        sfc_func = spike_field_pairwise_phase_consistency
-    elif method.lower() == 'plv':
-        sfc_func = spike_field_phase_locking_value
-    elif method.lower() in ['coherence','coh']:
-        sfc_func = spike_field_coherence
-    else:
-        raise ValueError("Unsuuported value '%s' given for <method>. \
-                         Should be 'PPC'|'PLV'|'coherence'" % method)
+    ylim    (2,) array-like. y-axis limits: (min,max)
+            Default: min/max over all data +/- 5%  (data.min(),data.max())
 
-    return sfc_func(spkdata,lfpdata, **kwargs)
+    color   (3,) array-like | Color spec. Color to plot in. 
+            Default: <default plot color>
 
-
-def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None,
-                          spec_method='multitaper',
-                          smp_rate=None,time_axis=None,**kwargs):
-    """
-    Computes pairwise coherence between single-channel spiking data and LFP data
-
-    coh,freqs,timepts = spike_field_coherence(spkdata,lfpdata,axis=0,data_type=None,
-                                            spec_method='multitaper',smp_rate=None,
-                                            time_axis=None,**kwargs)
-
-    ARGS
-    todo Fix documentation
-    data1,data2   (...,n_obs,...) ndarray. Single-channel LFP data for 2 distinct channels.
-            Can be given as raw LFPs or complex-valued time-frequency transform.
-
-            For raw data, axis corresponding to time must be given in <time_axis>.
-            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
-
-            Other than those constraints, data can have
-            Can have arbitrary shape, with analysis performed independently
-            along each dimension other than observation <axis> (eg different
-            frequencies, timepoints, conditions, etc.)
-
-    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
-
-    single_trial String or None. What type of coherence estimator to compute:
-            None        standard across-trial estimator [default]
-            'pseudo'    single-trial estimates using jackknife pseudovalues
-            'richter'   single-trial estimates using actual jackknife estimates
-                        as in Richter & Fries 2015
-
-    ztransform Bool. If True, returns z-transformed coherence using Jarvis &
-            Mitra (2001) method. If false [default], returns raw coherence.
-
-    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
-            Default: assume 'raw' if data is real; 'spectral' if complex
-
-    Following args are only used for spectral analysis for data_type == 'raw'
-
-    method  String. Spectral method. 'wavelet' | 'multitaper' [default]
-
-    smp_rate Scalar. Sampling rate of data (only needed for raw data)
-
-    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
-
-    Any other kwargs passed as-is to spectrogram() function.
-
+    **kwargs All other keyword args passed directly to plt.plot()
+    
+    ACTION 
+    Plots spectrum data into current axes using plt.plot()
+    
     RETURNS
-    coh     ndarray. Magnitude of coherence between spikeData and lfpdata.
-            If lfpdata is spectral, this has shape as lfpdata, but with <axis> removed.
-            If lfpdata is raw, this has same shape with <axis> removed and a new
-            frequency axis inserted immediately before <time_axis>.
+    lines   List of Line2D objects. Output of plt.plot()
+    """    
+    freqs   = np.asarray(freqs)
+    if ylim is None: 
+        ylim = (data.min(), data.max())
+        ylim = (ylim[0]-0.05*np.diff(ylim), ylim[1]+0.05*np.diff(ylim))
+    
+    freqs,fticks,fticklabels = frequency_plot_settings(freqs)
 
-    freqs   (n_freqs,). List of frequencies in coh (only for raw data)
-    timepts (n_timepts,). List of timepoints in coh (only for raw data)
+    df      = np.diff(freqs).mean()
+    flim    = [freqs[0]-df/2, freqs[-1]+df/2]
+    
+    if color is None: color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
+
+    lines = plt.plot(freqs, data, '-', color=color, **kwargs)
+
+    plt.xlim(flim)
+    plt.ylim(ylim)
+    plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+    plt.xticks(fticks,fticklabels)
+    
+    return lines
+
+
+def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
     """
-    # If raw data is input, compute spectral transform first
-    if (data_type == 'raw') or (_infer_data_type(spkdata) == 'raw'):
-        # Ensure spkdata is boolean array flagging spiking times
-        assert spkdata.dtype != object, \
-            "Spiking data must be converted from timestamps to boolean format for this function"
-        spkdata = spkdata.astype(bool)
+    Plots time-frequency spectrogram as a pseudocolor plot.
 
-        spkdata,freqs,timepts = spectrogram(spkdata,smp_rate,axis=time_axis,
-                                            method=spec_method,signal='spike',
-                                            **kwargs)
-
-    if (data_type == 'raw') or (_infer_data_type(lfpdata) == 'raw'):
-        lfpdata,freqs,timepts = spectrogram(lfpdata,smp_rate,axis=time_axis,
-                                            method=spec_method,signal='lfp',
-                                            **kwargs)
-        # Frequency axis always inserted just before time axis, so if
-        # observation/trial axis is later, must increment it
-        # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-    else:
-        freqs = []
-        timepts = []
-
-    coh,_,_ = coherence(spkdata,lfpdata,axis=axis,data_type='spectral')
-
-    return coh,freqs,timepts
-
-
-def spike_field_phase_locking_value(spkdata, lfpdata, axis=0, return_phase=False,
-                                    timepts=None, timewins=None,
-                                    spec_method='wavelet', data_type=None, smp_rate=None,
-                                    time_axis=None, **kwargs):
-    """
-    Computes phase locking value (PLV) of spike-triggered LFP phase
-
-    PLV is the mean resultant length (magnitude of the vector mean) of the
-    spike-triggered LFP phase phi:
-        plv  = abs( trialMean(exp(i*phi)) )
-
-    plv,freqs,timepts = spike_field_phase_locking_value(spkdata,lfpdata,axis=0,return_phase=False,
-                                          spec_method='wavelet',data_type=None,
-                                          smp_rate=None,time_axis=None,
-                                          **kwargs)
+    plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
 
     ARGS
-    TODO Redo docs
-    spkdata (...,n_obs,...) ndarray of bool. Binary spike trains (with 1's labelling)
-            spike times. Shape is arbitrary, but MUST have same shape as lfpdata.
-            Thus, if lfpdata is spectral, must pre-pend singleton dimension to
-            spkdata to match (eg using np.newaxis).
+    timepts (n_timepts,) array-like. Time sampling vector for data
+    
+    freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
+            May be linearly or logarithmically sampled; we deal appropriately.
+                        
+    data    (n_freqs,n_timepts) ndarray. Time-frequency (spectrogam) data
 
-    lfpdata (...,n_obs,...) ndarray of float or complex. LFP data, given either
-            as (real) raw data, or as complex spectral data.
+    clim    (2,) array-like. Color axis limits: (min,max)
+            Default: min/max over all data (data.min(),data.max())
 
-            For raw data, axis corresponding to time must be given in <time_axis>.
-            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+    cmap    String. Colormap to plot in. Default: 'viridis'
 
-            Other than those constraints, data can have arbitrary shape, with
-            analysis performed independently in mass-bivariate fashion along
-            each dimension other than observation <axis> (eg different conditions)
-
-    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
-
-    return_phase Bool. If True, returns add'l output with mean spike-triggered phase
-
-    timewins (n_wins,2) ndarray. Time windows to compute PLV within, given as
-            series of window [start end]'s
-
-            Can instead give window parameters as kwargs:
-            window  Scalar. Window width (s). Default: 0.5
-            spacing Scalar. Window spacing (s)
-                    Default: <window> (giving exactly non-overlapping windows)
-            lims    (2,) array-like. [Start,end] limits for windows
-                    Default: (timepts[0],timepts[-1]) (full sampled time of LFPs)
-
-    Following args are only used for spectral analysis for data_type == 'raw'
-
-    method  String. Spectral method. 'wavelet' [default] | 'multitaper'
-
-    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
-            Default: assume 'raw' if data is real; 'spectral' if complex
-
-    smp_rate Scalar. Sampling rate of data (only needed for raw data)
-    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
-
-    Any other kwargs passed as-is to spectrogram() function.
-
+    **kwargs All other keyword args passed directly to plt.imshow()
+    
+    ACTION 
+    Plots spectrogram data into current axes using plt.imshow()
+    
     RETURNS
-    plv     ndarray. Phase locking value between spike and LFP data.
-            If lfpdata is spectral, this has same shape, but with <axis> removed.
-            If lfpdata is raw, this has same shape with <axis> removed and a new
-            frequency axis inserted immediately before <time_axis>.
+    img    AxesImage object. Output of plt.imshow()
+    """    
+    timepts = np.asarray(timepts)
+    freqs   = np.asarray(freqs)
+    if clim is None: clim = (data.min(), data.max())
+    
+    freqs,fticks,fticklabels = frequency_plot_settings(freqs)
 
-    freqs   (n_freqs,). List of frequencies in plv (only for raw data)
-    timepts (n_timepts,). List of timepoints in plv (only for raw data)
+    df      = np.diff(freqs).mean()
+    flim    = [freqs[0]-df/2, freqs[-1]+df/2]    
 
-    phi     ndarray. If return_phase is True, mean spike-triggered LFP phase
-            (in radians) is also returned here
+    dt      = np.diff(timepts).mean()
+    tlim    = [timepts[0]-dt/2, timepts[-1]+dt/2]
 
-    REFERENCES
-    Lachaux et al. (1999) Human Brain Mapping
-    """
-    # FIXME I think we need to require timepts argument, no?
-    # Ensure spkdata boolean array (not timestamps), is same shape as lfpdata
-    assert spkdata.dtype != object, \
-        "Spiking data must be converted from timestamps to boolean format for this function"
-    assert (spkdata.ndim == lfpdata.ndim) and (spkdata.shape[1:] == lfpdata.shape[1:]), \
-        "Spiking data must have same size/shape as LFP data (minus any frequency axis)"
+    img = plt.imshow(data, extent=[*tlim,*flim], vmin=clim[0], vmax=clim[1],
+                     aspect='auto', origin='lower', cmap=cmap, **kwargs)
 
-    spkdata = spkdata.astype(bool)  # Ensure spkdata is boolean array
-
-    # If raw data is input, compute spectral transform first
-    if (data_type == 'raw') or (_infer_data_type(lfpdata) == 'raw'):
-        lfpdata,freqs,time_idxs = spectrogram(lfpdata,smp_rate,axis=time_axis,
-                                              method=spec_method,signal='lfp',
-                                              **kwargs)
-        timepts = timepts[time_idxs]
-
-        # Frequency axis always inserted just before time axis, so if
-        # observation/trial axis is later, must increment it
-        # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
+    plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+    plt.yticks(fticks,fticklabels)
+    
+    return img
+    
+    
+def frequency_plot_settings(freqs):
+    """ Returns settings for plotting a frequency axis: plot freqs, ticks, tick labels """
+    freq_scale = _infer_freq_scale(freqs)
+    
+    # For log-sampled freqs, plot in log(freq) but label with actual freqs
+    if freq_scale == 'log':
+        freqs           = np.log2(freqs)
+        fmin            = ceil(freqs[0])
+        fmax            = floor(freqs[-1])
+        freq_ticks      = np.arange(fmin,fmax+1)
+        freq_tick_labels= 2**np.arange(fmin,fmax+1)
         
-        # Insert singleton dimension into spkdata to match freq dim in lfpdata
-        spkdata = spkdata[np.newaxis,:,:]
-
+    # For linear-sampled freqs, just plot in actual freqs    
     else:
-        freqs = []
+        fmin            = ceil(freqs[0]/10.0)*10.0
+        fmax            = floor(freqs[-1]/10.0)*10.0                
+        freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
+        freq_tick_labels= freq_ticks           
 
-    # Set timewins based on given parameters if not set in args
-    if timewins is None:
-        window  = kwargs.pop('window',0.5)
-        spacing = kwargs.pop('spacing',window)
-        lims    = kwargs.pop('lims',(timepts[0],timepts[-1]))
-        timewins = setup_sliding_windows(window,lims,spacing)
-    else:
-        timewins = np.asarray(timewins)
-
-    # Move trials/observations axis to end of data arrays
-    if axis not in [-1,lfpdata.ndim]:
-        lfpdata = np.moveaxis(lfpdata,axis,-1) # -> (n_freqs,n_timepts,n_trials)
-        spkdata = np.moveaxis(spkdata,axis,-1) # -> (1,n_timepts,n_trials)
-
-    # Remove singleton freq dim from spkdata (yes, kinda pointless to have it in
-    # the first place, but makes axis bookeeping tractable)
-    spkdata = spkdata.squeeze(axis=0)
-
-    n_freqs = lfpdata.shape[0]
-    n_timewins = timewins.shape[0]
-
-    # Normalize LFP spectrum/spectrogram so data is all unit-length complex vectors
-    lfpdata = lfpdata / np.abs(lfpdata)
-
-    # Convert time sampling vector and time windows to int-valued ms,
-    #  to avoid floating-point issues in indexing below
-    timepts_ms  = np.round(timepts*1000)
-    timewins_ms = np.round(timewins*1000)
-
-    vector_mean = np.full((n_freqs,n_timewins),np.nan,dtype=complex)
-    n = np.zeros((n_timewins,))
-
-    for i_timewin,timewin in enumerate(timewins_ms):
-        # Boolean vector flagging all time points within given time window
-        tbool = (timepts_ms >= timewin[0]) & (timepts_ms <= timewin[1])
-
-        # Logical AND btwn window and spike train booleans to get spikes in window
-        win_spikes = spkdata & tbool[:,np.newaxis] # Expand win bool to trial dim
-
-        # Count of all spikes within time window across all trials/observations
-        n[i_timewin] = win_spikes.sum()
-
-        # If no spikes in window, can't compute PLV. Skip and leave = nan.
-        if n[i_timewin] == 0: continue
-
-        # Compute complex vector mean of all spike-triggered LFP phase angles
-        for i_freq in range(n_freqs):
-            # Extract LFP data for current frequency
-            lfpdata_f = lfpdata[i_freq,:,:]
-            # Complex vector mean across all trials and all timepts in window
-            vector_mean[i_freq,i_timewin] = lfpdata_f[win_spikes].mean()
-
-    # Compute absolute value of complex vector mean = mean resultant = PLV
-    # and optionally the mean phase angle as well. Also return spike counts.
-    if return_phase:
-        return np.abs(vector_mean), freqs, timepts, n, np.angle(vector_mean)
-    else:
-        return np.abs(vector_mean), freqs, timepts, n
-
-
-def spike_field_pairwise_phase_consistency(spkdata, lfpdata, axis=0,
-                                           return_phase=False, **kwargs):
-    """
-    Computes pairwise phase consistency (PPC) of spike-triggered LFP phase,
-    which is unbiased by n (unlike PLV and coherence)
-
-    PPC is an unbiased estimator of PLV^2, and can be expressed (and computed
-    efficiently) in terms of PLV and n:
-        PPC = (n*PLV^2 - 1) / (n-1)
-
-    TODO Rest of docs
-    """
-    if return_phase:
-        plv,freqs,timepts,n,mean_phase = \
-        spike_field_phase_locking_value(spkdata,lfpdata,axis=axis,
-                                        return_phase=True, **kwargs)
-        return plv_to_ppc(plv,n), freqs, timepts, n, mean_phase
-
-    else:
-        plv,freqs,timepts,n = \
-        spike_field_phase_locking_value(spkdata,lfpdata,axis=axis,
-                                        return_phase=False, **kwargs)
-        return plv_to_ppc(plv,n), freqs, timepts, n
-
+    return freqs,freq_ticks,freq_tick_labels
 
 
 # =============================================================================
@@ -2675,6 +2492,7 @@ def amp_phase_to_complex(amp,theta):
     """ Converts amplitude and phase angle to complex variable """
     return amp * np.exp(1j*theta)
 
+
 def complex_to_amp_phase(c):
     """ Converts complex variable to amplitude and phase angle """
     return np.abs(c), np.angle(c)
@@ -2787,8 +2605,8 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
                 Set=None [default] for fully random numbers.
     
     RETURNS
-    data        (n_timepts,n_trials) ndarray. Simulated data                
-    """        
+    data        (n_timepts,n_trials) ndarray. Simulated oscillation-in-noise data.           
+    """
     if seed is not None: np.random.seed(seed)
     
     def _randn(*args):
@@ -2803,7 +2621,7 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
     freq    = frequency if freq_sd == 0 else frequency + freq_sd*_randn(1,n_trials)
     amp     = amplitude if amp_sd == 0 else amplitude + amp_sd*_randn(1,n_trials)
     phi     = phase if phase_sd == 0 else phase + phase_sd*_randn(1,n_trials)
-    
+        
     # Simulate oscillatory bursts if burst_rate is set != 0
     bursty = burst_rate > 0
     # Convert burst width from cycles to s
@@ -2846,7 +2664,79 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
 
     return data
 
+
+def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
+    """
+    Generates synthetic multichannel data with oscillations at given parameters.
     
+    For each channel, generates multiple trials with constant oscillatory signal +  
+    random additive Gaussian noise. Parameters can be shared across channels or set
+    independently for each channel
+    
+    data = simulate_multichannel_oscillation(n_chnls, *args, **kwargs)
+    
+    ARGS
+    n_chnls     Int. Number of channels to simulate
+    
+    *args       Rest of place and keyword arguments are passed to simulate_oscillation()
+    **kwargs    for each channel. Each argument can be given in one of two forms:
+                (1) A single value equivalent to the same argument to simulate_oscillation().
+                    That same value will be used for all n_chnls channels.  
+                (2) (n_chnls,) list can be given with different values for each channel,
+                    which will be iterated through.
+                See simulate_oscillation() for details on arguments.
+                
+                Exceptions: If a value is set for <seed>, it will be used to set the 
+                random number generator only ONCE at the start of this function, so that
+                the generation of all channel signals follow a reproducible random sequence.
+                
+                Simulated data must have same shape for all channels, so all channels must 
+                have the same value set for window, smp_rate, and n_trials.
+                
+
+    
+    RETURNS
+    data        (n_timepts,n_trials,n_chnls) ndarray. Simulated multichannel data.
+    """
+    # Set a single random seed, so simulation of all multichannel data follows a reproducible sequence
+    seed = kwargs.pop('seed',None)    
+    if seed is not None:
+        if not np.isscalar(seed) and (len(seed) > 1):
+            seed = seed[0]
+            print("Using only first value given for <seed> (%d). Multiple values not permitted" % seed)
+        np.random.seed(seed)
+    
+    # Ensure all channels have same values for these parameters that determine data size
+    for param in ['window','smp_rate','n_trials']:
+        assert (param not in kwargs) or np.isscalar(kwargs[param]) or np.allclose(np.diff(kwargs[param]), 0), \
+            ValueError("All simulated channels must have same value for '%s'" % param)
+                
+    # Replicate any single-valued arguments (args and kwargs) into (n_chnls,) lists
+    args = list(args)
+    for i,value in enumerate(args):
+        if np.isscalar(value) or (len(value) != n_chnls): args[i] = n_chnls * [value]
+        
+    for key,value in kwargs.items():
+        if np.isscalar(value) or (len(value) != n_chnls): kwargs[key] = n_chnls * [value]
+        
+    # Simulate oscillatory data for each channel        
+    for chnl in range(n_chnls):
+        # Extract the i-th value for each arg and kwarg
+        chnl_args = [value[chnl] for value in args]
+        chnl_kwargs = {key:value[chnl] for key,value in kwargs.items()}
+
+        chnl_data = simulate_oscillation(*chnl_args, **chnl_kwargs)
+        
+        # HACK Create the array to hold all channel data after we know the shape
+        if chnl == 0:
+            n_timepts,n_trials = chnl_data.shape
+            data = np.empty((n_timepts,n_trials,n_chnls))
+            
+        data[:,:,chnl] = chnl_data
+        
+    return data
+
+        
 def simulate_mvar(coeffs, cov=None, n_timepts=100, n_trials=1, burnin=100):
     """
     Simulates activity in a network with given connectivity coefficients and
@@ -3351,54 +3241,42 @@ def test_synchrony(method, test='frequency', values=None, spec_method='wavelet',
     test = test.lower()
     
     # Set defaults for tested values and set up rate generator function depending on <test>
+    sim_args = dict(amplitude=[amp,amp*damp], phase=[phi,phi+dphi], phase_sd=[0,phi_sd],
+                    n_trials=n, noise=noise, window=win, burst_rate=burst_rate, seed=seed)
     if test in ['synchrony','strength','coupling']:
         values = [pi, pi/2, pi/4, 0]
-        gen_data = lambda phi_sd: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                                 n_trials=n,phase_sd=phi_sd*ch, noise=noise,window=win,
-                                                                 burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['phase_sd']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda phi_sd: simulate_multichannel_oscillation(2,freq,**sim_args,phase_sd=[0,phi_sd])
         
     elif test in ['relphase','rel_phase','dphi']:
         values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
-        gen_data = lambda dphi: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                               burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['phase']   # Delete preset arg so it uses argument to lambda below
+        # Note: Implement dphi in 1st channel only so synchrony phase ends up monotonically *increasing* for tests below
+        gen_data = lambda dphi: simulate_multichannel_oscillation(2,freq,**sim_args,phase=[phi+dphi,phi])
 
     elif test in ['ampratio','amp_ratio','damp']:
         values = [1,2,4,8] if values is None else values
-        gen_data = lambda damp: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                               burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['amplitude']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda damp: simulate_multichannel_oscillation(2,freq,**sim_args,amplitude=[amp,amp*damp])
     
     elif test in ['frequency','freq']:
         values = [4,8,16,32,64] if values is None else values
-        gen_data = lambda freq: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                               n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                               burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        gen_data = lambda freq: simulate_multichannel_oscillation(2,freq,**sim_args)
         
     elif test in ['amplitude','amp']:
         values = [1,2,5,10,20] if values is None else values
-        gen_data = lambda amp: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                              n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                              burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['amplitude']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda amp: simulate_multichannel_oscillation(2,freq,**sim_args,amplitude=[amp,amp*damp])
         
     elif test in ['phase','phi']:
         values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
-        gen_data = lambda phi: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                              n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                              burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['phase']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda phi: simulate_multichannel_oscillation(2,freq,**sim_args,phase=[phi,phi+dphi])
                 
     elif test in ['n','n_trials']:
         values = [25,50,100,200,400,800] if values is None else values
-        gen_data = lambda n: np.stack((simulate_oscillation(freq,amplitude=amp*damp**ch,phase=phi+dphi*(1-ch),
-                                                            n_trials=n,phase_sd=phi_sd*ch,noise=noise,window=win,
-                                                            burst_rate=burst_rate,seed=seed) 
-                                          for ch in range(2)), axis=2)
+        del sim_args['n_trials']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda n: simulate_multichannel_oscillation(2,freq,**sim_args,n_trials=n)        
         
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
@@ -3418,9 +3296,9 @@ def test_synchrony(method, test='frequency', values=None, spec_method='wavelet',
     for i,value in enumerate(values):
         # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
         
-        # Simulate data with oscillation of given params in additive noise -> (n_timepts,n_trials)
+        # Simulate data with oscillation of given params in additive noise -> (n_timepts,n_trials,n_chnls=2)
         data = gen_data(value)
-                        
+                 
         # Compute time-frequency/spectrogram representation of data and
         # bivariate measure of synchrony -> (n_freqs,n_timepts)
         sync,freqs,timepts,phase = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
@@ -3637,7 +3515,6 @@ def synchrony_test_battery(methods=['PPC','PLV','coherence'],
                                 
                 test_synchrony(method, test=test, spec_method=spec_method, **kwargs)
                 print('PASSED (test ran in %.1f s)' % (time.time()-t1))
-                plt.close('all') # TEMP
                                 
         
 # =============================================================================
@@ -3875,6 +3752,20 @@ def _next_power_of_2(n):
     """
     # todo  Think about switching this to use scipy.fftpack.next_fast_len
     return 1 if n == 0 else 2**ceil(log2(n))
+
+
+def _infer_freq_scale(freqs):
+    """ Determines if frequency sampling vector is linear or logarithmic """
+    # Determine if frequency scale is linear (all equally spaced)
+    if np.allclose(np.diff(np.diff(freqs)),0):
+        return 'linear'
+    
+    # Determine if frequency scale is logarithmic (all equally spaced in log domain)
+    elif np.allclose(np.diff(np.diff(np.log2(freqs))),0):
+        return 'log'
+    
+    else:
+        raise "Unable to determine scale of frequency sampling vector"
 
 
 def _freq_to_scale(freqs, wavelet='morlet', wavenumber=6):

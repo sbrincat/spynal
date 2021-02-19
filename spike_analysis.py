@@ -27,7 +27,6 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
-# TODO  Generalize realign_spike_times,bool_to_times to arbitrary-shape data arrays
 
 import os
 from math import isclose, ceil, sqrt
@@ -37,7 +36,7 @@ import matplotlib.pyplot as plt
 
 from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
-from scipy.stats import poisson, bernoulli, norm
+from scipy.stats import poisson, bernoulli, norm, expon
 
 
 # =============================================================================
@@ -575,7 +574,7 @@ def cut_trials(data, trial_lims, trial_refs=None):
     return cut_data
     
                     
-def realign_spike_times(spike_times, align_times):
+def realign_spike_times(spike_times, align_times, axis=0):
     """
     Realigns trial-cut spike timestamps to new set of within-trial times 
     (eg new trial event) so that t=0 on each trial at given event. 
@@ -591,22 +590,26 @@ def realign_spike_times(spike_times, align_times):
 
     align_times (n_trials,) array-like. New set of times (in old
                 reference frame) to realign spike timestamps to
+                
+    axis                
 
     RETURNS
     realigned   Same data struture, but with each timestamp realigned to times
 
     """
-    # TODO Make this function invariant to array shape?
-    n_rows,n_cols = spike_times.shape
+    n_trials = spike_times.data[axis]
+    
+    # Move trial axis to first axis of array
+    if axis != 0: spike_times = np.moveaxis(spike_times, axis, 0)
+    
+    # Subtract new reference time from all spike times for each trial
+    for trial in range(n_trials):
+        spike_times[trial,...] - align_times[trial]
+        
+    # Move trial axis to original location
+    if axis != 0: spike_times = np.moveaxis(spike_times, 0, axis)
 
-    realigned = np.empty(spike_times.shape,dtype=object)
-
-    # For each spike train in <spike_times> compute count w/in each hist bin
-    for row in range(n_rows):
-        for col in range(n_cols):
-            realigned[row,col] = spike_times[row,col] - align_times[row]
-
-    return realigned
+    return spike_times
 
 
 def realign_spike_times_on_event(spike_times, event_data, event):
@@ -1121,7 +1124,9 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     else:           lambdas = (offset + gain[labels])*window
 
     # Simulate Poisson spike counts, convert to rates
-    rates = np.random.poisson(lambdas,(n_trials,)) / window
+    # Generates Poisson random variables in a way that reproducibly matches output of Matlab
+    rates = poisson.ppf(np.random.rand(n_trials), mu=lambdas) / window
+    # ALT rates = np.random.poisson(lambdas,(n_trials,)) / window
 
     return rates, labels
 
@@ -1207,10 +1212,13 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
             if data_type == 'timestamp': trains[i_trial] = np.asarray([],dtype=object)
             continue
         
-        # Simulate inter-spike intervals. Poisson process has exponential ISIs.
+        # Simulate inter-spike intervals. Poisson process has exponential ISIs,
+        # and this is best way to simulate one. 
         # HACK Generate 2x expected number of spikes, truncate below
         n_spikes_exp = lam*window
-        ISIs = np.random.exponential(1/lam,(int(round(2*n_spikes_exp)),))
+        # Generates exponential random variables in a way that reproducibly matches output of Matlab
+        ISIs = expon.ppf(np.random.rand(int(round(2*n_spikes_exp))), loc=0, scale=1/lam)
+        # ALT ISIs = np.random.exponential(1/lam, (int(round(2*n_spikes_exp)),))
 
         # Integrate ISIs to get actual spike times
         timestamps = np.cumsum(ISIs)
