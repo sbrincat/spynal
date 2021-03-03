@@ -44,9 +44,11 @@ spike_field_phase_locking_value Spike-field PLV between a spike/LFP pair
 spike_field_pairwise_phase_consistency Spike-field PPC between a spike/LFP pair
 
 ### Preprocessing ###
+cut_trials          Cut LFPs/continuous data into trial segments
+realign_data        Realigns LFPs/continuous data to new within-trial event
+
 get_freq_sampling   Frequency sampling vector for a given FFT-based computation
 setup_sliding_windows Generates set of sliding windows from given parameters
-cut_trials          Cut LFPs/continuous data into trial segments
 
 remove_dc           Removes constant DC component of signals
 remove_evoked       Removes phase-locked evoked potentials from signals
@@ -73,11 +75,9 @@ Created on Thu Oct  4 15:28:15 2018
 # TODO  Figure out how to switch temporal output (spectrum vs spectrogram,
 #       cont vs window vs epoch?) for each analysis. Code up missing functions:
 #       wavelet_spectrum, waveletSpikeSpectrogram, multitaperSpikeSpectrogram
-# TODO  Also option fixed-width vs variable width tapers (cf Fieldtrip)
 # TODO  Also option output signal type to ***Spectrum/ogram func's (complex/power/phase)?
 #       Same for synchrony funcs or stick with return_phase option?
 # TODO  Add Hanning tapers as another spectral analysis option
-# TODO  Build in ability to compute more than just pairwise sync measures?
 
 import os
 import time
@@ -90,7 +90,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from scipy.signal.windows import dpss
 from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
-from scipy.stats import norm
+from scipy.stats import norm,mode
 from sklearn.linear_model import LinearRegression
 from pyfftw.interfaces.scipy_fftpack import fft,ifft # ~ 46/16 s on benchmark
 
@@ -1219,8 +1219,8 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     # TODO  Option input of spectral data?
     method = method.lower()
     bands = np.asarray(bands)
-    if axis == -1:          axis = data.ndim - 1    
-    if trial_axis == -1:    trial_axis = data.ndim - 1
+    if axis < 0:        axis = data.ndim + axis
+    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
     
     if window is not None:
         assert len(window) == 2, \
@@ -2012,6 +2012,203 @@ def frequency_plot_settings(freqs):
 # =============================================================================
 # Preprocessing functions
 # =============================================================================
+def cut_trials(data, trial_lims, smp_rate, axis=0):
+    """
+    Cuts continuous (eg LFP) data into trials
+    
+    cut_data = cut_trials(data, trial_lims, smp_rate, axis=0)
+    
+    ARGS
+    data        (...,n_timepts,...) array. Continuous data unsegmented into trials.
+                Arbitrary dimensionality, could include multiple channels, etc.
+                
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s) 
+                to use to cut data.
+                
+    smp_rate    Scalar. Sampling rate of data (Hz).
+    
+    axis        Int. Axis of data array corresponding to time samples. Default: 0                
+                
+    RETURNS
+    cut_data    (...,n_trial_timepts,...,n_trials) array.
+                Continuous data segmented into trials.
+                Trial axis is appended to end of all axes in input data.          
+    """    
+    trial_lims = np.asarray(trial_lims)    
+    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
+        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
+    n_trials = trial_lims.shape[0]
+        
+    # Convert trial_lims in s -> indices into continuous data samples
+    trial_idxs = np.round(smp_rate*trial_lims).astype(int)
+    assert trial_idxs.min() >= 0, ValueError("trial_lims are attempting to index before start of data")
+    assert trial_idxs.max() < data.shape[axis], ValueError("trial_lims are attempting to index beyond end of data")
+    # Ensure all windows have same length
+    trial_idxs = _check_window_lengths(trial_idxs,tol=1)
+                        
+    # Samples per trial = end - start + 1        
+    n_smp_per_trial = trial_idxs[0,1] - trial_idxs[0,0] + 1
+        
+    # Create array to hold trial-cut data. Same shape as data, with time sample axis
+    # reduced to n_samples_per_trial and trial axis appended.
+    cut_shape = [*data.shape,n_trials]
+    cut_shape[axis] = n_smp_per_trial
+    cut_data = np.empty(tuple(cut_shape),dtype=data.dtype)
+    
+    # Extract segment of continuous data for each trial
+    for trial,lim in enumerate(trial_idxs):
+        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
+        
+        # Note: The following is several orders of magnitude slower (mainly bc need to form explicit index):
+        # cut_data[...,trial] = data.take(np.arange(lim[0],lim[1]+1), axis=axis)
+                
+    return cut_data
+
+
+def _check_window_lengths(windows,tol=1):
+    """ 
+    Ensures a set of windows are the same length. If not equal, but within given tolerance,
+    windows are trimmed or expanded to the modal window length.
+    
+    ARGS
+    windows (n_wins,2) array-like. Set of windows to test, given as series of [start,end].
+    
+    tol     Scalar. Max tolerance of difference of each window length from the modal value.
+    
+    RETURNS
+    windows (n_wins,2) ndarray. Same windows, possibly slightly trimmed/expanded to uniform length
+    """    
+    windows = np.asarray(windows)
+    
+    window_lengths  = np.diff(windows,axis=1).squeeze()
+    window_range    = np.ptp(window_lengths)
+    
+    # If all window lengths are the same, windows are OK and we are done here
+    if np.allclose(window_lengths, window_lengths[0]): return windows
+    
+    # Compute mode of windows lengths and max difference from it
+    modal_length    = mode(window_lengths)[0][0]    
+    max_diff        = np.max(np.abs(window_lengths - modal_length))
+    
+    # If range is beyond our allowed tolerance, throw an error
+    assert max_diff <= tol, \
+        ValueError("Variable-length windows unsupported (range=%.1f). All windows must have same length" \
+                    % window_range)
+        
+    # If range is between 0 and tolerance, we trim/expand windows to the modal length
+    windows[:,1]    = windows[:,1] + (modal_length - window_lengths)
+    return windows
+    
+
+def realign_data(data, timepts, align_times, time_range, time_axis=0, trial_axis=-1):
+    """
+    Realigns trial-cut continuous (eg LFP) data to new set of within-trial times 
+    (eg new trial event) so that t=0 on each trial at given event. 
+    For example, data aligned to a start-of-trial event might
+    need to be relaligned to the behavioral response.
+
+    realigned = realign_data(data,timepts,align_times,time_range,time_axis=0,trial_axis=-1)
+
+    ARGS
+    data        ndarray. Continuous data segmented into trials.
+                Arbitrary dimensionality, could include multiple channels, etc.
+
+    timepts     (n_timepts) array-like. Time sampling vector for data (in s)
+    
+    align_times (n_trials,) array-like. New set of times (in old
+                reference frame) to realign data to (in s)
+                
+    time_range  (2,) array-like. Time range to extract from each trial around
+                new align time ([start,end] in s relative to align_times).
+                eg, time_range=(-1,1) -> extract 1 s on either side of align event.
+                                
+    time_axis   Int. Axis of data corresponding to time samples.
+                Default: 0 (1st axis of array)       
+
+    trial_axis  Int. Axis of data corresponding to distinct trials.
+                Default: -1 (last axis of array)       
+                
+    RETURNS
+    realigned   Data realigned to given within-trial times.
+                Time axis is reduced to length implied by time_range, but otherwise
+                array has same shape as input data.
+    """
+    timepts     = np.asarray(timepts)
+    align_times = np.asarray(align_times)    
+    time_range  = np.asarray(time_range)
+    
+    if time_axis < 0:   time_axis = data.ndim + time_axis
+    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
+    
+    # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
+    if time_axis != 0:              data = np.moveaxis(data,0,time_axis)
+    if trial_axis != data.ndim-1:   data = np.moveaxis(data,-1,trial_axis)
+    
+    # Convert align times and time epochs to nearest integer sample indexes
+    dt = np.mean(np.diff(timepts))
+    align_smps = np.round((align_times - timepts[0])/dt).astype(int)
+    range_smps = np.round(time_range/dt).astype(int)
+    # Compute [start,end] sample indexes for each trial epoch = align time +/- time range
+    trial_range_smps = align_smps[:,np.newaxis] + range_smps[np.newaxis,:]
+        
+    assert (trial_range_smps[:,0] >= 0).all(), \
+        "Some requested time epochs extend before start of data"    
+    assert (trial_range_smps[:,1] < len(timepts)).all(), \
+        "Some requested time epochs extend beyond end of data"
+            
+    n_timepts_out   = range_smps[1] - range_smps[0] + 1    
+    return_shape    = (n_timepts_out, *(data.shape[1:]))    
+    realigned = np.empty(return_shape)
+    
+    # Extract timepoints corresponding to realigned time epoch from each trial in data     
+    for iTrial,t in enumerate(trial_range_smps):
+        # Note: '+1' below makes the selection inclusive of the right endpoint in each trial
+        realigned[...,iTrial] = data[t[0]:t[1]+1,...,iTrial]    
+    
+    # Move array axes back to original locations
+    if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
+    if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
+        
+    return realigned
+
+
+def realign_data_on_event(data, event_data, event, timepts, align_times, time_range,
+                          time_axis=0, trial_axis=-1):
+    """
+    Realigns trial-cut continuous (eg LFP) data to new within-trial event
+    so that t=0 on each trial at given event. 
+    
+    Convenience wrapper around realign_data() for relaligning to a given
+    named event within a per-trial dataframe or dict variable.
+    
+    realigned = realign_data_on_event(data,event_data,event,timepts,align_times,time_range,
+                                      time_axis=0,trial_axis=-1)
+
+    ARGS
+    data        ndarray. Continuous data segmented into trials.
+                Arbitrary dimensionality, could include multiple channels, etc.
+
+    event_data  {string:(n_trials,) array} dict | (n_trials,n_events) DataFrame.
+                Per-trial event timing data to use to realign spike timestamps.
+
+    event       String. Dict key or DataFrame column name whose associated values
+                are to be used to realign spike timestamps
+                
+    See realign_data() for details on rest of arguments                
+    
+    RETURNS
+    realigned   Data realigned to given trial event.
+                Time axis is reduced to length implied by time_range, but otherwise
+                array has same shape as input data.
+    """
+    # Extract vector of times to realign on
+    align_times = event_data[event]
+    
+    # Compute the realignment and return
+    return realign_data(data, timepts, align_times, time_range,
+                        time_axis=time_axis, trial_axis=trial_axis)
+
+
 def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):
     """
     Returns frequency sampling vector (axis) for a given FFT-based computation
@@ -2145,59 +2342,6 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
         win_ends   = np.round(win_ends)
 
     return np.stack((win_starts,win_ends),axis=1)
-
-
-def cut_trials(data, trial_lims, smp_rate, axis=0):
-    """
-    Cuts continuous (eg LFP) data into trials
-    
-    cut_data = cut_trials(data, trial_lims, smp_rate, axis=0)
-    
-    ARGS
-    data        (...,n_timepts,...) array. Continuous data unsegmented into trials.
-                Arbitrary dimensionality, could include multiple channels, etc.
-                
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s) 
-                to use to cut data.
-                
-    smp_rate    Scalar. Sampling rate of data (Hz).
-    
-    axis        Int. Axis of data array corresponding to time samples. Default: 0                
-                
-    RETURNS
-    cut_data    (...,n_trial_timepts,...,n_trials) array.
-                Continuous data segmented into trials.
-                Trial axis is appended to end of all axes in input data.          
-    """
-    trial_lims = np.asarray(trial_lims)    
-    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
-        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
-    n_trials = trial_lims.shape[0]
-        
-    # Convert trial_lims in s -> indices into continuous data samples
-    trial_idxs = np.round(smp_rate*trial_lims).astype(int)
-    assert np.allclose(np.diff(np.diff(trial_idxs,axis=1)),0), \
-        ValueError("Variable-length trials are unsupported. All trials in trial_lims must have same length")
-    assert trial_idxs.min() >= 0, ValueError("trial_lims are attempting to index before start of data")
-    assert trial_idxs.max() < data.shape[axis], ValueError("trial_lims are attempting to index beyond end of data")
-                    
-    # Samples per trial = end - start + 1        
-    n_smp_per_trial = int(round((trial_idxs[:,1] - trial_idxs[:,0]).mean())) + 1
-        
-    # Create array to hold trial-cut data. Same shape as data, with time sample axis
-    # reduced to n_samples_per_trial and trial axis appended.
-    cut_shape = [*data.shape,n_trials]
-    cut_shape[axis] = n_smp_per_trial
-    cut_data = np.empty(tuple(cut_shape),dtype=data.dtype)
-    
-    # Extract segment of continuous data for each trial
-    for trial,lim in enumerate(trial_idxs):
-        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
-        
-        # Note: The following is several orders of magnitude slower (mainly bc need to form explicit index):
-        # cut_data[...,trial] = data.take(np.arange(lim[0],lim[1]+1), axis=axis)
-                
-    return cut_data
 
 
 def remove_dc(data, axis=None):
@@ -2567,7 +2711,7 @@ def jackknife_to_pseudoval(x, xjack, n):
 # =============================================================================
 def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=1000,
                          freq_sd=0, amp_sd=0, phase_sd=0,
-                         smp_rate=1000, window=1.0, burst_rate=0, burst_width=4, seed=None):
+                         smp_rate=1000, time_range=1.0, burst_rate=0, burst_width=4, seed=None):
     """
     Generates synthetic data with oscillation at given parameters.
     
@@ -2575,7 +2719,7 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
     random additive Gaussian noise.
     
     data = simulate_oscillation(frequency,amplitude=5.0,phase=0,noise=1.0,n_trials=1000,
-                                smp_rate=1000,window=1.0,burst_rate=0,burst_width=4,seed=None)
+                                smp_rate=1000,time_range=1.0,burst_rate=0,burst_width=4,seed=None)
     
     ARGS
     frequency   Scalar. Frequency to simulation oscillation at (Hz)
@@ -2594,7 +2738,7 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
 
     smp_rate    Int. Sampling rate for simulate data (Hz). Default: 1000
     
-    window      Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    time_range  Scalar. Full time range to simulate oscillation over (s). Default: 1 s
     
     burst_rate  Scalar. Oscillatory burst rate (bursts/trial). Set=0 to simulate 
                 constant, non-bursty oscillation. Default: 0 (not bursty)
@@ -2628,7 +2772,7 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
     burst_sd = burst_width/freq
     
     # Set time sampling vector (in s)
-    n_timepts = round(window * smp_rate)
+    n_timepts = round(time_range * smp_rate)
     t = np.arange(n_timepts) / smp_rate
 
     # Generate oscillatory signal = sinusoid wave at given amplitude(s),frequency(s),phase(s)
@@ -2691,9 +2835,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
                 the generation of all channel signals follow a reproducible random sequence.
                 
                 Simulated data must have same shape for all channels, so all channels must 
-                have the same value set for window, smp_rate, and n_trials.
-                
-
+                have the same value set for time_range, smp_rate, and n_trials.                
     
     RETURNS
     data        (n_timepts,n_trials,n_chnls) ndarray. Simulated multichannel data.
@@ -2707,7 +2849,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
         np.random.seed(seed)
     
     # Ensure all channels have same values for these parameters that determine data size
-    for param in ['window','smp_rate','n_trials']:
+    for param in ['time_range','smp_rate','n_trials']:
         assert (param not in kwargs) or np.isscalar(kwargs[param]) or np.allclose(np.diff(kwargs[param]), 0), \
             ValueError("All simulated channels must have same value for '%s'" % param)
                 
@@ -2736,7 +2878,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
         
     return data
 
-        
+                
 def simulate_mvar(coeffs, cov=None, n_timepts=100, n_trials=1, burnin=100):
     """
     Simulates activity in a network with given connectivity coefficients and
@@ -2861,7 +3003,7 @@ def network_simulation(simulation='DhamalaFig3'):
 
     
 def test_power(method, test='frequency', values=None, plot=False, plot_dir=None, seed=1,
-               amp=5.0, freq=32, phi=0, noise=0.5, n=1000, win=3.0, smp_rate=1000, burst_rate=0,  **kwargs):
+               amp=5.0, freq=32, phi=0, noise=0.5, n=1000, time_range=3.0, smp_rate=1000, burst_rate=0,  **kwargs):
     """
     Basic testing for functions estimating time-frequency spectral power 
     
@@ -2869,7 +3011,7 @@ def test_power(method, test='frequency', values=None, plot=False, plot_dir=None,
     estimates spectrogram using given function, and compares estimated to expected.
     
     means,sems = test_power(method,test='frequency',value=None,plot=False,plot_dir=None,seed=1,
-                            amp=5.0,freq=32,phi=0,noise=0.5,n=1000,win=3.0,smp_rate=1000,
+                            amp=5.0,freq=32,phi=0,noise=0.5,n=1000,time_range=3.0,smp_rate=1000,
                             burst_rate=0,**kwargs)
                               
     ARGS
@@ -2905,7 +3047,7 @@ def test_power(method, test='frequency', values=None, plot=False, plot_dir=None,
     phi     Scalar. Simulated oscillation phase (rad). Default: 0
     noise   Scalar. Additive noise for simulated signal (a.u., same as amp). Default: 0.5
     n       Int. Number of trials to simulate if test != 'n'. Default: 1000
-    win     Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    time_range Scalar. Full time range to simulate oscillation over (s). Default: 1.0
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
     burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
     
@@ -2926,27 +3068,27 @@ def test_power(method, test='frequency', values=None, plot=False, plot_dir=None,
     if test in ['frequency','freq']:
         values = [4,8,16,32,64] if values is None else values
         gen_data = lambda freq: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     window=win,burst_rate=burst_rate,seed=seed)
+                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
         
     elif test in ['amplitude','amp']:
         values = [1,2,5,10,20] if values is None else values
         gen_data = lambda amp: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     window=win,burst_rate=burst_rate,seed=seed)
+                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
         
     elif test in ['phase','phi']:
         values = [-pi,-pi/2,0,pi/2,pi] if values is None else values
         gen_data = lambda phi: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                    window=win,burst_rate=burst_rate,seed=seed)
+                                                    time_range=time_range,burst_rate=burst_rate,seed=seed)
         
     elif test in ['n','n_trials']:
         values = [25,50,100,200,400,800] if values is None else values
         gen_data = lambda n: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     window=win,burst_rate=burst_rate,seed=seed)
+                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
         
     elif test in ['burst_rate','burst']:
         values = [0.1,0.2,0.4,0.8] if values is None else values
         gen_data = lambda rate: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     window=win,burst_rate=burst_rate,seed=seed)        
+                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)        
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
     
@@ -3160,7 +3302,7 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
             
                 
 def test_synchrony(method, test='frequency', values=None, spec_method='wavelet', plot=False, plot_dir=None,
-                   seed=1, phi_sd=pi/4, dphi=0, damp=1, amp=5.0, freq=32, phi=0, noise=0.5,n=1000, win=3.0, 
+                   seed=1, phi_sd=pi/4, dphi=0, damp=1, amp=5.0, freq=32, phi=0, noise=0.5,n=1000, time_range=3.0, 
                    smp_rate=1000, burst_rate=0, **kwargs):    
     """
     Basic testing for functions estimating bivariate time-frequency synchrony/coherence 
@@ -3170,7 +3312,7 @@ def test_synchrony(method, test='frequency', values=None, spec_method='wavelet',
     
     syncs,phases = test_synchrony(method,test='frequency',values=None,spec_method='wavelet',
                                   plot=False,plot_dir=None,seed=1,
-                                  phi_sd=pi/4,dphi=0,damp=1,amp=5.0,freq=32,phi=0,noise=0.5,n=1000,win=3.0,
+                                  phi_sd=pi/4,dphi=0,damp=1,amp=5.0,freq=32,phi=0,noise=0.5,n=1000,time_range=3.0,
                                   smp_rate=1000,burst_rate=0,**kwargs)
                               
     ARGS
@@ -3221,7 +3363,7 @@ def test_synchrony(method, test='frequency', values=None, spec_method='wavelet',
     phi     Scalar. Simulated oscillation phase (rad). Default: 0
     noise   Scalar. Additive noise for simulated signal (a.u., same as amp). Default: 0.5    
     n       Int. Number of trials to simulate if test != 'n'. Default: 1000
-    win     Scalar. Time window to simulate oscillation over (s). Default: 1.0
+    time_range Scalar. Full time range to simulate oscillation over (s). Default: 3 s
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
     burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
 
@@ -3241,8 +3383,8 @@ def test_synchrony(method, test='frequency', values=None, spec_method='wavelet',
     test = test.lower()
     
     # Set defaults for tested values and set up rate generator function depending on <test>
-    sim_args = dict(amplitude=[amp,amp*damp], phase=[phi,phi+dphi], phase_sd=[0,phi_sd],
-                    n_trials=n, noise=noise, window=win, burst_rate=burst_rate, seed=seed)
+    sim_args = dict(amplitude=[amp,amp*damp], phase=[phi+dphi,phi], phase_sd=[0,phi_sd],
+                    n_trials=n, noise=noise, time_range=time_range, burst_rate=burst_rate, seed=seed)
     if test in ['synchrony','strength','coupling']:
         values = [pi, pi/2, pi/4, 0]
         del sim_args['phase_sd']   # Delete preset arg so it uses argument to lambda below
@@ -3504,13 +3646,17 @@ def synchrony_test_battery(methods=['PPC','PLV','coherence'],
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
+    if isinstance(spec_methods,str): spec_methods = [spec_methods]
+    tests = [test.lower() for test in tests]
+    methods = [method.lower() for method in methods]
     
     for test in tests:
         for method in methods:
             for spec_method in spec_methods:
                 print("Running %s test on %s %s" % (test,spec_method,method))
                 t1 = time.time()
-                # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
+                # Skip tests expected to fail due to properties of given info measures (eg ones that are biased/affected by n)
+                if (test in ['n','n_trials']) and (method in ['coherence','coh','plv']): continue
                 if (test in ['ampratio','amp_ratio','damp']) and (method in ['coherence','coh']): continue
                                 
                 test_synchrony(method, test=test, spec_method=spec_method, **kwargs)
@@ -3593,6 +3739,8 @@ def _reshape_data(data, axis=0):
 
     data_shape (data.ndim,) tuple. Original shape of data array
     """
+    if axis < 0: axis = data.ndim + axis
+    
     # Save original shape/dimensionality of <data>
     data_ndim  = data.ndim
     data_shape = data.shape
@@ -3607,8 +3755,7 @@ def _reshape_data(data, axis=0):
     # Faster method for c-contiguous arrays
     else:
         # If observation axis != last dim, permute axis to make it so
-        last_dim = data_ndim - 1
-        if axis != last_dim: data = np.moveaxis(data,axis,last_dim)
+        if axis != data_ndim - 1: data = np.moveaxis(data,axis,last_dim)
 
         # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
         if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T

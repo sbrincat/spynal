@@ -591,20 +591,19 @@ def realign_spike_times(spike_times, align_times, axis=0):
     align_times (n_trials,) array-like. New set of times (in old
                 reference frame) to realign spike timestamps to
                 
-    axis                
+    axis        Int. Axis of spike_times corresponding to trials.
+                Default: 0 (1st axis of array)       
 
     RETURNS
     realigned   Same data struture, but with each timestamp realigned to times
 
-    """
-    n_trials = spike_times.data[axis]
-    
+    """    
     # Move trial axis to first axis of array
     if axis != 0: spike_times = np.moveaxis(spike_times, axis, 0)
     
     # Subtract new reference time from all spike times for each trial
-    for trial in range(n_trials):
-        spike_times[trial,...] - align_times[trial]
+    for trial,align_time in enumerate(align_times):
+        spike_times[trial,...] = spike_times[trial,...] - align_time
         
     # Move trial axis to original location
     if axis != 0: spike_times = np.moveaxis(spike_times, 0, axis)
@@ -618,8 +617,8 @@ def realign_spike_times_on_event(spike_times, event_data, event):
     trial at given event. For example, timestamps aligned to a start-of-trial event
     might need to be relaligned to the behavioral response.
     
-    Wrapper around realign_spike_times() for relaligning to a given named event
-    within a per-trial dataframe or dict variable.
+    Convenience wrapper around realign_spike_times() for relaligning to a given
+    named event within a per-trial dataframe or dict variable.
 
     spike_times = realign_spike_times_on_event(spike_times,event_data,event)
 
