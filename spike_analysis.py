@@ -8,7 +8,9 @@ bin_rate            Computes spike counts/rates in series of time bins (regular 
 density             Computes spike density (smoothed rate) with given kernel
 
 ### Preprocessing ###
+cut_trials          Cuts spike timestamp data into trials
 realign_spike_times Realigns spike timestamps to new t=0
+
 times_to_bool       Converts spike timestamps to binary spike trains
 bool_to_times       Converts binary spike train to timestamps
 pool_electrode_units Pools all units on each electrode into a multi-unit
@@ -213,7 +215,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     width       Scalar. Width parameter for given kernel. Default: 50 ms
                 Interpretation is kernel-specific.
                 'gaussian' : <width> = 1 Gaussian standard deviation
-                'hanning'  : <width> = kernel half-width (~ 2.5x Gaussian SD)
+                'hanning'  : <width> = kernel half-width (~ 2.53x Gaussian SD)
 
     lims        (2,) array-like. Full time range of analysis (in s).
 
@@ -272,7 +274,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     if smp_rate < 500: 
         print('Warning: Sampling of %d Hz will likely lead to multiple spikes in bin binarized to 0/1' % round(smp_rate))
         
-    # Add buffer to time sampling vector and data to mitigate edge effects        
+    # Add buffer to time sampling vector and data to mitigate edge effects
     if buffer != 0:
         n_buffer = int(round(buffer*smp_rate))    # Convert buffer from time units -> samples
         # Extend time sampling by n_buffer samples on either end (for both data types)
@@ -315,9 +317,8 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         
     # Implement any temporal downsampling of rates    
     if downsmp != 1:
-        data        = data[...,0:-1:downsmp]        
-        rates       = rates[...,0:-1:downsmp]
-        t           = t[...,0:-1:downsmp]
+        rates       = rates[...,0::downsmp]
+        t           = t[0::downsmp]
 
     # KLUDGE Sometime trials/neurons/etc. w/ 0 spikes end up with tiny non-0 values
     # due to floating point error in fft routines. Fix by setting = 0.
@@ -1130,14 +1131,14 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     return rates, labels
 
 
-def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
-                          window=1.0, seed=None, data_type='timestamp'):
+def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_range=1.0,
+                          refractory=0, seed=None, data_type='timestamp'):
     """
     Simulates Poisson spike trains across multiple conditions/groups
     with given condition effect size
 
     trains,labels = simulate_spike_trains(gain=5.0,offset=5.0,n_conds=2,
-                                          n_trials=1000,window=1.0,seed=None,
+                                          n_trials=1000,time_range=1.0,seed=None,
                                           data_type='timestamp')
 
     ARGS
@@ -1154,8 +1155,11 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
 
     n_trials Int. Number of trials/observations to simulate. Default: 1000
 
-    window  Scalar. Time window to simulate spike train over. Default: 1.0 s
+    time_range  Scalar. Full time range to simulate spike train over. Default: 1 s
 
+    refractory  Scalar. Absolute refractory period in which a second spike cannot
+            occur after another. Set=0 for Poisson with no refractory [default].
+            
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for actual random numbers.
 
@@ -1201,7 +1205,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     if data_type == 'timestamp':
         trains = np.empty((n_trials,),dtype=object)
     else:
-        n_timepts = int(round(window*1000))
+        n_timepts = int(round(time_range*1000))
         trains = np.zeros((n_trials,n_timepts),dtype=bool)
 
     # Simulate Poisson spike trains with given lambda for each trial
@@ -1214,15 +1218,19 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
         # Simulate inter-spike intervals. Poisson process has exponential ISIs,
         # and this is best way to simulate one. 
         # HACK Generate 2x expected number of spikes, truncate below
-        n_spikes_exp = lam*window
+        n_spikes_exp = lam*time_range
         # Generates exponential random variables in a way that reproducibly matches output of Matlab
         ISIs = expon.ppf(np.random.rand(int(round(2*n_spikes_exp))), loc=0, scale=1/lam)
         # ALT ISIs = np.random.exponential(1/lam, (int(round(2*n_spikes_exp)),))
+        
+        # HACK Implement absolute refractory period by deleting ISIs < refractory
+        # TODO More principled way of doing this that doesn't affect rates
+        if refractory != 0: ISIs = ISIs[ISIs >= refractory]
 
         # Integrate ISIs to get actual spike times
         timestamps = np.cumsum(ISIs)
-        # Keep only spike times within desired time window
-        timestamps = timestamps[timestamps < window]
+        # Keep only spike times within desired time time_range
+        timestamps = timestamps[timestamps < time_range]
 
         if data_type == 'timestamp':
             trains[i_trial] = timestamps
