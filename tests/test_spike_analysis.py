@@ -52,7 +52,7 @@ def spike_data(spike_timestamp, spike_bool):
     data_dict   {'data_type' : (data,timepts)} dict containing outputs from
                 each of constituent fixtures
                 
-    REFERENCE   https://stackoverflow.com/a/42400786
+    SOURCE      https://stackoverflow.com/a/42400786
     """    
     return {'spike_timestamp': spike_timestamp, 'spike_bool': spike_bool}
 
@@ -78,13 +78,21 @@ def test_bin_rate(spike_data, data_type, count, result):
     assert np.issubdtype(rates.dtype,np.integer) if count else np.issubdtype(rates.dtype,np.float)
     assert np.isclose(rates.sum(), result) if count else np.isclose(rates.mean(), result)
     
-    # Test for consistent output with different dimensionality
+    # Test for consistent output with different data array shape
     shape = (5,2,2,*data.shape[2:])
     rates, bins = bin_rate(data.reshape(shape), lims=[0,1], count=count, axis=-1, t=t)
     assert bins.shape == (20, 2)
     assert rates.shape == (5, 2, 2, 20)
     assert np.isclose(rates.sum(), result) if count else np.isclose(rates.mean(), result)
-    
+
+    # Test for consistent output with transposed data dimensionality
+    # Note: output dims are expected to be different for timestamp vs boolean data
+    expected_shape = (20, 2, 10) if data_type == 'spike_bool' else (2, 10, 20)
+    rates, bins = bin_rate(data.transpose(), lims=[0,1], count=count, axis=0, t=t)
+    assert bins.shape == (20, 2)
+    assert rates.shape == expected_shape
+    assert np.isclose(rates.sum(), result) if count else np.isclose(rates.mean(), result)
+        
     # Test for consistent output with different sliding window length
     rates, bins = bin_rate(data, lims=[0,1], width=20e-3, count=count, axis=-1, t=t)
     assert bins.shape == (50, 2)  
@@ -124,6 +132,23 @@ def test_density(spike_data, data_type, kernel, result):
     assert rates.shape == (10, 2, 1001)
     assert np.isclose(rates.mean(), result)
     
+    # Test for consistent output with different data array shape
+    shape = (5,2,2,*data.shape[2:])
+    rates, tout = density(data.reshape(shape), kernel=kernel, width=width, lims=[0,1], buffer=0, 
+                          axis=-1, t=t)    
+    assert tout.shape == (1001,)
+    assert rates.shape == (5, 2, 2, 1001)
+    assert np.isclose(rates.mean(), result)
+    
+    # Test for consistent output with transposed data dimensionality
+    # Note: output dims are expected to be different for timestamp vs boolean data
+    expected_shape = (1001, 2, 10) if data_type == 'spike_bool' else (2, 10, 1001)
+    rates, tout = density(data.transpose(), kernel=kernel, width=width, lims=[0,1], buffer=0,
+                          axis=0, t=t)    
+    assert tout.shape == (1001,)
+    assert rates.shape == expected_shape
+    assert np.isclose(rates.mean(), result)
+                
     # Test for ~ consistent ouptut with 10x downsampling after spike density estimation
     rates, tout = density(data, kernel=kernel, width=width, lims=[0,1], buffer=0, 
                           downsmp=10, axis=-1, t=t)
@@ -140,13 +165,16 @@ def test_bool_to_times(spike_timestamp, spike_bool):
     data_bool_to_timestamp = bool_to_times(data_bool, t, axis=-1)
     
     # Test that timestamp->bool->timestamp data retains same dtype, shape, values
-    assert data_timestamp.dtype == data_bool_to_timestamp.dtype
-    assert data_timestamp.shape == data_bool_to_timestamp.shape
+    assert data_bool_to_timestamp.dtype == data_timestamp.dtype
+    assert data_bool_to_timestamp.shape == data_timestamp.shape
     assert np.asarray([d1.shape == d2.shape for d1,d2 
-                       in zip(data_timestamp.flatten(), data_bool_to_timestamp.flatten())]).all()
-    assert np.asarray([np.allclose(np.round(d1,3), d2) for d1,d2 
-                       in zip(data_timestamp.flatten(), data_bool_to_timestamp.flatten())]).all()
+                       in zip(data_bool_to_timestamp.flatten(), data_timestamp.flatten())]).all()
+    assert np.asarray([np.allclose(d1, np.round(d2,3)) for d1,d2 
+                       in zip(data_bool_to_timestamp.flatten(), data_timestamp.flatten())]).all()
     
+    # Test for correct handling of single spike trains
+    assert np.allclose(bool_to_times(data_bool[0,0,:], t, axis=-1), np.round(data_timestamp[0,0],3))
+                               
 
 def test_times_to_bool(spike_timestamp, spike_bool):
     """ Unit tests for times_to_bool function to convert binary spike trains to timestamps """
@@ -157,6 +185,10 @@ def test_times_to_bool(spike_timestamp, spike_bool):
     
     # Test that bool->timestamp->bool data retains same shape, dtype, values    
     assert (t == t2).all()
-    assert data_bool.shape == data_timestamp_to_bool.shape
-    assert data_bool.dtype == data_timestamp_to_bool.dtype
-    assert (data_bool == data_timestamp_to_bool).all()    
+    assert data_timestamp_to_bool.shape == data_bool.shape
+    assert data_timestamp_to_bool.dtype == data_bool.dtype
+    assert (data_timestamp_to_bool == data_bool).all()
+    
+    # Test for correct handling of single spike trains and list-valued data
+    assert (times_to_bool(data_timestamp[0,0], lims=(0,1))[0] == data_bool[0,0,:]).all()
+    assert (times_to_bool(list(data_timestamp[0,0]), lims=(0,1))[0] == data_bool[0,0,:]).all()

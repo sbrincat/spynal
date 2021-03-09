@@ -29,6 +29,7 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
+# TODO  Add versions of cut_trials, realign_spike_times for spike_bool data
 
 import os
 from math import isclose, ceil, sqrt
@@ -88,12 +89,13 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
                 Not used for spike timestamp data, but MUST be input for binary data.
                                 
     RETURNS
-    rates       (...,n_bins) ndarray. Spike rates (in spk/s) or spike counts 
-                in each time bin (and for each trial/unit/etc. in <data>). 
-                Same shape as <data>, with time-bin axis appended to end.
+    rates       (...,n_bins) ndarray | (...,n_bins,...) ndarray. Spike rates (in spk/s) 
+                or spike counts in each time bin (and for each trial/unit/etc. in <data>). 
+                For timestamp inputs, same shape as <data>, with time-bin axis appended to end.
                 If only a single spike train is input, output is (n_bins,) vector.
+                For boolean inputs, rates has same shape as data with time axis length = n_bins.
                 dtype is uint16 if <count> is True, float otherwise.
-
+                
     bins        (n_bins,2) ndarray. [start,end] of each time bin (in s).
     
     NOTES
@@ -166,7 +168,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
     if single_train: rates = rates.squeeze(axis=0)
     
     # For boolean input data, shift time axis back to its original location in array
-    if (data_type == 'bool') and (axis != rates.ndim): rates = np.moveaxis(rates,axis,-1)
+    if (data_type == 'bool') and (axis != rates.ndim): rates = np.moveaxis(rates,-1,axis)
     
     return rates, bins
     
@@ -328,7 +330,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     
     # Reshape rates so that time axis is in original location
     if (data_type == 'bool') and (axis != data.ndim):
-        rates = np.moveaxis(rates,axis,-1)
+        rates = np.moveaxis(rates,-1,axis)
         
     return rates, t
 
@@ -534,7 +536,6 @@ def cut_trials(data, trial_lims, trial_refs=None):
                 Spike timestamp data segmented into trials.
                 Trial axis is appended to end of all axes in input data.          
     """
-    # TODO Remove nan trials in trial_lims?
     trial_lims = np.asarray(trial_lims)    
     assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
         "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
@@ -661,13 +662,23 @@ def bool_to_times(spike_bool, t, axis=-1):
     axis        Int. Axis of data corresponding to time dimension. Default: -1 (last axis)              
 
     RETURNS
-    spike_times Object ndarray of (n_spikes[cell],) ndarrays.
-                Spike timestamps (in same time units as t), for 
+    spike_times Object ndarray of (n_spikes[cell],) ndarrays | (n_spikes,) ndarray
+                Spike timestamps (in same time units as t), for each spike train in input.
+                Returns as vector-valued array of timestamps if input is single spike train,
+                otherwise as object array of variable-length timestamp vectors
     """
+    spike_bool = np.asarray(spike_bool)
     t = np.asarray(t)
     if axis < 0: axis = spike_bool.ndim + axis
     
-    # Reshape input data -> 2d array (n_spike_trains,n_timepts) (where spike trains = trials,units,etc.)
+    # For single-spike-train data, temporarily prepend singleton axis 
+    single_train = spike_bool.ndim == 1
+    if single_train:
+        spike_bool = spike_bool[np.newaxis,:]
+        axis = 1
+        
+    # Reshape input data -> 2d array (n_spike_trains,n_timepts)
+    # (where spike trains = trials,units,etc.)
     spike_bool,spike_bool_shape = _reshape_data(spike_bool,axis=axis)
     n_spike_trains,n_timepts = spike_bool.shape
     
@@ -680,7 +691,10 @@ def bool_to_times(spike_bool, t, axis=-1):
     # Reshape output to match shape of input, without time axis
     out_shape = [d for i,d in enumerate(spike_bool_shape) if i != axis]
     spike_times = spike_times.reshape(out_shape)
-    
+
+    # Extract single spike train from nesting array -> (n_spikes,) array
+    if single_train: spike_times = spike_times[0]
+            
     return spike_times
 
 
