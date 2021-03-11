@@ -38,13 +38,10 @@ def gen_data():
                          [('pev', (6.26,-2.94,54.51,26.08)),
                           ('dprime', (-0.68,-0.29,-2.23,-1.27)),
                           ('auroc', (0.34,0.46,0.05,0.19)),
-                          ('mutual_information', (0.56,0.40,0.90,0.76))])                        
+                          ('mutual_information', (0.26,0.06,0.72,0.44))])                        
 def test_neural_info(gen_data, method, result):    
     """ Unit tests for neural_info function for computing neural information """    
     data, labels = gen_data
-    
-    # HACK For mutual information, must discretize data values
-    if method == 'mutual_information': data = np.round(data)
     
     # Basic test of shape, value of output
     # Only information value for 1st simulated channel for simplicity    
@@ -68,7 +65,14 @@ def test_neural_info(gen_data, method, result):
     assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with vector-valued data
-    info = neural_info(labels, data[:,0], axis=0, method=method)
+    # HACK For mutual info, computing bins over all data != over 1 channel, so fix that
+    if method == 'mutual_information':
+        bins = np.histogram_bin_edges(data, bins='fd')
+        bins = np.stack((bins[:-1],bins[1:]),axis=1)
+        extra_args = dict(bins=bins)
+    else:
+        extra_args = {}
+    info = neural_info(labels, data[:,0], axis=0, method=method, **extra_args)
     assert isinstance(info,float)
     assert np.isclose(info, result[0], rtol=1e-2, atol=1e-2)
                 

@@ -143,12 +143,12 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 # =============================================================================
 # Mutual information analysis
 # =============================================================================
-def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
+def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, groups=None):
     """
     Mass-univariate mutual information between set of responses 
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
     
-    info = mutual_information(labels,data,axis=0,resp_entropy=None,groups=None)
+    info = mutual_information(labels,data,axis=0,bins='fd',resp_entropy=None,groups=None)
 
     Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
@@ -176,6 +176,13 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
+    bins        (n_bins,2) array-like | string. Non-integer data must be binned for
+                mutual information computation. Bins can be given either explicitly, as an
+                array of bin [left,right] edges, or as a string indicating the type of 
+                binning rule to use in np.histogram_bin_edges() (see there for details).
+                Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
+                Data is binned only if it is non-integer-valued or if a value is input for bins.
+                
     resp_entropy   (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
 
@@ -187,7 +194,9 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     info        (...,1,...) ndarray. Mutual information between responses 
                 and experimental conditions (in bits). 
                 
-    REFERENCE     Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1                
+    REFERENCE   Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
+    (binning)   https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
+    (binning)   https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
     """
     # TODO  Recode for > 2 groups
     labels = np.asarray(labels)
@@ -198,6 +207,29 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     assert len(groups) == 2, \
         "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)
 
+    # Bin-discretize data if it is not already integer-valued OR if value is input for bins
+    do_bins = (bins is not None) or \
+              (np.issubdtype(data.dtype,np.float) and not np.allclose(np.round(data), data))
+    
+    if do_bins:
+        # If bins are given explicitly, reshape them as needed
+        if isinstance(bins, (list, tuple, np.ndarray)):
+            bins = np.asarray(bins)
+            assert (bins.ndim == 2) and (bins.shape[1] == 2), \
+                ValueError("bins must be given as (n_bins,2) array of [left,right] edges (or as string)")
+            
+            # Convert bins to format expected by np.digitize = edges of all bins in 1 series
+            bins_ = np.hstack((bins[:,0],bins[-1,-1]))
+        
+        # Otherwise, use some heuristic rule to set bins based on data
+        else:            
+           if bins is None: bins = 'fd'
+           bins_ = np.histogram_bin_edges(data, bins=bins)
+        
+        # Bin the data. Note: this actually returns bin numbers for each datapoint, 
+        # but MI treats values categorically, so doesn't matter    
+        data = np.digitize(data, bins_)
+        
     # Reshape data array -> (n_observations,n_data_series) matrix
     data, data_shape = _reshape_data(data,axis)
     if resp_entropy is not None:
@@ -264,12 +296,12 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     return info
 
 
-def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
+def mutual_information_2groups(data1, data2, axis=0, bins=None, resp_entropy=None):
     """
     Mass-univariate mutual information between set of responses 
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
         
-    info = mutual_information_2groups(data1,data2,axis=0,resp_entropy=None)
+    info = mutual_information_2groups(data1,data2,axis=0,bins='fd',resp_entropy=None)
 
     Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
@@ -284,9 +316,9 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     fashion across data series in all other data dimensions (channels, time points, 
     frequencies, etc.).
     
-    Note: For convenience, mutual_information() is also provided as a wrapper around this
-    function that accepts standard data,label arguments.
-    
+    Note: This is a wrapper around mutual_information(), which accepts standard
+    data,label arguments
+        
     ARGS
     data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
                 Sets of values for each of two distributions to be compared.  
@@ -294,9 +326,15 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
+    bins        (n_bins,2) array-like | string. Non-integer data must be binned for
+                mutual information computation. Bins can be given either explicitly, as an
+                array of bin [left,right] edges, or as a string indicating the type of 
+                binning rule to use in np.histogram_bin_edges() (see there for details).
+                Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
+                Data is binned only if it is non-integer-valued or if a value is input for bins.
+                
     resp_entropy  (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
-
 
     RETURNS
     info        (...,1,...) ndarray. Mutual information between responses 
@@ -306,72 +344,14 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     """
     n1 = data1.shape[axis]
     n2 = data2.shape[axis]
-    N  = n1 + n2
-
     assert (n1 != 0) and (n2 != 0), \
         "mutual_information: Data contains no observations (trials) for one or more groups"
 
-    # Reshape data arrays -> (n_observations,n_data_series) matrix
-    data1, data1_shape = _reshape_data(data1,axis)
-    data2, data2_shape = _reshape_data(data2,axis)
-    if resp_entropy is not None:
-        resp_entropy,_ = _reshape_data(resp_entropy,axis)
-
-    if data1.ndim > 1:
-        n_series = data1.shape[1]
-                    
-        assert data1.shape[1] == data2.shape[1], \
-            "mutual_information: Data distributions to compare must have same number of data series (timepts,freqs,channels,etc.) \
-             (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
-    else:
-        n_series = 1
-        
-    # Stimulus probabilities
-    Ps1 = n1/N                  # P(stimulus==s1)
-    Ps2 = n2/N                  # P(stimulus==s2)
-            
-    info = np.empty((n_series,))
-  
-    for i_series in range(n_series):    
-        data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
-        data2_series = data2[:,i_series] if n_series > 1 else data2.squeeze()
-
-        # Compute total response entropy H (if not input)
-        if resp_entropy is None:
-            # Concatenate data from both conditions together, and find all unique data values
-            data_pooled = np.hstack((data1_series, data2_series))
-            
-            # Response probability distributions
-            _,counts    = np.unique(data_pooled, return_counts=True)
-            Pr          = counts / N            # P(response==r)
-
-            # Response entropy (Dayan & Abbott, eqn. 4.3)
-            H   = entropy(Pr)
-
-        else:
-            H   = resp_entropy[i_series]
-        
-        # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
-        # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
-        _,counts    = np.unique(data1_series, return_counts=True)
-        Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
-        _,counts    = np.unique(data2_series, return_counts=True)
-        Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
-                
-        # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
-        Hs1     = entropy(Prs1)
-        Hs2     = entropy(Prs2)
+    labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
     
-        # Noise entropy (Dayan & Abbott, eqn. 4.6)
-        Hnoise  = Ps1*Hs1 + Ps2*Hs2
-
-        # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
-        info[i_series] = H - Hnoise
-
-    # Pre-pend singleton axis to make info expected (1,n_series) shape
-    info = _unreshape_data(info[np.newaxis,:],data1_shape,axis=axis)
-        
-    return info
+    return mutual_information(labels, np.concatenate((data1,data2), axis=axis),
+                              axis=axis, bins=bins, resp_entropy=resp_entropy, groups=[0,1])
+    
     
   
 # =============================================================================
