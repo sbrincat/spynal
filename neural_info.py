@@ -6,6 +6,7 @@ neural_info     A module for computing measures of neural information about
 
 
 FUNCTIONS
+### High-level information computation wrapper functions ###
 neural_info     Wrapper function computes neural information using any given method
 neural_info_2groups Wrapper function computes neural info on two data distributions
 
@@ -46,9 +47,12 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
-from patsy import DesignMatrix, dmatrix
+from patsy import DesignMatrix
 
 
+# =============================================================================
+# High-level neural information wrapper functions
+# =============================================================================
 def neural_info(labels, data, axis=0, method='pev', **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
@@ -220,9 +224,9 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     Ps1 = n1/N                  # P(stimulus==s1)
     Ps2 = n2/N                  # P(stimulus==s2)
             
-    info = np.empty((1,n_series))
+    info = np.empty((n_series,))
   
-    for i_series in range(n_series):    
+    for i_series in range(n_series):
         data_series = data[:,i_series] if n_series > 1 else data.squeeze()
 
         # Compute total response entropy H (if not input)
@@ -254,7 +258,8 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
         # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
         info[i_series] = H - Hnoise
 
-    info = _unreshape_data(info,data_shape,axis=axis)
+    # Pre-pend singleton axis to make info expected (1,n_series) shape
+    info = _unreshape_data(info[np.newaxis,:],data_shape,axis=axis)
         
     return info
 
@@ -325,7 +330,7 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     Ps1 = n1/N                  # P(stimulus==s1)
     Ps2 = n2/N                  # P(stimulus==s2)
             
-    info = np.empty((1,n_series))
+    info = np.empty((n_series,))
   
     for i_series in range(n_series):    
         data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
@@ -348,9 +353,9 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
         
         # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
         # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
-        _,counts    = np.unique(data1, return_counts=True)
+        _,counts    = np.unique(data1_series, return_counts=True)
         Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
-        _,counts    = np.unique(data2, return_counts=True)
+        _,counts    = np.unique(data2_series, return_counts=True)
         Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
                 
         # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
@@ -363,7 +368,8 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
         # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
         info[i_series] = H - Hnoise
 
-    info = _unreshape_data(info,data1_shape,axis=axis)
+    # Pre-pend singleton axis to make info expected (1,n_series) shape
+    info = _unreshape_data(info[np.newaxis,:],data1_shape,axis=axis)
         
     return info
     
@@ -495,7 +501,7 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     else:
         n_series = 1
         
-    roc_area = np.empty((1,n_series))        
+    roc_area = np.empty((n_series,))        
   
     for i_series in range(n_series):    
         data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
@@ -524,7 +530,8 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     # If desired, calculate absolute/unsigned area under ROC metric
     if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
   
-    roc_area = _unreshape_data(roc_area,data1_shape,axis=axis)
+    # Pre-pend singleton axis to make info expected (1,n_series) shape
+    roc_area = _unreshape_data(roc_area[np.newaxis,:],data1_shape,axis=axis)
         
     return roc_area
   
@@ -660,6 +667,9 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
 
     # Return unsigned (absolute) d', if requested
     if not signed: d = np.abs(d)
+
+    # For scalar info (vector data), extract value -> float for output
+    if d.size == 1: d = d.item()
 
     return d
   
@@ -1426,7 +1436,6 @@ def _reshape_data(data, axis=0):
     data_shape = data.shape         # Shape of original data
     data_ndim  = len(data_shape)    # Number of dimensions in original data
 
-
     if ~data.flags.c_contiguous:
         # If observation axis != 0, permute axis to make it so
         if axis != 0:       data = np.moveaxis(data,axis,0)
@@ -1483,12 +1492,16 @@ def _unreshape_data(data, data_shape, axis=0):
         shape = (axis_len,*data_shape[np.arange(data_ndim) != axis_])
         data = np.reshape(data,shape,order='F')
 
-    # Squeeze (n_obs,1) array back down to 1d (n_obs,) vector
-    elif data_ndim == 1:  data = np.squeeze(data)
+    # Squeeze (n_obs,1) array back down to 1d (n_obs,) vector, 
+    #  and extract value from scalar array -> float
+    elif data_ndim == 1:
+        data = np.squeeze(data)
+        if data.size == 1: data = data.item()
 
     # If observation axis wasn't 0, permute axis back to original position
-    if axis_ != 0: data = np.moveaxis(data,0,axis_)
-
+    if (axis_ != 0) and isinstance(data,np.ndarray):
+        data = np.moveaxis(data,0,axis_)
+    
     return data
 
 
@@ -1502,200 +1515,3 @@ def _unsorted_unique(x):
     x    = np.asarray(x)
     idxs = np.unique(x,return_index=True)[1]
     return x[np.sort(idxs)]
-
-
-#==============================================================================
-# Testing functions
-#==============================================================================
-def test_info(method, test='gain', values=None, arg_type='label', n_reps=100,
-              plot=False, plot_dir=None, **kwargs):
-    """
-    Basic testing for functions estimating neural information.
-    
-    Generates synthetic spike rate data, estimates information using given method,
-    and compares estimated to expected values.
-    
-    info,sd = test_info(method,test='gain',values=None,arg_type='label',n_reps=100,
-                        plot=False,plot_dir=None, **kwargs)
-                              
-    ARGS
-    method  String. Name of information function to test:
-            'pev' | 'anova1' | 'anova2' | 'regress'
-            
-    test    String. Type of test to run. Default: 'gain'. Options:
-            'gain'  Tests multiple values between-condition rate difference (gain)
-                    Checks for monotonically increasing information
-            'n'     Tests multiple values of number of trials (n)
-                    Checks that information doesn't vary with n.                    
-            'bias'  Tests multiple n values with 0 btwn-cond difference
-                    Checks that information is not > 0 (unbiased)
-            'n_conds' Tests multiple values for number of conditions
-                    (no actual checking, just to see behavior of info measure)
-            
-    values  (n_values,) array-like. List of values to test. 
-            Interpretation and defaults are test-specific:
-            'gain'  Btwn-condition rate differences (gains). Default: [1,2,5,10,20]
-            'n'     Trial numbers. Default: [25,50,100,200,400,800]
-            
-    arg_type String. Which input-argument version of info computing function to use:
-            'label'     : Standard version with labels,data arguments [default]
-            '2groups'   : Binary contrast version with data1,data2 arguments
-    
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
-            
-    plot    Bool. Set=True to plot test results. Default: False
-    
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
-        
-    **kwargs All other keyword args passed to information estimation function
-    
-    RETURNS
-    info    (n_values,) ndarray. Estimated information for each tested value
-    sd      (n_values,) ndarray. Across-run SD of information for each tested value
-    
-    ACTION
-    Throws an error if any estimated information value is too far from expected value
-    If <plot> is True, also generates a plot summarizing estimated information
-    """    
-    from spike_analysis import simulate_spike_rates
-    
-    test = test.lower()
-    method = method.lower()
-    arg_type = arg_type.lower()
-    
-    assert arg_type in ['label','labels','2groups'], \
-        ValueError("arg_type value %s not supported. Should be 'label' | '2groups'" % arg_type)
-    if arg_type == '2groups':
-        assert test != 'n_conds', \
-            ValueError("Cannot run 'n_conds' test of condition number with '2groups' arg_type")
-    
-    # Set defaults for tested values and set up rate generator function depending on <test>
-    if test == 'gain':
-        values = [1,2,5,10,20] if values is None else values
-        gen_rates = lambda gain,seed: simulate_spike_rates(gain=float(gain),offset=5.0,
-                                                           n_conds=2,n_trials=1000,
-                                                           seed=seed)
-        
-    elif test in ['n','n_trials','bias']:
-        values = [25,50,100,200,400,800] if values is None else values
-        gain = 0.0 if test == 'bias' else 5.0
-        gen_rates = lambda n_trials,seed: simulate_spike_rates(gain=gain,offset=5.0,
-                                                               n_conds=2,n_trials=n_trials,
-                                                               seed=seed)
-
-    elif test == 'n_conds':
-        values = [2,4,8] if values is None else values
-        gen_rates = lambda n_conds,seed: simulate_spike_rates(gain=10.0,offset=5.0,
-                                                              n_conds=n_conds,n_trials=1000,
-                                                              seed=seed)
-        
-    else:
-        raise ValueError("Unsupported value '%s' set for <test>" % test)
-        
-    method_ = method
-            
-    # Deal with special-case linear models -- funnel into pev function 
-    if method in ['pev','regress','anova1','anova2','anovan']:
-        method_ = 'pev'
-        # For PEV, additional argument to neural_info() specifying linear model to use
-        if method == 'pev': kwargs.update({'model':'anova1'})
-        else:               kwargs.update({'model':method})
-        
-    # For these signed binary methods, reverse default grouping bc in stimulated rates,
-    # group1 > group0, but signed info assumes opposite preference
-    if method in ['dprime','d','cohensd', 'auroc','roc','aucroc','auc']:
-        groups = [1,0]
-        if (arg_type != '2groups') and ('groups' not in kwargs): kwargs.update({'groups':[1,0]})
-    else:
-        groups = [0,1]
-    
-    # UNCOMMENT to test string labels: 
-    # string_labels = np.asarray(['cond1','cond2'])
-    # groups = string_labels[np.asarray(groups)]
-    # if 'groups' in kwargs: kwargs['groups'] = groups
-                           
-    # Expected baseline value for no btwn-condition = 0.5 for AUROC, 0 for other methods
-    baseline = 0.5 if method in ['auroc','roc','aucroc','auc'] else 0
-                 
-    info = np.empty((len(values),n_reps))
-        
-    for i,value in enumerate(values):        
-        for seed in range(n_reps):
-            # Generate simulated spike rates with given test value and random seed
-            rates,labels = gen_rates(value,seed)
-                        
-            # UNCOMMENT to test string labels: labels = string_labels[labels]
-
-            # For regression model, convert labels list -> design matrix, append intercept term 
-            if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
-                            
-            if arg_type == '2groups':
-                info[i,seed] = neural_info_2groups(rates[labels==groups[0]],rates[labels==groups[1]],
-                                                   method=method_,**kwargs)
-            else:                            
-                info[i,seed] = neural_info(labels,rates,method=method_,**kwargs)
-            
-    # Compute mean and std dev across different reps of simulation            
-    sd = info.std(axis=1,ddof=0)
-    info = info.mean(axis=1)
-    
-    if plot:
-        plt.figure()
-        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
-        plt.errorbar(values, info, sd, marker='o')
-        xlabel = 'n' if test == 'bias' else test
-        plt.xlabel(xlabel)
-        plt.ylabel("Information (%s)" % method_)
-        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'info-summary-%s-%s' % (method,test)))
-       
-    # Determine if test actually produced the expected values
-    # 'gain' : Test if information increases monotonically with gain
-    if test == 'gain':
-        assert (np.diff(info) > 0).all(), \
-            AssertionError("Information does not increase monotonically with between-condition rate difference")
-                                
-    # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
-    elif test in ['n','n_trials']:
-        assert info.ptp() < sd.max(), \
-            AssertionError("Information has larger than expected range across n's (likely biased by n)")
-        
-    # 'bias': Test if information is not > baseline if gain = 0, for varying n
-    elif test == 'bias':
-        assert ((info - baseline) < sd).all(), \
-            AssertionError("Information is above baseline for no rate difference between conditions")
-         
-    return info, sd
-
-
-def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs):
-    """ 
-    Runs a battery of given tests on given neural information computation methods
-    
-    info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs)
-    
-    ARGS
-    methods     Array-like. List of neural information methods to test.
-                Default: ['pev','dprime','auroc','mutual_information'] (all supported methods)
-                
-    tests       Array-like. List of tests to run.
-                Note: certain combinations of methods,tests are skipped, as they are not expected to pass
-                (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
-                Default: ['gain','n','bias'] (all supported tests)
-                
-    kwargs      Any other kwargs passed directly to test_info()
-    
-    ACTION
-    Throws an error if any estimated information value for any (method,test) is too far from expected value    
-    """
-    if isinstance(methods,str): methods = [methods]
-    if isinstance(tests,str): tests = [tests]
-    
-    for test in tests:
-        for method in methods:
-            print("Running %s test on %s" % (test,method))
-            # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
-            if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']): continue
-            
-            test_info(method, test=test, **kwargs)
-            print('PASSED')
-            

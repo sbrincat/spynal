@@ -80,7 +80,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
                 Default: bins with given <width,step>, ranging from lims[0] to lims[1]
                 
     count       Bool. If True, returns integer-valued spike counts, rather than rates.
-                Default: False (computes rates)               
+                Default: False (computes rates)         
                 
     axis        Int. Axis of binary data corresponding to time dimension.
                 Not used for spike timestamp data. Default: -1 (last axis of array)           
@@ -1080,7 +1080,7 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
 # Synthetic data generation and testing functions
 #==============================================================================
 def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
-                         window=1.0, seed=None):
+                         window=1.0, count=False, seed=None):
     """
     Simulates Poisson spike rates across multiple conditions/groups
     with given condition effect size
@@ -1105,6 +1105,9 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     window  Scalar. Time window to count simulated spikes over. Can set = 1
             if you want spike *counts*, rather than rates. Default: 1.0 s
 
+    count   Bool. If True, returns integer-valued spike counts, rather than rates.
+            Default: False (computes rates)      
+                
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for actual random numbers.
 
@@ -1125,7 +1128,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
             ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
                        % (len(gain), n_conds))
 
-    # Create (nTrials,) vector of group labels (ints in set 0-n_conds-1)
+    # Create (n_trials,) vector of group labels (ints in set 0-n_conds-1)
     n_reps = ceil(n_trials/n_conds)
     labels = np.tile(np.arange(n_conds),(n_reps,))[0:n_trials]
     # For easy visualization, sort trials by group number
@@ -1137,11 +1140,11 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     # Hand-set gain specific for each condition
     else:           lambdas = (offset + gain[labels])*window
 
-    # Simulate Poisson spike counts, convert to rates
+    # Simulate Poisson spike counts, optionally convert to rates
     # Generates Poisson random variables in a way that reproducibly matches output of Matlab
     rates = poisson.ppf(np.random.rand(n_trials), mu=lambdas) / window
-    # ALT rates = np.random.poisson(lambdas,(n_trials,)) / window
-
+    if not count: rates = rates.astype(float) / window
+    
     return rates, labels
 
 
@@ -1204,7 +1207,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
             ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
                        % (len(gain), n_conds))
 
-    # Create (nTrials,) vector of group labels (ints in set 0-n_conds-1)
+    # Create (n_trials,) vector of group labels (ints in set 0-n_conds-1)
     n_reps = ceil(n_trials/n_conds)
     labels = np.tile(np.arange(n_conds),(n_reps,))[0:n_trials]
     # For easy visualization, sort trials by group number
