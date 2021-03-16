@@ -200,12 +200,27 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
     """
     # TODO  Recode for > 2 groups
     labels = np.asarray(labels)
+
+    # Reshape data array -> (n_observations,n_data_series) matrix
+    data, data_shape = _reshape_data(data,axis)
+    if resp_entropy is not None:
+        resp_entropy,_ = _reshape_data(resp_entropy,axis)
+
+    n_series = data.shape[1] if data.ndim > 1 else 1
     
-    # Find set of unique group labels in <labels>
-    if groups is None: groups = np.unique(labels)
+    # Find set of unique group labels in <labels> if not explicitly set
+    if groups is None:
+        groups = np.unique(labels)
+
+    # If groups set in args, remove any observations not represented in <groups>
+    else:
+        idxs = np.in1d(labels,groups)
+        if idxs.sum() != data.shape[0]:
+            labels  = labels[idxs]
+            data    = data[idxs,...]
 
     assert len(groups) == 2, \
-        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)
+        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)    
 
     # Bin-discretize data if it is not already integer-valued OR if value is input for bins
     do_bins = (bins is not None) or \
@@ -224,24 +239,11 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
         # Otherwise, use some heuristic rule to set bins based on data
         else:            
            if bins is None: bins = 'fd'
-           bins_ = np.histogram_bin_edges(data, bins=bins)
+           bins_ = np.histogram_bin_edges(data.flatten(), bins=bins)
         
         # Bin the data. Note: this actually returns bin numbers for each datapoint, 
         # but MI treats values categorically, so doesn't matter    
         data = np.digitize(data, bins_)
-        
-    # Reshape data array -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
-    if resp_entropy is not None:
-        resp_entropy,_ = _reshape_data(resp_entropy,axis)
-    
-    n_series = data.shape[1] if data.ndim > 1 else 1
-
-    # Remove any observations not represented in <groups>
-    idxs = (labels == groups[0]) | (labels == groups[1])
-    if idxs.sum() != data.shape[0]:
-        labels  = labels[idxs]
-        data    = data[idxs,:]
 
     idxs1 = labels == groups[0]
     idxs2 = labels == groups[1]
@@ -648,7 +650,7 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
     # Return unsigned (absolute) d', if requested
     if not signed: d = np.abs(d)
 
-    # For scalar info (vector data), extract value -> float for output
+    # For scalar info (vector data), extract value from scalar array -> float for output
     if d.size == 1: d = d.item()
 
     return d
@@ -838,21 +840,31 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         mu  (...,n_groups,...). Group mean for each group/level
         n   (...,n_groups,). Number of observations (trials) in each group/level
     """
-    # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
-    n_obs,n_series = data.shape
-
     assert (labels.ndim == 1) or (labels.shape[1] == 1), \
             "labels should have only a single column for anova1 model (it has %d)" \
             % labels.shape[1]
+    
+    # Reshape data array data -> (n_observations,n_data_series) matrix
+    data, data_shape = _reshape_data(data,axis)
+    
+    # Find set of unique group labels in list of labels
+    if groups is None:
+        groups = np.unique(labels)
+        
+    # Remove any observations not represented in <groups>
+    else:
+        idxs = np.in1d(labels,groups)
+        if idxs.sum() != data.shape[0]:
+            labels  = labels[idxs]
+            data    = data[idxs,:]
+        
+    n_groups = len(groups)        
+    n_obs,n_series = data.shape
+
     assert labels.shape[0] == n_obs, \
             "labels and data array should have same number of rows (%d != %d)" \
             % (labels.shape[0], n_obs)
-
-    # Find set of unique group labels in list of labels
-    if groups is None: groups = np.unique(labels)
-    n_groups = len(groups)
-
+        
     # Compute mean for each group (and for each data series)
     n = np.empty((n_groups,))
     mu = np.empty((n_groups,n_series))

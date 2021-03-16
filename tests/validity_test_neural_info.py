@@ -2,7 +2,7 @@
 validity_test_neural_info.py
 
 Suite of tests to assess "face validity" of neural information computation functions in neural_info.py
-Usually used to test new or majorly updated functions.  
+Usually used to test new or majorly updated functions to ensure they perform as expected.
 
 Includes tests that parametrically estimate information as a function of difference in distribution
 means, assays of bias, etc. to establish methods produce expected pattern of results. 
@@ -10,7 +10,7 @@ means, assays of bias, etc. to establish methods produce expected pattern of res
 Plots results and runs assertions that basic expected results are reproduced
 
 FUNCTIONS
-test_info               Contains tests of neural information computation functions
+test_neural_info        Contains tests of neural information computation functions
 info_test_battery       Runs standard battery of tests of information computation functions
 """
 
@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm, poisson
 from patsy import dmatrix
 
-from spike_analysis import simulate_spike_rates
 from neural_info import neural_info, neural_info_2groups
 
 
@@ -49,7 +48,7 @@ def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
                     Default: 100
                               
     seed            Int. Random generator seed for repeatable results.
-                    Set=None [default] for actual random numbers.
+                    Set=None [default] for unseeded random numbers.
                                                   
     RETURNS
     data            (n,) | (*n) ndarray. Simulated random data.
@@ -99,7 +98,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
             If vector, one spread value should be given for each condition.
             
     seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for actual random numbers.
+            Set=None [default] for unseeded random numbers.
 
     RETURNS
     data    (n*n_conds,). Simulated data for multiple repetitions of one/more conditions.
@@ -139,16 +138,16 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     return data, labels
 
 
-def test_info(method, test='gain', values=None, distribution='normal', n_reps=100,
-              seed=None, arg_type='label', plot=False, plot_dir=None, **kwargs):
+def test_neural_info(method, test='gain', test_values=None, distribution='normal', n_reps=100,
+                     seed=None, arg_type='label', plot=False, plot_dir=None, **kwargs):
     """
     Basic testing for functions estimating neural information.
     
     Generates synthetic data, estimates information using given method,
     and compares estimated to expected values.
     
-    info,sd = test_info(method,test='gain',values=None,distribution='normal',n_reps=100,
-                        seed=None,arg_type='label',n_reps=100,plot=False,plot_dir=None, **kwargs)
+    info,sd = test_neural_info(method,test='gain',test_values=None,distribution='normal',n_reps=100,
+                               seed=None,arg_type='label',n_reps=100,plot=False,plot_dir=None, **kwargs)
                               
     ARGS
     method  String. Name of information function to test:
@@ -166,10 +165,12 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
             'n_conds' Tests multiple values for number of conditions
                     (no actual checking, just to see behavior of info measure)
             
-    values  (n_values,) array-like. List of values to test. 
+    test_values  (n_values,) array-like. List of values to test. 
             Interpretation and defaults are test-specific:
-            'gain'  Btwn-condition response differences (gains). Default: [1,2,5,10,20]
-            'n'     Trial numbers. Default: [25,50,100,200,400,800]
+            'gain'      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
+            'spread'    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
+            'n'/'bias'  Trial numbers. Default: [25,50,100,200,400,800]
+            'n_conds'   Number of conditions. Default: [2,4,8]
             
     distribution    String. Name of distribution to simulate data from. 
                     Options: 'normal' [default] | 'poisson'
@@ -177,7 +178,7 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
     n_reps  Int. Number of independent repetitions of tests to run. Default: 100
             
     seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for actual random numbers.
+            Set=None [default] for unseeded random numbers.
 
     arg_type String. Which input-argument version of info computing function to use:
             'label'     : Standard version with labels,data arguments [default]
@@ -211,27 +212,28 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
     
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    sim_args = dict(gain=5.0, offset=5.0, n_conds=2, n=500, distribution=distribution,
-                    spreads=1.0, seed=None)
+    # TODO Should we move some/all of these into function arguments, instead of hard-coding?
+    sim_args = dict(gain=5.0, offset=5.0, spreads=5.0, n_conds=2, n=500, 
+                    distribution=distribution, seed=None)
        
     if test == 'gain':
-        values = [1,2,5,10,20] if values is None else values
+        test_values = [1,2,5,10,20] if test_values is None else test_values
         del sim_args['gain']                        # Delete preset arg so it uses argument to lambda below
         gen_data = lambda gain: simulate_dataset(**sim_args,gain=gain)
         
     elif test in ['spread','spreads','sd']:
-        values = [1,2,5,10,20] if values is None else values
+        test_values = [1,2,5,10,20] if test_values is None else test_values
         del sim_args['spreads']                     # Delete preset arg so it uses argument to lambda below
         gen_data = lambda spreads: simulate_dataset(**sim_args,spreads=spreads)
 
     elif test in ['n','n_trials','bias']:
-        values = [25,50,100,200,400,800] if values is None else values
+        test_values = [25,50,100,200,400,800] if test_values is None else test_values
         if test == 'bias': sim_args['gain'] = 0     # Set gain=0 for bias test
         del sim_args['n']                           # Delete preset arg so it uses argument to lambda below
         gen_data = lambda n_trials: simulate_dataset(**sim_args,n=n_trials)
 
     elif test == 'n_conds':
-        values = [2,4,8] if values is None else values
+        test_values = [2,4,8] if test_values is None else test_values
         del sim_args['n_conds']                     # Delete preset arg so it uses argument to lambda below
         gen_data = lambda n_conds: simulate_dataset(**sim_args,n_conds=n_conds)
         
@@ -254,25 +256,17 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
         if (arg_type != '2groups') and ('groups' not in kwargs): kwargs.update({'groups':[1,0]})
     else:
         groups = [0,1]
-    
-    # TODO Move this and (prolly) arg_type shit to unit tests
-    # UNCOMMENT to test string labels: 
-    # string_labels = np.asarray(['cond1','cond2'])
-    # groups = string_labels[np.asarray(groups)]
-    # if 'groups' in kwargs: kwargs['groups'] = groups
-                           
+                               
     # Expected baseline value for no btwn-condition = 0.5 for AUROC, 0 for other methods
     baseline = 0.5 if method in ['auroc','roc','aucroc','auc'] else 0
                  
-    info = np.empty((len(values),n_reps))
+    info = np.empty((len(test_values),n_reps))
         
-    for i_value,value in enumerate(values):        
+    for i_value,test_value in enumerate(test_values):        
         for i_rep in range(n_reps):
             # Generate simulated data with current test value
-            data,labels = gen_data(value)
+            data,labels = gen_data(test_value)
                         
-            # UNCOMMENT to test string labels: labels = string_labels[labels]
-
             # For regression model, convert labels list -> design matrix, append intercept term 
             if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
                             
@@ -289,7 +283,7 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
     if plot:
         plt.figure()
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
-        plt.errorbar(values, info, sd, marker='o')
+        plt.errorbar(test_values, info, sd, marker='o')
         xlabel = 'n' if test == 'bias' else test
         plt.xlabel(xlabel)
         plt.ylabel("Information (%s)" % method_)
@@ -298,12 +292,12 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
     # Determine if test actually produced the expected values
     # 'gain' : Test if information increases monotonically with between-group gain
     if test == 'gain':
-        assert (np.diff(info) > 0).all(), \
+        assert (np.diff(info) >= 0).all(), \
             AssertionError("Information does not increase monotonically with between-condition mean difference")
 
     # 'spread' : Test if information decreases monotonically with within-group spread
     elif test in ['spread','spreads','sd']:
-        assert (np.diff(info) < 0).all(), \
+        assert (np.diff(info) <= 0).all(), \
             AssertionError("Information does not decrease monotonically with within-condition spread increase")
                                 
     # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
@@ -319,11 +313,13 @@ def test_info(method, test='gain', values=None, distribution='normal', n_reps=10
     return info, sd
 
 
-def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs):
+def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], 
+                      tests=['gain','spread','n','bias'], **kwargs):
     """ 
     Runs a battery of given tests on given neural information computation methods
     
-    info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs)
+    info_test_battery(methods=['pev','dprime','auroc','mutual_information'],
+                      tests=['gain','spread','n','bias'], **kwargs)
     
     ARGS
     methods     Array-like. List of neural information methods to test.
@@ -334,7 +330,7 @@ def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tes
                 (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
                 Default: ['gain','n','bias'] (all supported tests)
                 
-    kwargs      Any other kwargs passed directly to test_info()
+    kwargs      Any other kwargs passed directly to test_neural_info()
     
     ACTION
     Throws an error if any estimated information value for any (method,test) is too far from expected value    
@@ -348,8 +344,10 @@ def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tes
             # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
             if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']): continue
             
-            test_info(method, test=test, **kwargs)
+            test_neural_info(method, test=test, **kwargs)
             print('PASSED')
+            # If saving plots to file, let's not leave them all open
+            if 'plot_dir' in kwargs: plt.close('all')
             
             
 def _distribution_name_to_func(name):
@@ -359,11 +357,13 @@ def _distribution_name_to_func(name):
     
     # Normal RV's : mu = mean, s = SD
     if name in ['normal','norm','gaussian','gauss']:
-        return lambda n,mu,s: norm.ppf(np.random.rand(*n), loc=mu, scale=s)
+        return lambda n,mu,s: norm.ppf(np.random.rand(n) if np.isscalar(n) else np.random.rand(*n),
+                                       loc=mu, scale=s)
 
     # Poisson RV's : mu = lamba (aka mean,rate), s is unused
     elif name in ['poisson','poiss']:
-        return lambda n,mu,s: poisson.ppf(np.random.rand(*n), mu=mu)
+        return lambda n,mu,s: poisson.ppf(np.random.rand(n) if np.isscalar(n) else np.random.rand(*n),
+                                          mu=mu)
 
     else:
         raise ValueError("%s distribution is not yet supported. Should be 'normal' | 'poisson'")
