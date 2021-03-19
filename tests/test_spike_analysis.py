@@ -66,7 +66,8 @@ def spike_data(spike_timestamp, spike_bool):
                           ('spike_bool', True, 105),
                           ('spike_bool', False, 5.25)])                        
 def test_bin_rate(spike_data, data_type, count, result):    
-    """ Unit tests for bin_rate function for computing binned spike rates """    
+    """ Unit tests for bin_rate function for computing binned spike rates """
+    # Extract given data type from data dict
     data, t = spike_data[data_type]
     
     # Basic test of shape, dtype, value of output
@@ -126,7 +127,8 @@ def test_bin_rate(spike_data, data_type, count, result):
                           ('spike_bool', 'gaussian', 4.92),
                           ('spike_bool', 'hanning', 4.93)])                        
 def test_density(spike_data, data_type, kernel, result):    
-    """ Unit tests for bin_rate function for computing binned spike rates """    
+    """ Unit tests for bin_rate function for computing binned spike rates """
+    # Extract given data type from data dict
     data, t = spike_data[data_type]
     # Set kernel width parameter so gaussian and hanning kernels are ~ identical
     width = 50e-3 if kernel == 'gaussian' else 2.53*50e-3
