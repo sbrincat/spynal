@@ -4,8 +4,8 @@ import numpy as np
 
 from scipy.stats import bernoulli
 
-from ..neural_synchrony import simulate_oscillation, power_spectrum, power_spectrogram, \
-                               phase_spectrogram
+from ..neural_synchrony import simulate_oscillation, spectrum, power_spectrum, \
+                               spectrogram, power_spectrogram, phase_spectrogram
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -80,68 +80,73 @@ def oscillatory_data(oscillation, bursty_oscillation, spiking_oscillation):
 # =============================================================================
 # Unit tests
 # =============================================================================
-@pytest.mark.parametrize('signal, method, result',
+@pytest.mark.parametrize('data_type, method, result',
                          [('lfp', 'multitaper', 0.0137),
                           ('spike', 'multitaper', 194.0514)])    
-def test_power_spectrum(oscillatory_data, signal, method, result):
+def test_power_spectrum(oscillatory_data, data_type, method, result):
     """ Unit tests for power_spectrum function """
     # TODO Add wavelet, bandfilter methods
-    data = oscillatory_data[signal]
+    data = oscillatory_data[data_type]
     smp_rate = 1000
     n_trials = 4
     n_freqs = {'wavelet': 26, 'multitaper':513,  'bandfilter': 3}
+    spec_type = 'power'
         
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over all freqs in first trial for simplicity
-    spec, freqs = power_spectrum(data, smp_rate, axis=0, method=method, signal=signal)
-    # print(spec.shape, np.round(spec[:,0].mean(),4))
+    spec, freqs = spectrum(data, smp_rate, axis=0, method=method,
+                                 data_type=data_type, spec_type=spec_type)
+    print(spec.shape, np.round(spec[:,0].mean(),4))
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method], n_trials)
     assert np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[:,0].mean(), result, rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with different data array shape (3rd axis)
-    spec, freqs = power_spectrum(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
-                                 smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs = spectrum(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
+                                 smp_rate, axis=0, method=method, data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method], n_trials/2, n_trials/2)
     assert np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
         
     # Test for consistent output with transposed data dimensionality
-    spec, freqs = power_spectrum(data.T, smp_rate, axis=-1, method=method, signal=signal)
+    spec, freqs = spectrum(data.T, smp_rate, axis=-1, method=method, data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_trials, n_freqs[method])
     assert np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[0,:].mean(), result, rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with vector-valued data
-    spec, freqs = power_spectrum(data[:,0], smp_rate, axis=-1, method=method, signal=signal)
+    spec, freqs = spectrum(data[:,0], smp_rate, axis=-1, method=method,
+                                 data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method],)
     assert np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec.mean(), result, rtol=1e-4, atol=1e-4)
 
             
-@pytest.mark.parametrize('signal, method, result',
+@pytest.mark.parametrize('data_type, method, result',
                          [('lfp', 'wavelet', 44.9462),
                           ('lfp', 'multitaper', 0.0137),
                           ('lfp', 'bandfilter', 2.8736),
                           ('spike', 'wavelet', 0.4774),
                           ('spike', 'multitaper', 193.7612),
                           ('spike', 'bandfilter', 0.0568)])
-def test_power_spectrogram(oscillatory_data, signal, method, result):
+def test_power_spectrogram(oscillatory_data, data_type, method, result):
     """ Unit tests for power_spectrogram function """
     # Extract given data type from data dict
-    data = oscillatory_data[signal]    
+    data = oscillatory_data[data_type]    
     smp_rate = 1000
     n_trials = 4
     n_freqs = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
     n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}    
+    spec_type = 'power'
     
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over all timepts, freqs for 1st trial for simplicity
-    spec, freqs, timepts = power_spectrogram(data, smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
+                                       data_type=data_type, spec_type=spec_type)
     # print(spec.shape, np.round(spec[:,:,0].mean(),4))
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
@@ -150,8 +155,8 @@ def test_power_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[:,:,0].mean(), result, rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with different data array shape (3rd axis)
-    spec, freqs, timepts = power_spectrogram(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
-                                             smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
+                                       smp_rate, axis=0, method=method, data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method], n_trials/2, n_trials/2)
@@ -159,7 +164,8 @@ def test_power_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[:,:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
  
     # Test for consistent output with transposed data dimensionality
-    spec, freqs, timepts = power_spectrogram(data.T, smp_rate, axis=-1, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data.T, smp_rate, axis=-1, method=method,
+                                       data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_trials, n_freqs[method], n_timepts[method])
@@ -167,7 +173,8 @@ def test_power_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[0,:,:].mean(), result, rtol=1e-4, atol=1e-4)
            
     # Test for consistent output with vector-valued data
-    spec, freqs, timepts = power_spectrogram(data[:,0], smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data[:,0], smp_rate, axis=0, method=method,
+                                       data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method])
@@ -175,26 +182,28 @@ def test_power_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
     
     
-@pytest.mark.parametrize('signal, method, result',
+@pytest.mark.parametrize('data_type, method, result',
                          [('lfp', 'wavelet', 0.0053),
-                          ('lfp', 'multitaper', 0.0249),
+                          ('lfp', 'multitaper', -0.1523),
                           ('lfp', 'bandfilter', 0.0016),
                           ('spike', 'wavelet', 0.0054),
-                          ('spike', 'multitaper', 0.0033),
+                          ('spike', 'multitaper', -0.0547),
                           ('spike', 'bandfilter', 0.0649)])    
-def test_phase_spectrogram(oscillatory_data, signal, method, result):
+def test_phase_spectrogram(oscillatory_data, data_type, method, result):
     """ Unit tests for phase_spectrogram function """
     # Extract given data type from data dict
-    data = oscillatory_data[signal]       
+    data = oscillatory_data[data_type]       
     smp_rate = 1000
     n_trials = 4
     n_freqs = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
     n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}    
+    spec_type = 'phase'
         
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over entire array -> scalar
-    spec, freqs, timepts = phase_spectrogram(data, smp_rate, axis=0, method=method, signal=signal)
-    # print(signal, method, spec.shape, np.round(spec[:,:,0].mean(),4))
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
+                                             data_type=data_type, spec_type=spec_type)
+    print(data_type, method, spec.shape, np.round(spec[:,:,0].mean(),4))
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method], n_trials)
@@ -202,8 +211,9 @@ def test_phase_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[:,:,0].mean(), result, rtol=1e-4, atol=1e-4)
         
     # Test for consistent output with different data array shape (3rd axis)
-    spec, freqs, timepts = phase_spectrogram(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
-                                             smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
+                                             smp_rate, axis=0, method=method,
+                                             data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method], n_trials/2, n_trials/2)
@@ -211,7 +221,8 @@ def test_phase_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[:,:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
  
     # Test for consistent output with transposed data dimensionality
-    spec, freqs, timepts = phase_spectrogram(data.T, smp_rate, axis=-1, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data.T, smp_rate, axis=-1, method=method,
+                                             data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_trials, n_freqs[method], n_timepts[method])
@@ -219,7 +230,8 @@ def test_phase_spectrogram(oscillatory_data, signal, method, result):
     assert np.isclose(spec[0,:,:].mean(), result, rtol=1e-4, atol=1e-4)
            
     # Test for consistent output with vector-valued data
-    spec, freqs, timepts = phase_spectrogram(data[:,0], smp_rate, axis=0, method=method, signal=signal)
+    spec, freqs, timepts = spectrogram(data[:,0], smp_rate, axis=0, method=method,
+                                             data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method])

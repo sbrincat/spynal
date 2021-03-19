@@ -116,13 +116,13 @@ _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
 # =============================================================================
 # General spectral analysis functions
 # =============================================================================
-def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
+def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_type='complex',
              removeDC=True, **kwargs):
     """
     Computes complex frequency spectrum of data using given method
 
     spec,freqs = spectrum(data,smp_rate,axis=0,method='multitaper',
-                          signal='lfp',**kwargs)
+                          data_type='lfp',spec_type='complex',**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -136,7 +136,10 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
     method      String. Specific spectral analysis method to use:
                 'multitaper' [default] (only value currently supported)
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
 
     removeDC    Bool. If True, removes mean DC component across time axis,
                 making signals zero-mean for spectral analysis. Default: True
@@ -155,25 +158,27 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', signal='lfp',
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).                
     """
-    assert signal in ['lfp','spike'], \
-        ValueError("<signal> must be 'lfp' or 'spike' ('%s' given)" % signal)
+    method = method.lower()
+    assert data_type in ['lfp','spike'], \
+        ValueError("<data_type> must be 'lfp' or 'spike' ('%s' given)" % data_type)
 
-    if method.lower() == 'multitaper':  spec_fun = multitaper_spectrum
+    if method == 'multitaper':  spec_fun = multitaper_spectrum
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
-    spec,freqs = spec_fun(data,smp_rate,axis=axis,signal=signal,removeDC=removeDC, **kwargs)
+    spec,freqs = spec_fun(data,smp_rate,axis=axis,data_type=data_type,spec_type=spec_type,
+                          removeDC=removeDC, **kwargs)
 
     return spec, freqs
 
 
-def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
+def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_type='complex',
                 removeDC=True, **kwargs):
     """
     Computes complex time-frequency transform of data using given method
 
     spec,freqs,timepts = spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                     signal='lfp',removeDC=True,**kwargs)
+                                     data_type='lfp', spec_type='complex',removeDC=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -189,7 +194,10 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
     
     removeDC    Bool. If True, removes mean DC component across time axis,
                 making signals zero-mean for spectral analysis. Default: True
@@ -211,23 +219,25 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', signal='lfp',
     timepts     (n_timepts,...) ndarray. List of time points / time window centers
                 for each time index in <spec>
     """
-    assert signal in ['lfp','spike'], \
-        ValueError("<signal> must be 'lfp' or 'spike' ('%s' given)" % signal)
+    method = method.lower()
+    assert data_type in ['lfp','spike'], \
+        ValueError("<data_type> must be 'lfp' or 'spike' ('%s' given)" % data_type)
 
-    if method.lower() == 'wavelet':         spec_fun = wavelet_spectrogram
-    elif method.lower() == 'multitaper':    spec_fun = multitaper_spectrogram
-    elif method.lower() == 'bandfilter':    spec_fun = bandfilter_spectrogram
+    if method == 'wavelet':         spec_fun = wavelet_spectrogram
+    elif method == 'multitaper':    spec_fun = multitaper_spectrogram
+    elif method == 'bandfilter':    spec_fun = bandfilter_spectrogram
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
-    spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,signal=signal,removeDC=removeDC, **kwargs)
+    spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,data_type=data_type,spec_type=spec_type,
+                                  removeDC=removeDC, **kwargs)
 
     return spec, freqs, timepts
 
 
 def power_spectrum(data, smp_rate, axis=0, method='multitaper', **kwargs):
     """
-    Computes power spectrum of data using given method
+    Convenience wrapper around spectrum to compute power spectrum of data with given method
 
     spec,freqs = power_spectrum(data,smp_rate,axis=0,method='multitaper',**kwargs)
 
@@ -243,8 +253,6 @@ def power_spectrum(data, smp_rate, axis=0, method='multitaper', **kwargs):
     method      String. Specific spectral analysis method to use:
                 'multitaper' [default] (only value currently supported)
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
-
     **kwargs    All other kwargs passed directly to method-specific
                 spectrum function. See there for details.
 
@@ -259,26 +267,14 @@ def power_spectrum(data, smp_rate, axis=0, method='multitaper', **kwargs):
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).                
     """
-    if axis < 0: axis = data.ndim + axis
+    return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
     
-    # Compute full complex spectrum
-    spec,freqs = spectrum(data,smp_rate,axis=axis,method=method, **kwargs)
 
-    # Compute power from complex spectral data (.real fixes small float errors)
-    spec = (spec*spec.conj()).real
-
-    # Compute mean across tapers for multitaper method (taper axis = <axis>+1)
-    if method == 'multitaper': spec = spec.mean(axis=axis+1)
-
-    return spec, freqs
-
-
-def power_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, **kwargs):
+def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
-    Computes power of time-frequency transform of data using given method
+    Convenience wrapper around spectrogram() to compute time-frequency power with given method
 
-    spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                           removeDC=True,**kwargs)
+    spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -293,9 +289,6 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, *
                 'wavelet' :     Continuous Morlet wavelet analysis [default]
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
-
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
                 
     **kwargs    All other kwargs passed directly to method-specific
                 spectrogram function. See there for details.
@@ -313,27 +306,15 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, *
     timepts     (n_timepts,...) ndarray. List of time points / time window
                 centers for each time index in <spec>
     """
-    if axis < 0: axis = data.ndim + axis
-    
-    # Compute full complex spectrogram
-    spec,freqs,timepts = spectrogram(data,smp_rate,axis=axis,method=method,
-                                     removeDC=removeDC,**kwargs)
-
-    # Compute power from complex spectral data (.real fixes small float errors)
-    spec = (spec*spec.conj()).real
-
-    # Compute mean across tapers for multitaper method (taper axis = <axis>+1)
-    if method == 'multitaper': spec = spec.mean(axis=axis+1)
-
-    return spec, freqs, timepts
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
 
 
-def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, **kwargs):
+def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
-    Computes phase of time-frequency transform of data using given method
+    Convenience wrapper around spectrogram() to compute phase of time-frequency transform
+    of data with given method
 
-    spec,freqs,timepts = phase_spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                           removeDC=True,**kwargs)
+    spec,freqs,timepts = phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -349,9 +330,6 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, *
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
-                
     **kwargs    All other kwargs passed directly to method-specific
                 spectrogram function. See there for details.
 
@@ -369,30 +347,22 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', removeDC=True, *
     timepts     (n_timepts,...) ndarray. List of time points / time window centers
                 for each time index in <spec>
     """
-    if axis < 0: axis = data.ndim + axis
-    
-    spec,freqs,timepts = spectrogram(data,smp_rate,axis=axis,method=method,removeDC=removeDC, **kwargs)
-
-    # Compute phase angle of spectrogram
-    spec = np.angle(spec)
-
-    # Compute circular mean across tapers for multitaper method (taper axis = <axis>+1)
-    if method == 'multitaper': spec = np.exp(1j*spec).mean(axis=axis+1)
-
-    return spec.real, freqs, timepts
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', **kwargs)
 
 
 # =============================================================================
 # Multitaper spectral analysis functions
 # =============================================================================
-def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, removeDC=True,
-                        freq_width=4, n_tapers=None, tapers=None, pad=True, **kwargs):
+def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freq_range=None, 
+                        removeDC=True, freq_width=4, n_tapers=None, keep_tapers=False,
+                        tapers=None, pad=True, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP)
     or point process (eg spike) data
 
-    spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,signal='lfp',freq_range=None,removeDC=True,
-                                     freq_width=4,n_tapers=None,tapers=None,pad=True,**kwargs)
+    spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',freq_range=None,
+                                     removeDC=True,freq_width=4,n_tapers=None,keep_tapers=False,
+                                     tapers=None,pad=True,**kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -403,27 +373,33 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, r
     axis        Int. Axis of data to perform spectral analysis on (usually time dim)
                 Default: 0
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
 
     freq_range  (2,) array-like | Scalar. Range of frequencies to keep in output,
                 either given as an explicit [low,high] range or just a scalar
                 giving the highest frequency to return.
                 Default: all frequencies from FFT, ranging from
                 0 Hz - Nyquist frequency (smp_rate/2)             
+
+    removeDC    Bool. If True, removes mean DC component across time axis,
+                making signals zero-mean for spectral analysis. Default: True
     
     freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
                 Note: Time bandwidth 'T' is set to full length of data.
     
     n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
                 the max number of spectrally delimited tapers. Default: 2TW-1                
-
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
                 
     tapers      (n_samples,n_tapers). Precomputed tapers (as computed by compute_tapers()).
                 Input either (freq_width, n_tapers) -or- tapers.
                 Default: computed from (time range, freq_width, n_tapers)
 
+    keep_tapers Bool. If True, retains all tapered versions of spectral data in output.
+                If False [default], returns the mean across tapers.
+                
     pad         Bool. If True [default], zero-pads data to next power of 2 length
 
     RETURNS
@@ -441,7 +417,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, r
     if axis < 0: axis = data.ndim + axis
     
     # Convert spike timestamp data to boolean spike train format
-    if (signal == 'spike') and (_spike_data_type(data) == 'timestamp'):
+    if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
         data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
         axis = data.ndim
     
@@ -471,7 +447,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, r
 
     # DELETE Results are identical with just subtracting of DC from data before fft
     # # Compute values needed for normalizing point process (spiking) signals
-    # if signal == 'spike' and removeDC:
+    # if data_type == 'spike' and removeDC:
     #     # Compute Fourier transform of tapers
     #     taper_fft= fft(tapers,n=n_fft,axis=0)
     #     if data.ndim > 1:
@@ -494,29 +470,39 @@ def multitaper_spectrum(data, smp_rate, axis=0, signal='lfp', freq_range=None, r
 
     # Compute Fourier transform of projected data, normalizing appropriately
     spec    = fft(data,n=n_fft,axis=0)
-    if signal != 'spike': spec = spec/smp_rate
+    if data_type != 'spike': spec = spec/smp_rate
 
     # DELETE Results are identical with just subtracting of DC from data before fft
     # Subtract off the DC component (average spike rate) for point process signals
-    # if signal == 'spike' and removeDC: spec -= taper_fft*mean_rate
+    # if data_type == 'spike' and removeDC: spec -= taper_fft*mean_rate
 
     # Extract desired set of frequencies
     spec    = spec[fbool,...]
 
+    # Convert to desired output spectral signal type
+    spec    = complex_to_spec_type(spec,spec_type)
+
+    # Compute mean across tapers if requested
+    if not keep_tapers:
+        if spec_type == 'phase':    spec = phase(np.exp(1j*spec).mean(axis=1))
+        else:                       spec = spec.mean(axis=1)
+        
     # If observation axis wasn't 0, permute (freq,tapers) back to original position
-    if axis != 0: spec = np.moveaxis(spec,[0,1],[axis,axis+1])
+    if axis != 0: 
+        if keep_tapers: spec = np.moveaxis(spec,[0,1],[axis,axis+1])
+        else:           spec = np.moveaxis(spec,0,axis)
 
     return spec, freqs
 
 
-def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp', freq_range=None, removeDC=True, 
-                           time_width=0.5, freq_width=4, n_tapers=None, spacing=None,
-                           tapers=None, pad=True, **kwargs):
+def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freq_range=None,
+                           removeDC=True, time_width=0.5, freq_width=4, n_tapers=None, spacing=None,
+                           tapers=None, keep_tapers=False, pad=True, **kwargs):
     """
     Multitaper time-frequency spectrogram computation for continuous (eg LFP)
     or point process (eg spike) data
 
-    spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,signal='lfp',
+    spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
                                                 freq_range=None,removeDC=True,
                                                 time_width=0.5,freq_width=4,n_tapers=None,
                                                 spacing=None,tapers=None,pad=True,**kwargs)
@@ -530,7 +516,10 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp', freq_range=None
     axis        Int. Axis of data to perform spectral analysis on (usually time dim)
                 Default: 0
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
 
     freq_range  (2,) array-like | Scalar. Range of frequencies to keep in output,
                 either given as an explicit [low,high] range or just a scalar
@@ -576,7 +565,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp', freq_range=None
     if axis < 0: axis = data.ndim + axis
     
     # Convert spike timestamp data to boolean spike train format
-    if (signal == 'spike') and (_spike_data_type(data) == 'timestamp'):
+    if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
         data,_ = times_to_bool(data,**kwargs)
         axis = data.ndim
 
@@ -603,12 +592,14 @@ def multitaper_spectrogram(data, smp_rate, axis=0, signal='lfp', freq_range=None
     
     # Do multitaper analysis on windowed data
     # Note: Set axis=0 and removeDC=False bc already dealt with above
-    spec, freqs = multitaper_spectrum(data,smp_rate,axis=0,signal=signal,
+    spec, freqs = multitaper_spectrum(data,smp_rate,axis=0,data_type=data_type,spec_type=spec_type,
                                       freq_range=freq_range,tapers=tapers,pad=pad,
-                                      removeDC=False,**kwargs)
+                                      removeDC=False,keep_tapers=keep_tapers,**kwargs)
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
-    if axis != 0: spec = np.moveaxis(spec,[0,1,2],[axis,axis+1,axis+2])
+    if axis != 0: 
+        if keep_tapers: spec = np.moveaxis(spec,[0,1,2],[axis,axis+1,axis+2])
+        else:           spec = np.moveaxis(spec,[0,1],[axis,axis+1])
 
     return spec, freqs, timepts
 
@@ -664,17 +655,17 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
 # =============================================================================
 # Wavelet analysis functions
 # =============================================================================
-def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
+def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freqs=2**np.arange(1,7.5,0.25), removeDC=True,
-                        wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1):
+                        wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1, **kwargs):
     """
     Computes continuous wavelet transform of given data signal at given frequencies.
 
 
-    spec,freqs,timepts = wavelet_spectrogram(data,smp_rate,axis=0,signal='lfp',
+    spec,freqs,timepts = wavelet_spectrogram(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
                                             freqs=2**np.arange(1,7.5,0.25),removeDC=True,
                                             wavelet='morlet',wavenumber=6,
-                                            pad=True,buffer=0,downsmp=1)
+                                            pad=True,buffer=0,downsmp=1, **kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -685,7 +676,10 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     axis        Int. Axis of <data> to do spectral analysis on
                 (usually time dimension). Default: 0
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
 
     freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
                 Default: 2**np.irange(1,7.5,0.25) (log sampled in 1/4 octaves from 2-128)
@@ -723,7 +717,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     if axis < 0: axis = data.ndim + axis
     
     # Convert spike timestamp data to boolean spike train format
-    if (signal == 'spike') and (_spike_data_type(data) == 'timestamp'):
+    if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
         data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
         axis = data.ndim
             
@@ -759,8 +753,12 @@ def wavelet_spectrogram(data, smp_rate, axis=0, signal='lfp',
     data = data[np.newaxis,...]
     if data.ndim == 3: wavelets_fft = wavelets_fft[:,:,np.newaxis]
 
+    # Convolve data with wavelets (multiply in Fourier domain) -> inverse FFT to get wavelet transform
     spec = ifft(data*wavelets_fft, n=n_fft,axis=1, **_FFTW_KWARGS_DEFAULT)[:,timepts_out,...]
 
+    # Convert to desired output spectral signal type
+    spec    = complex_to_spec_type(spec,spec_type)
+    
     spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
 
     return spec, freqs, timepts_out
@@ -933,7 +931,7 @@ def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
 # =============================================================================
 # Band-pass filtering analysis functions
 # =============================================================================
-def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
+def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freqs=((2,8),(10,32),(40,100)), removeDC=True,
                            filt='butter', params=None, buffer=0, downsmp=1, **kwargs):
     """
@@ -942,7 +940,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
 
     Function aliased as bandfilter_spectrogram() or bandfilter().
 
-    spec,freqs,timepts = bandfilter_spectrogram(data,smp_rate,axis=0,signal='lfp',
+    spec,freqs,timepts = bandfilter_spectrogram(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
                                                freqs=((2,8),(10,32),(40,100)),
                                                filt='butter',
                                                params=None,buffer=0,downsmp=1,
@@ -957,7 +955,10 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
     axis        Int. Axis of <data> to do spectral analysis on
                 (usually time dimension). Default: 0
 
-    signal      String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+
+    spec_type   String. Type of spectral signal to return: 'complex' [default] | 
+                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details. 
 
     freqs       (n_freqbands,) array-like of (2,) sequences | (n_freqbands,2) ndarray.
                 List of (low,high) cut frequencies for each band to use.
@@ -1007,7 +1008,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
     if axis < 0: axis = data.ndim + axis
     
     # Convert spike timestamp data to boolean spike train format
-    if (signal == 'spike') and (_spike_data_type(data) == 'timestamp'):
+    if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
         data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
         axis = data.ndim
             
@@ -1067,8 +1068,10 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, signal='lfp',
         bandfilt = filtfilt(b,a,data,axis=0)
         spec[i_freq,:,:] = hilbert(bandfilt[timepts_out,:],axis=0)
 
-    if vector_data: spec = spec.squeeze(axis=-1)
+    # Convert to desired output spectral signal type
+    spec    = complex_to_spec_type(spec,spec_type)
     
+    if vector_data: spec = spec.squeeze(axis=-1)    
     spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
 
     return spec, freqs, timepts_out
@@ -1492,9 +1495,9 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
         
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp',**kwargs)
+                                          method=method,data_type='lfp',spec_type='complex',**kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp',**kwargs)
+                                          method=method,data_type='lfp',spec_type='complex',**kwargs)
         # Account for new frequency (and/or taper) axis
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
@@ -1711,9 +1714,9 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
         
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp', **kwargs)
+                                          method=method,data_type='lfp', spec_type='complex', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp', **kwargs)
+                                          method=method,data_type='lfp', spec_type='complex', **kwargs)
         # Account for new frequency (and/or taper) axis
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
@@ -1861,9 +1864,9 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
         
         data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp', **kwargs)
+                                          method=method,data_type='lfp',spec_type='complex', **kwargs)
         data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
-                                          method=method,signal='lfp', **kwargs)
+                                          method=method,data_type='lfp',spec_type='complex', **kwargs)
         # Account for new frequency (and/or taper) axis
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
@@ -2461,6 +2464,53 @@ def remove_evoked(data, axis=0, method='mean', design=None):
 # =============================================================================
 # Post-processing helper functions
 # =============================================================================
+def complex_to_spec_type(data, spec_type):
+    """
+    Converts complex spectral data to given spectral signal type
+    
+    ARGS
+    data        ndarray of complex. Complex spectral (or time-frequency) data. Arbitrary shape.
+    spec_type   String. Type of spectral signal to return:
+                'power'     Spectral power of data
+                'phase'     Phase of complex spectral data (in radians)
+                'magnitude' Magnitude (square root of power) of complex data
+                'real'      Real part of complex data
+                'imag'      Imaginary part of complex data
+                
+    RETURNS
+    data        ndarray of float. Computed spectral signal. Same shape as input.                
+    """
+    if spec_type == 'complex':      return data    
+    elif spec_type == 'power':      return power(data)
+    elif spec_type == 'phase':      return phase(data)
+    elif spec_type == 'magnitude':  return magnitude(data)
+    elif spec_type == 'real':       return data.real
+    elif spec_type == 'imag':       return np.imag(data)
+    else:
+        raise ValueError("%s is an unsupported option for spec_type" % spec_type)
+    
+        
+def power(data):
+    """ Computes power from complex spectral data  """
+    return (data*data.conj()).real  # Note: .real fixes small float errors
+        
+def magnitude(data):
+    """ Computes magnitude (square root of power) from complex spectral data  """
+    return np.abs(data)
+
+def phase(data):
+    """ Computes phase of complex spectral data  """
+    return np.angle(data)
+
+def real(data):
+    """ Returns real part of complex spectral data  """
+    return data.real
+
+def imag(data):
+    """ Returns imaginary part of complex spectral data  """
+    return np.imag(data)
+    
+    
 def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     """
     Pools (averages) spectral data within each of a given set of frequency bands
@@ -2665,21 +2715,6 @@ def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
 # =============================================================================
 # Helper functions for circular and complex data (phase) analsysis
 # =============================================================================
-def power(data):
-    """ Computes power from complex spectral data  """
-    return (data*data.conj()).real  # Note: .real fixes small float errors
-    
-    
-def magnitude(data):
-    """ Computes magnitude (square root of power) from complex spectral data  """
-    return np.abs(data)
-
-
-def phase(data):
-    """ Computes phase of complex spectral data  """
-    return np.angle(data)
-
-    
 def amp_phase_to_complex(amp,theta):
     """ Converts amplitude and phase angle to complex variable """
     return amp * np.exp(1j*theta)
@@ -3142,7 +3177,7 @@ def _reshape_data(data, axis=0):
     # Faster method for c-contiguous arrays
     else:
         # If observation axis != last dim, permute axis to make it so
-        if axis != data_ndim - 1: data = np.moveaxis(data,axis,last_dim)
+        if axis != data_ndim - 1: data = np.moveaxis(data,axis,-1)
 
         # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
         if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T
