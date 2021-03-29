@@ -17,6 +17,7 @@ rate_test_battery   Runs standard battery of tests of rate estimation functions
 # TODO  Code up n_trials test, test battery function
 import os
 import time
+from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 

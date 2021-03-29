@@ -6,7 +6,7 @@ from scipy.stats import norm
 
 from ..neural_info import neural_info, neural_info_2groups
 
-# TODO Test specific pev models, including multifactor ANOVA2,regress and their stats output
+# TODO Test specific pev models, including multifactor ANOVA2, regress and their stats output
 
 # =============================================================================
 # Fixtures for generating simulated data

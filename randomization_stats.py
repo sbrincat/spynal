@@ -25,6 +25,9 @@ one_way_test                    Wrapper for all 1-way test (~ 1-way ANOVA/F-test
 one_way_permutation_test        Permutation 1-way multi-level test
 two_way_permutation_test        Permutation 2-way multi-level/multi-factor test
 
+### Confidence intervals ###
+bootstrap_confints              Bootstrap confidence intervals for any stat
+
 ### Functions to compute frequently-used stats ###
 one_sample_tstat                Mass univariate 1-sample t-statistic
 paired_tstat                    Mass univariate paired-sample t-statistic

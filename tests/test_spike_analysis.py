@@ -5,7 +5,7 @@ import numpy as np
 from ..spike_analysis import simulate_spike_trains, setup_sliding_windows, \
                              times_to_bool, bool_to_times, bin_rate, density
 
-# TODO  Tests for cut_trials, realign_spike_times, pool_electrode_units
+# TODO  Tests for cut_trials, realign_data, pool_electrode_units
 
 # =============================================================================
 # Fixtures for generating simulated data

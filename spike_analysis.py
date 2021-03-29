@@ -9,12 +9,14 @@ bin_rate            Computes spike counts/rates in series of time bins (regular 
 density             Computes spike density (smoothed rate) with given kernel
 
 ### Preprocessing ###
-cut_trials          Cuts spike timestamp data into trials
-realign_spike_times Realigns spike timestamps to new t=0
-
 times_to_bool       Converts spike timestamps to binary spike trains
 bool_to_times       Converts binary spike train to timestamps
+
+cut_trials          Cuts spiking data into trials
+realign_data        Realigns data to new within-trial times (new t=0)
 pool_electrode_units Pools all units on each electrode into a multi-unit
+
+setup_sliding_windows Generates set of sliding windows with given parameters
 
 ### Plotting ###
 plot_raster         Generates a raster plot
@@ -30,17 +32,15 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
-# TODO  Add versions of cut_trials, realign_spike_times for spike_bool data
-
 import os
-from math import isclose, ceil, sqrt
+from math import isclose, ceil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
-from scipy.stats import poisson, bernoulli, norm, expon
+from scipy.stats import poisson, bernoulli, norm, expon, mode
 
 
 # =============================================================================
@@ -239,7 +239,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
                 -or-
-                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                (...,n_timepts,...) ndarray of bool. Binary/boolean representation of 
                 spike times, for either a single or multiple spike trains.                
                 
     kernel      String. Name of convolution kernel to use:
@@ -550,135 +550,6 @@ def plot_waveform_heatmap(spike_waves, t=None, wf_range=None,
 # =============================================================================
 # Preprocessing/Utility functions
 # =============================================================================
-def cut_trials(data, trial_lims, trial_refs=None):
-    """
-    Cuts spike timestamp data into trials
-    
-    cut_data = cut_trials(data, trial_lims)
-    
-    ARGS
-    data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape).
-                List of spike timestamps (in s).  Can be given for either a single
-                spike train, or for multiple spike trains (eg different trials,
-                units, etc.) within an object array of any arbitrary shape.
-                
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
-                (in same timebase as data) to use to cut data.
-                
-    RETURNS
-    cut_data    (...,n_trials) object array of (n_trial_spikes) arrays.
-                Spike timestamp data segmented into trials.
-                Trial axis is appended to end of all axes in input data.          
-    """
-    trial_lims = np.asarray(trial_lims)    
-    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
-        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
-    n_trials = trial_lims.shape[0]
-    
-    do_ref = trial_refs is not None
-    
-    # If data is not an object array, its assumed to be a single spike train
-    single_train = isinstance(data,list) or (data.dtype != object)
-        
-    # Enclose in object array to simplify computations; removed at end
-    if single_train: data = _enclose_in_object_array(np.asarray(data))  
-
-    
-    # Create 1D flat iterator to iterate over arbitrary-shape data array
-    # Note: This always iterates in row-major/C-order regardless of data order, so all good
-    data_flat = data.flat
-        
-    # Create array to hold trial-cut data. Same shape as data, with trial axis appended.
-    cut_data = np.empty((*data.shape,n_trials),dtype=object)
-    
-    for _ in range(data.size):        
-        coords = data_flat.coords   # Multidim coordinates into data array
-        data_cell = data[coords]    # Timestamps for current array cell (unit,etc.)
-
-        # Find and extract all spikes in each trial for given element in data
-        for trial,lim in enumerate(trial_lims):
-            trial_bool = (lim[0] <= data_cell) & (data_cell < lim[1])
-            # Note: Returns empty array if no spikes
-            trial_spikes = data_cell[trial_bool]            
-            # Re-reference spike times to within-trial reference time (if requested)
-            if do_ref: trial_spikes -= trial_refs[trial]
-            cut_data[(*coords,trial)] = trial_spikes
-            
-        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
-        next(data_flat)    
-        
-    return cut_data
-    
-                    
-def realign_spike_times(spike_times, align_times, axis=0):
-    """
-    Realigns trial-cut spike timestamps to new set of within-trial times 
-    (eg new trial event) so that t=0 on each trial at given event. 
-    For example, timestamps aligned to a start-of-trial event might
-    need to be relaligned to the behavioral response.
-
-    spike_times = realign_spike_times(spike_times,align_times)
-
-    ARGS
-    spike_times (n_trials,n_units) object ndarray of (n_spikes[trial,unit],) ndarrays.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event.
-
-    align_times (n_trials,) array-like. New set of times (in old
-                reference frame) to realign spike timestamps to
-                
-    axis        Int. Axis of spike_times corresponding to trials.
-                Default: 0 (1st axis of array)       
-
-    RETURNS
-    realigned   Same data struture, but with each timestamp realigned to times
-
-    """    
-    # Move trial axis to first axis of array
-    if axis != 0: spike_times = np.moveaxis(spike_times, axis, 0)
-    
-    # Subtract new reference time from all spike times for each trial
-    for trial,align_time in enumerate(align_times):
-        spike_times[trial,...] = spike_times[trial,...] - align_time
-        
-    # Move trial axis to original location
-    if axis != 0: spike_times = np.moveaxis(spike_times, 0, axis)
-
-    return spike_times
-
-
-def realign_spike_times_on_event(spike_times, event_data, event):
-    """     
-    Realigns trial-cut spike timestamps to new trial event, so that t=0 on each 
-    trial at given event. For example, timestamps aligned to a start-of-trial event
-    might need to be relaligned to the behavioral response.
-    
-    Convenience wrapper around realign_spike_times() for relaligning to a given
-    named event within a per-trial dataframe or dict variable.
-
-    spike_times = realign_spike_times_on_event(spike_times,event_data,event)
-
-    ARGS
-    spike_times (n_trials,n_units) object ndarray of (n_spikes[trial,unit],) ndarrays.
-                Spike timestamps, usually in seconds referenced to some
-                within-trial event.
-
-    event_data  {string:(n_trials,) array} dict | (n_trials,n_events) DataFrame.
-                Per-trial event timing data to use to realign spike timestamps.
-
-    event       String. Dict key or DataFrame column name whose associated values
-                are to be used to realign spike timestamps
-
-    RETURNS
-    spike_times Same data struture, but with each timestamp realigned to event
-
-    """
-    # Extract vector of times to realign on
-    align_times = event_data[event]
-    # Compute the realignment and return
-    return realign_spike_times(spike_times,align_times)
-
-
 def bool_to_times(spike_bool, t, axis=-1):
     """
     Converts boolean (binary) spike train representaton to spike timestamps
@@ -783,6 +654,343 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     spike_bool = spike_bool.astype(bool)
 
     return spike_bool, timepts
+
+
+def cut_trials(data, trial_lims, **kwargs):
+    """
+    Cuts spiking data into trials, for either spike timestamps or binary spike trains
+    
+    Wrapper around cut_trials_spike_times/cut_trials_spike_bool.  See those for 
+    details on data-specific arguments.
+    
+    cut_data = cut_trials(data, trial_lims, **kwargs)
+    
+    ARGS
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape) | 
+                (...,n_timepts,...) ndarray.
+                Spiking data, given either as spike timestamps or binary (1/0) spike trains.
+                Can be given for either a single spike train, or for multiple spike trains 
+                (eg different trials, units, etc.) within an object array.
+                
+                For binary spike data, additional <smp_rate> and <axis> keyword arguments must be 
+                input to indicate the sampling rate (in Hz) and the array time axis.
+                
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
+                (in same timebase as data) to use to cut data.
+                
+    **kwargs    Any additional keyword args passed directly to cut_trials_spike_times/bool()                
+                
+    RETURNS
+    cut_data    (...,n_trials) object array of (n_trial_spikes) arrays | 
+                (...,n_trial_timepts,...,n_trials) array.
+                Data segmented into trials.
+                Trial axis is appended to end of all axes in input data.  
+    """
+    data_type = _spike_data_type(data)
+    
+    if data_type == 'timestamp':    cut_func = cut_trials_spike_times
+    elif data_type == 'bool':       cut_func = cut_trials_spike_bool
+    else:
+        raise ValueError("Unsupported data format input. Must be spike timestamps or binary (0/1) spike train")
+    
+    return cut_func(data, trial_lims, **kwargs)
+        
+        
+def cut_trials_spike_times(data, trial_lims, trial_refs=None):
+    """
+    Cuts spike timestamp data into trials
+    
+    cut_data = cut_trials_spike_times(data, trial_lims, trial_refs=None)
+    
+    ARGS
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape).
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
+                
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
+                (in same timebase as data) to use to cut data.
+                
+    trial_refs  (n_trials,) array-like. List of event time in each trial to re-reference 
+                trial's spike timestamps to (ie this sets t=0 for each trial), if desired.
+                Default: None (just leave timestamps in original timebase)              
+                
+    RETURNS
+    cut_data    (...,n_trials) object array of (n_trial_spikes) arrays.
+                Spike timestamp data segmented into trials.
+                Trial axis is appended to end of all axes in input data.          
+    """
+    trial_lims = np.asarray(trial_lims)    
+    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
+        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
+    n_trials = trial_lims.shape[0]
+    
+    do_ref = trial_refs is not None
+    
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(data,list) or (data.dtype != object)
+        
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: data = _enclose_in_object_array(np.asarray(data))  
+
+    
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    data_flat = data.flat
+        
+    # Create array to hold trial-cut data. Same shape as data, with trial axis appended.
+    cut_data = np.empty((*data.shape,n_trials),dtype=object)
+    
+    for _ in range(data.size):        
+        coords = data_flat.coords   # Multidim coordinates into data array
+        data_cell = data[coords]    # Timestamps for current array cell (unit,etc.)
+
+        # Find and extract all spikes in each trial for given element in data
+        for trial,lim in enumerate(trial_lims):
+            trial_bool = (lim[0] <= data_cell) & (data_cell < lim[1])
+            # Note: Returns empty array if no spikes
+            trial_spikes = data_cell[trial_bool]            
+            # Re-reference spike times to within-trial reference time (if requested)
+            if do_ref: trial_spikes -= trial_refs[trial]
+            cut_data[(*coords,trial)] = trial_spikes
+            
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        next(data_flat)    
+        
+    return cut_data
+    
+    
+def cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
+    """
+    Cuts binary spike train data into trials
+    
+    cut_data = cut_trials_spike_bool(data, trial_lims, smp_rate, axis=0)
+    
+    ARGS
+    data        (...,n_timepts,...) ndarray. Continuous spike train data unsegmented into trials.
+                Arbitrary dimensionality, could include multiple channels, etc.
+                
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s) 
+                to use to cut data.
+                
+    smp_rate    Scalar. Sampling rate of data (Hz). Must input a value for this.
+    
+    axis        Int. Axis of data array corresponding to time samples. Default: 0                
+                
+    RETURNS
+    cut_data    (...,n_trial_timepts,...,n_trials) array.
+                Data segmented into trials.
+                Trial axis is appended to end of all axes in input data.          
+    """
+    assert smp_rate is not None, "For binary spike train data, you must smp_rate = sampling rate in Hz"
+        
+    trial_lims = np.asarray(trial_lims)    
+    assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
+        "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
+    n_trials = trial_lims.shape[0]
+        
+    # Convert trial_lims in s -> indices into continuous data samples
+    trial_idxs = np.round(smp_rate*trial_lims).astype(int)
+    assert trial_idxs.min() >= 0, ValueError("trial_lims are attempting to index before start of data")
+    assert trial_idxs.max() < data.shape[axis], ValueError("trial_lims are attempting to index beyond end of data")
+    # Ensure all windows have same length
+    trial_idxs = _check_window_lengths(trial_idxs,tol=1)
+                        
+    # Samples per trial = end - start + 1        
+    n_smp_per_trial = trial_idxs[0,1] - trial_idxs[0,0] + 1
+        
+    # Create array to hold trial-cut data. Same shape as data, with time sample axis
+    # reduced to n_samples_per_trial and trial axis appended.
+    cut_shape = [*data.shape,n_trials]
+    cut_shape[axis] = n_smp_per_trial
+    cut_data = np.empty(tuple(cut_shape),dtype=data.dtype)
+    
+    # Extract segment of continuous data for each trial
+    for trial,lim in enumerate(trial_idxs):
+        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
+                        
+    return cut_data
+    
+    
+def realign_data(data, align_times, **kwargs):
+    """
+    Realigns trial-cut spiking data on new within-trial event times, 
+    for either spike timestamps or binary spike trains
+    
+    Wrapper around realign_spike_times/realign_spike_bool.  See those for details
+    on data-specific arguments.
+    
+    realigned = realign_data(data, align_times, **kwargs)
+    
+    ARGS
+    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays | 
+                (...,n_timepts,...) ndarray.
+                Spiking data, given either as spike timestamps or binary (1/0) spike trains.
+                Arbitrary shape, but must give <trial_axis> (and <time_axis> for binary data).
+
+    align_times (n_trials,) array-like. New set of times (in old
+                reference frame) to realign spiking data to                
+                
+    **kwargs    Any additional keyword args passed directly to realign_spike_times/bool()                
+                
+    RETURNS
+    realigned   Data realigned to given within-trial times.
+                For timestamp data, this has same shape as input data.
+                For binary data, time axis is reduced to length implied by time_range, but 
+                otherwise array has same shape as input data.   
+    """
+    data_type = _spike_data_type(data)
+    
+    if data_type == 'timestamp':    realign_func = realign_spike_times
+    elif data_type == 'bool':       realign_func = realign_spike_bool
+    else:
+        raise ValueError("Unsupported data format input. Must be spike timestamps or binary (0/1) spike train")
+    
+    return realign_func(data, align_times, **kwargs)
+          
+
+def realign_data_on_event(data, event_data, event, **kwargs):
+    """     
+    Convenience wrapper around realign_data() for relaligning to a given
+    named event within a per-trial dataframe or dict variable.
+
+    realigned = realign_spike_times_on_event(spike_times, event_data, event, **kwargs)
+
+    ARGS
+    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays | 
+                (...,n_timepts,...) ndarray.
+                Spiking data, given either as spike timestamps or binary (1/0) spike trains.
+                Arbitrary shape, but must give <trial_axis> (and <time_axis> for binary data).
+
+    event_data  {string:(n_trials,) array} dict | (n_trials,n_events) DataFrame.
+                Per-trial event timing data to use to realign spike timestamps.
+
+    event       String. Dict key or DataFrame column name whose associated values
+                are to be used to realign spike timestamps
+
+    RETURNS
+    realigned   Same data struture, but realigned to given event
+    """
+    # Extract vector of times to realign on
+    align_times = event_data[event]
+    # Compute the realignment and return
+    return realign_data(data, align_times, **kwargs)
+
+                    
+def realign_spike_times(spike_times, align_times, trial_axis=0):
+    """
+    Realigns trial-cut spike timestamps to new set of within-trial times 
+    (eg new trial event) so that t=0 on each trial at given event. 
+    For example, timestamps aligned to a start-of-trial event might
+    need to be relaligned to the behavioral response.
+
+    spike_times = realign_spike_times(spike_times,align_times,trial_axis=0)
+
+    ARGS
+    spike_times (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays |
+                ndarray of bool.
+                Spike timestamps, usually in seconds referenced to some
+                within-trial event. Can be any arbitrary shape (including having
+                multiple units), as long as trial axis is given in <trial_axis>.
+
+    align_times (n_trials,) array-like. New set of times (in old
+                reference frame) to realign spike timestamps to
+                
+    trial_axis  Int. Axis of spike_times corresponding to trials.
+                Default: 0 (1st axis of array)       
+
+    RETURNS
+    realigned   Same data struture, but with each timestamp realigned to times
+    """    
+    # Move trial axis to first axis of array
+    if trial_axis != 0: spike_times = np.moveaxis(spike_times, trial_axis, 0)
+    
+    # Subtract new reference time from all spike times for each trial
+    for trial,align_time in enumerate(align_times):
+        spike_times[trial,...] = spike_times[trial,...] - align_time
+        
+    # Move trial axis to original location
+    if trial_axis != 0: spike_times = np.moveaxis(spike_times, 0, trial_axis)
+
+    return spike_times
+
+
+def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_axis=0, trial_axis=-1):
+    """
+    Realigns trial-cut binary (1/0) spiking data to new set of within-trial times 
+    (eg new trial event) so that t=0 on each trial at given event. 
+    For example, data aligned to a start-of-trial event might
+    need to be relaligned to the behavioral response.
+
+    realigned = realign_data(data,align_times,time_range,timepts,time_axis=0,trial_axis=-1)
+
+    ARGS
+    data        ndarray. Binary (1/0) spiking data segmented into trials.
+                Arbitrary dimensionality, could include multiple units, etc.
+    
+    align_times (n_trials,) array-like. New set of times (in old
+                reference frame) to realign data to (in s)
+                
+    time_range  (2,) array-like. Time range to extract from each trial around
+                new align time ([start,end] in s relative to align_times).
+                eg, time_range=(-1,1) -> extract 1 s on either side of align event.
+                Must set value for this.
+                        
+    timepts     (n_timepts) array-like. Time sampling vector for data (in s).
+                Must set value for this.]
+                                
+    time_axis   Int. Axis of data corresponding to time samples.
+                Default: 0 (1st axis of array)       
+
+    trial_axis  Int. Axis of data corresponding to distinct trials.
+                Default: -1 (last axis of array)       
+                
+    RETURNS
+    realigned   Data realigned to given within-trial times.
+                Time axis is reduced to length implied by time_range, but otherwise
+                array has same shape as input data.
+    """
+    assert time_range is not None, \
+        "Desired time range to extract from each trial must be given in  <time_range>"
+    assert timepts is not None, "Data time sampling vector must be given in <timepts>"
+    
+    timepts     = np.asarray(timepts)
+    align_times = np.asarray(align_times)    
+    time_range  = np.asarray(time_range)
+    
+    if time_axis < 0:   time_axis = data.ndim + time_axis
+    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
+    
+    # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
+    if time_axis != 0:              data = np.moveaxis(data,0,time_axis)
+    if trial_axis != data.ndim-1:   data = np.moveaxis(data,-1,trial_axis)
+    
+    # Convert align times and time epochs to nearest integer sample indexes
+    dt = np.mean(np.diff(timepts))
+    align_smps = np.round((align_times - timepts[0])/dt).astype(int)
+    range_smps = np.round(time_range/dt).astype(int)
+    # Compute [start,end] sample indexes for each trial epoch = align time +/- time range
+    trial_range_smps = align_smps[:,np.newaxis] + range_smps[np.newaxis,:]
+        
+    assert (trial_range_smps[:,0] >= 0).all(), \
+        "Some requested time epochs extend before start of data"    
+    assert (trial_range_smps[:,1] < len(timepts)).all(), \
+        "Some requested time epochs extend beyond end of data"
+            
+    n_timepts_out   = range_smps[1] - range_smps[0] + 1    
+    return_shape    = (n_timepts_out, *(data.shape[1:]))    
+    realigned       = np.empty(return_shape)
+    
+    # Extract timepoints corresponding to realigned time epoch from each trial in data     
+    for iTrial,t in enumerate(trial_range_smps):
+        # Note: '+1' below makes the selection inclusive of the right endpoint in each trial
+        realigned[...,iTrial] = data[t[0]:t[1]+1,...,iTrial]    
+    
+    # Move array axes back to original locations
+    if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
+    if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
+        
+    return realigned
 
 
 def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
@@ -1293,8 +1501,147 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     return trains, labels
 
 
+# ===========================================================================
+# Data reshaping helper functions
+# =============================================================================
+def _index_axis(data, axis, idxs):
+    """ 
+    Utility to dynamically index into a arbitrary axis of an ndarray 
+    
+    data = _index_axis(data, axis, idxs)
+    
+    ARGS
+    data    ndarray. Array of arbitrary shape, to index into given axis of.
+    
+    axis    Int. Axis of ndarray to index into.
+    
+    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
+            Indexing into given axis of array, given either as list of
+            integer indexes or as boolean vector.
+    
+    RETURNS
+    data    ndarray. Input array with indexed values selected from given axis.
+    """
+    # Generate list of slices, with ':' for all axes except <idxs> for <axis>
+    slices = _axis_slices(axis, idxs, data.ndim)
+
+    # Use slices to index into data, and return sliced data
+    return data[slices]
+
+
+def _axis_slices(axis, idxs, ndim):
+    """
+    Generate list of slices, with ':' for all axes except <idxs> for <axis>,
+    to use for dynamic indexing into an arbitary axis of an ndarray
+    
+    slices = _axis_slices(axis, idxs, ndim)
+    
+    ARGS
+    axis    Int. Axis of ndarray to index into.
+    
+    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
+            Indexing into given axis of array, given either as list of
+            integer indexes or as boolean vector.
+    
+    ndim    Int. Number of dimensions in ndarray to index into
+    
+    RETURNS
+    slices  Tuple of slices. Index tuple to use to index into given 
+            axis of ndarray as: selected_values = array[slices]  
+    """
+    # Initialize list of null slices, equivalent to [:,:,:,...]
+    slices = [slice(None)] * ndim
+
+    # Set slice for <axis> to desired indexing
+    slices[axis] = idxs
+
+    # Convert to tuple bc indexing arrays w/ a list is deprecated
+    return tuple(slices)
+
+
+def _reshape_data(data, axis=-1):
+    """
+    Reshapes multi-dimensional data array to 2D (matrix) form for analysis
+
+    data, data_shape = _reshape_data(data,axis=-1)
+
+    ARGS
+    data    (...,n,...) ndarray. Data array of arbitrary shape.
+
+    axis    Int. Axis of data to move to axis -1 for subsequent analysis. Default: -1
+
+    RETURNS
+    data    (m,n) ndarray. Data array w/ <axis> moved to axis=-1, 
+            and all axes < -1 unwrapped into single dimension, where 
+            m = prod(shape[:-1])
+
+    data_shape (data.ndim,) tuple. Original shape of data array
+    """
+    # Save original shape/dimensionality of <data>
+    data_ndim  = data.ndim
+    data_shape = data.shape
+
+    # Faster method for f-contiguous arrays
+    if data.flags.f_contiguous:
+        # If observation axis != first dim, permute axis to make it so
+        if axis != 0: data = np.moveaxis(data,axis,0)
+
+        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
+        if data_ndim > 2:   data = np.reshape(data,(data_shape[axis],-1),order='F').T
+        else:               data = data.T
+
+    else:
+        # If observation axis != -1, permute axis to make it so
+        if axis not in [-1, data_ndim - 1]: data = np.moveaxis(data,axis,-1)
+
+        # If data array data has > 2 dims, keep axis -1 and unwrap other dims into a matrix
+        if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C')
+
+    return data, data_shape
+
+
+def _unreshape_data(data, data_shape, axis=-1):
+    """
+    Reshapes data array from unwrapped 2D (matrix) form back to ~ original
+    multi-dimensional form
+
+    data = _unreshape_data(data,data_shape,axis=-1)
+
+    ARGS
+    data    (m,axis_len) ndarray. Data array w/ <axis> moved to axis=-1, 
+            and all axes < -1 unwrapped into single dimension, where 
+            m = prod(shape[:-1])
+
+    data_shape (data.ndim,) tuple. Original shape of data array
+
+    axis    Int. Axis of original data moved to axis -1, which will be shifted 
+            back to original axis.. Default: -1
+
+    RETURNS
+    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
+    """
+    data_shape  = np.asarray(data_shape)
+
+    data_ndim   = len(data_shape) # Number of dimensions in original data
+    axis_len    = data.shape[-1]  # Length of dim -1 (will become dim <axis> again)
+
+    # If data array data had > 2 dims, reshape matrix back into ~ original shape
+    # (but with length of dimension <axis> = <axis_length>)
+    if data_ndim > 2:
+        # Reshape data -> (<original shape w/o <axis>>,axis_len)
+        shape = (*data_shape[np.arange(data_ndim) != axis],axis_len)
+        # Note: I think you want the order to be 'C' regardless of memory layout
+        # TODO test this!!!
+        data  = np.reshape(data,shape,order='C')
+
+    # If observation axis wasn't -1, permute axis back to original position
+    if axis != -1: data = np.moveaxis(data,-1,axis)
+
+    return data
+
+
 #==============================================================================
-# Helper functions
+# Other helper functions
 #==============================================================================
 def _spike_data_type(data):
     """
@@ -1387,87 +1734,6 @@ def _remove_buffer(data, buffer, axis=-1):
                     .swapaxes(axis,-1))
 
 
-def _reshape_data(data, axis=-1):
-    """
-    Reshapes multi-dimensional data array to 2D (matrix) form for analysis
-
-    data, data_shape = _reshape_data(data,axis=-1)
-
-    ARGS
-    data    (...,n,...) ndarray. Data array of arbitrary shape.
-
-    axis    Int. Axis of data to move to axis -1 for subsequent analysis. Default: -1
-
-    RETURNS
-    data    (m,n) ndarray. Data array w/ <axis> moved to axis=-1, 
-            and all axes < -1 unwrapped into single dimension, where 
-            m = prod(shape[:-1])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-    """
-    # Save original shape/dimensionality of <data>
-    data_ndim  = data.ndim
-    data_shape = data.shape
-
-    # Faster method for f-contiguous arrays
-    if data.flags.f_contiguous:
-        # If observation axis != first dim, permute axis to make it so
-        if axis != 0: data = np.moveaxis(data,axis,0)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
-        if data_ndim > 2:   data = np.reshape(data,(data_shape[axis],-1),order='F').T
-        else:               data = data.T
-
-    else:
-        # If observation axis != -1, permute axis to make it so
-        if axis not in [-1, data_ndim - 1]: data = np.moveaxis(data,axis,-1)
-
-        # If data array data has > 2 dims, keep axis -1 and unwrap other dims into a matrix
-        if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C')
-
-    return data, data_shape
-
-
-def _unreshape_data(data, data_shape, axis=-1):
-    """
-    Reshapes data array from unwrapped 2D (matrix) form back to ~ original
-    multi-dimensional form
-
-    data = _unreshape_data(data,data_shape,axis=-1)
-
-    ARGS
-    data    (m,axis_len) ndarray. Data array w/ <axis> moved to axis=-1, 
-            and all axes < -1 unwrapped into single dimension, where 
-            m = prod(shape[:-1])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    axis    Int. Axis of original data moved to axis -1, which will be shifted 
-            back to original axis.. Default: -1
-
-    RETURNS
-    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
-    """
-    data_shape  = np.asarray(data_shape)
-
-    data_ndim   = len(data_shape) # Number of dimensions in original data
-    axis_len    = data.shape[-1]  # Length of dim -1 (will become dim <axis> again)
-
-    # If data array data had > 2 dims, reshape matrix back into ~ original shape
-    # (but with length of dimension <axis> = <axis_length>)
-    if data_ndim > 2:
-        # Reshape data -> (<original shape w/o <axis>>,axis_len)
-        shape = (*data_shape[np.arange(data_ndim) != axis],axis_len)
-        # Note: I think you want the order to be 'C' regardless of memory layout
-        # TODO test this!!!
-        data  = np.reshape(data,shape,order='C')
-
-    # If observation axis wasn't -1, permute axis back to original position
-    if axis != -1: data = np.moveaxis(data,-1,axis)
-
-    return data
-
-
 def _str_to_kernel(kernel, width, **kwargs):
     """ Converts string specifier to scipy.signal.windows function """
     if isinstance(kernel,str):  kernel = kernel.lower()
@@ -1479,3 +1745,39 @@ def _str_to_kernel(kernel, width, **kwargs):
     else:
         raise ValueError("Unsupported value '%s' given for kernel. \
                          Should be 'hanning'|'gaussian'" % kernel)
+
+
+def _check_window_lengths(windows,tol=1):
+    """ 
+    Ensures a set of windows are the same length. If not equal, but within given tolerance,
+    windows are trimmed or expanded to the modal window length.
+    
+    ARGS
+    windows (n_wins,2) array-like. Set of windows to test, given as series of [start,end].
+    
+    tol     Scalar. Max tolerance of difference of each window length from the modal value.
+    
+    RETURNS
+    windows (n_wins,2) ndarray. Same windows, possibly slightly trimmed/expanded to uniform length
+    """    
+    windows = np.asarray(windows)
+    
+    window_lengths  = np.diff(windows,axis=1).squeeze()
+    window_range    = np.ptp(window_lengths)
+    
+    # If all window lengths are the same, windows are OK and we are done here
+    if np.allclose(window_lengths, window_lengths[0]): return windows
+    
+    # Compute mode of windows lengths and max difference from it
+    modal_length    = mode(window_lengths)[0][0]    
+    max_diff        = np.max(np.abs(window_lengths - modal_length))
+    
+    # If range is beyond our allowed tolerance, throw an error
+    assert max_diff <= tol, \
+        ValueError("Variable-length windows unsupported (range=%.1f). All windows must have same length" \
+                    % window_range)
+        
+    # If range is between 0 and tolerance, we trim/expand windows to the modal length
+    windows[:,1]    = windows[:,1] + (modal_length - window_lengths)
+    return windows
+    
