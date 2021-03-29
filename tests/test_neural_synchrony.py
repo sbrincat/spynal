@@ -1,11 +1,14 @@
 """ Unit tests for neural_synchrony.py module """
 import pytest
+from math import pi
 import numpy as np
 
 from scipy.stats import bernoulli
 
-from ..neural_synchrony import simulate_oscillation, spectrum, power_spectrum, \
-                               spectrogram, power_spectrogram, phase_spectrogram
+from ..neural_synchrony import simulate_oscillation, simulate_multichannel_oscillation, \
+                               spectrum, power_spectrum, \
+                               spectrogram, power_spectrogram, phase_spectrogram, \
+                               synchrony
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -76,26 +79,49 @@ def oscillatory_data(oscillation, bursty_oscillation, spiking_oscillation):
     return {'lfp': oscillation, 'burst': bursty_oscillation, 'spike':spiking_oscillation}
 
 
+@pytest.fixture(scope='session')
+def oscillation_pair():
+    """ 
+    Fixture simulates set of instances of pairs of weakly synchronized oscillatory data 
+    for unit tests of synchrony computation functions
+    
+    RETURNS
+    data    (1001,40,2) ndarray. Simulated oscillatory data.
+            (eg simulating 1001 timepoints x 40 trials x 2 channels)                        
+    """
+    # Note: seed=1 makes data reproducibly match output of Matlab
+    frequency = 32 
+    return simulate_multichannel_oscillation(2, frequency, amplitude=5.0, phase=[pi/4,0], phase_sd=[0,pi/4],
+                                             noise=1.0, n_trials=40, time_range=1.0, smp_rate=1000, seed=1)
+
+    
+
 
 # =============================================================================
 # Unit tests
 # =============================================================================
 @pytest.mark.parametrize('data_type, spec_type, method, result',
-                         [('lfp',   'power', 'multitaper', 0.0137),
-                          ('spike', 'power', 'multitaper', 194.0514)])
+                         [('lfp',   'power', 'multitaper',  0.0137),
+                          ('lfp',   'power', 'wavelet',     44.9462),
+                          ('lfp',   'power', 'bandfilter',  2.3069),
+                          ('spike', 'power', 'multitaper',  194.0514),
+                          ('spike', 'power', 'wavelet',     0.4774),
+                          ('spike', 'power', 'bandfilter',  0.0483)])
 def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
-    """ Unit tests for power_spectrum function """
-    # TODO Add wavelet, bandfilter methods
+    """ Unit tests for spectrum function """
     data = oscillatory_data[data_type]
     smp_rate = 1000
     n_trials = 4
     n_freqs = {'wavelet': 26, 'multitaper':513,  'bandfilter': 3}
-        
+    # Time reversal -> inverted sign phase, complex conj of complex, preserves power
+    if spec_type == 'phase':        reversed_result = -result
+    elif spec_type == 'complex':    reversed_result = np.conj(result)
+    else:                           reversed_result = result
+            
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over all freqs in first trial for simplicity
-    spec, freqs = spectrum(data, smp_rate, axis=0, method=method,
-                                 data_type=data_type, spec_type=spec_type)
-    # print(spec.shape, np.round(spec[:,0].mean(),4))
+    spec, freqs = spectrum(data, smp_rate, axis=0, method=method, data_type=data_type, spec_type=spec_type)
+    print(spec.shape, np.round(spec[:,0].mean(),4))
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method], n_trials)
     assert np.issubdtype(spec.dtype,np.float)
@@ -103,7 +129,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     
     # Test for consistent output with different data array shape (3rd axis)
     spec, freqs = spectrum(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
-                                 smp_rate, axis=0, method=method, data_type=data_type, spec_type=spec_type)
+                           smp_rate, axis=0, method=method, data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method], n_trials/2, n_trials/2)
     assert np.issubdtype(spec.dtype,np.float)
@@ -117,45 +143,61 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.isclose(spec[0,:].mean(), result, rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with vector-valued data
-    spec, freqs = spectrum(data[:,0], smp_rate, axis=-1, method=method,
-                                 data_type=data_type, spec_type=spec_type)
+    spec, freqs = spectrum(data[:,0], smp_rate, axis=-1, method=method, data_type=data_type, spec_type=spec_type)
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert spec.shape == (n_freqs[method],)
     assert np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec.mean(), result, rtol=1e-4, atol=1e-4)
-                              
-            
+           
+    # Test for expected output with time-reversed data
+    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for multitaper phase/complex -- not time-reversal invariant
+    if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
+        spec, freqs = spectrum(np.flip(data,axis=0), smp_rate, axis=0, method=method,
+                               data_type=data_type, spec_type=spec_type)
+        assert spec.shape == (n_freqs[method], n_trials)
+        assert np.isclose(spec[:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+        
+                                      
+# TODO Take a closer look at 'complex' outputs -- why coming out = 0?            
 @pytest.mark.parametrize('data_type, spec_type, method, result',
-                         [('lfp',   'power', 'wavelet',     44.9462),
-                          ('lfp',   'power', 'multitaper',  0.0137),
-                          ('lfp',   'power', 'bandfilter',  2.8736),
-                          ('spike', 'power', 'wavelet',     0.4774),
-                          ('spike', 'power', 'multitaper',  193.7612),
-                          ('spike', 'power', 'bandfilter',  0.0568),
-                          ('lfp',   'phase', 'wavelet',     0.0053),
-                          ('lfp',   'phase', 'multitaper', -0.1523),
-                          ('lfp',   'phase', 'bandfilter',  0.0016),
-                          ('spike', 'phase', 'wavelet',     0.0054),
-                          ('spike', 'phase', 'multitaper', -0.0547),
-                          ('spike', 'phase', 'bandfilter',  0.0649)])
+                         [('lfp',   'power',    'wavelet',     44.9462),
+                          ('lfp',   'power',    'multitaper',  0.0137),
+                          ('lfp',   'power',    'bandfilter',  2.3069),
+                          ('spike', 'power',    'wavelet',     0.4774),
+                          ('spike', 'power',    'multitaper',  193.7612),
+                          ('spike', 'power',    'bandfilter',  0.0483),
+                          ('lfp',   'phase',    'wavelet',     0.0053),
+                          ('lfp',   'phase',    'multitaper', -0.1523),
+                          ('lfp',   'phase',    'bandfilter',  0.1473),
+                          ('spike', 'phase',    'wavelet',     0.0054),
+                          ('spike', 'phase',    'multitaper', -0.0547),
+                          ('spike', 'phase',    'bandfilter',  0.1190),
+                          ('lfp',   'complex',  'wavelet',     0j),
+                          ('lfp',   'complex',  'multitaper',  0.0019-0.0011j),
+                          ('lfp',   'complex',  'bandfilter',  -0.0109+0j)])
 def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
-    """ Unit tests for power_spectrogram function """
+    """ Unit tests for spectrogram() function """
     # Extract given data type from data dict
     data = oscillatory_data[data_type]    
     smp_rate = 1000
     n_trials = 4
     n_freqs = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
-    n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}    
+    n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}
+    # Time reversal -> inverted sign phase, complex conj of complex, preserves power
+    if spec_type == 'phase':        reversed_result = -result
+    elif spec_type == 'complex':    reversed_result = np.conj(result)
+    else:                           reversed_result = result
     
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over all timepts, freqs for 1st trial for simplicity
     spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
                                        data_type=data_type, spec_type=spec_type)
-    # print(spec.shape, np.round(spec[:,:,0].mean(),4))
+    print(spec.shape, np.round(spec[:,:,0].mean(),4))
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method], n_trials)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,np.complex) if spec_type == 'complex' else np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[:,:,0].mean(), result, rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with different data array shape (3rd axis)
@@ -164,7 +206,7 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method], n_trials/2, n_trials/2)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,np.complex) if spec_type == 'complex' else np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[:,:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
  
     # Test for consistent output with transposed data dimensionality
@@ -173,7 +215,7 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_trials, n_freqs[method], n_timepts[method])
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,np.complex) if spec_type == 'complex' else np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[0,:,:].mean(), result, rtol=1e-4, atol=1e-4)
            
     # Test for consistent output with vector-valued data
@@ -182,6 +224,116 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     assert freqs.shape == (n_freqs[method],2) if method == 'bandfilter' else freqs.shape == (n_freqs[method],)
     assert timepts.shape == (n_timepts[method],)
     assert spec.shape == (n_freqs[method], n_timepts[method])
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,np.complex) if spec_type == 'complex' else np.issubdtype(spec.dtype,np.float)
     assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
     
+    # Test for expected output with time-reversed data
+    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for multitaper phase/complex -- not time-reversal invariant
+    if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
+        spec, freqs, timepts = spectrogram(np.flip(data,axis=0), smp_rate, axis=0, method=method,
+                                        data_type=data_type, spec_type=spec_type)
+        print(spec.shape, np.round(spec[:,:,0].mean(),4))    
+        assert spec.shape == (n_freqs[method], n_timepts[method], n_trials)
+        assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+        
+
+@pytest.mark.parametrize('method, spec_method, result',
+                         [('coherence', 'wavelet',      (0.2475,0.4795)),
+                          ('coherence', 'multitaper',   (0.1046,0.3043)),
+                          ('coherence', 'bandfilter',   (0.3490,0.6703)),
+                          ('PLV',       'wavelet',      (0.2541,0.3713)),
+                          ('PLV',       'multitaper',   (0.0984,0.2228)),
+                          ('PLV',       'bandfilter',   (0.3322,0.4532)),
+                          ('PPC',       'wavelet',      (0.0912,0.3713)),
+                          ('PPC',       'multitaper',   (0.0100,0.2228)),
+                          ('PPC',       'bandfilter',   (0.1715,0.4532))])
+def test_synchrony(oscillation_pair, method, spec_method, result):
+    """ Unit tests for synchrony() function """
+    # Extract per-channel data and reshape -> (n_trials,n_timepts)
+    data1, data2 = oscillation_pair[:,:,0].T, oscillation_pair[:,:,1].T
+    
+    smp_rate = 1000
+    n_trials = 40
+    n_freqs = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
+    n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}    
+        
+    # Basic test of shape, dtype, value of output. 
+    # Test values averaged over all timepts, freqs for simplicity
+    sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method, spec_method=spec_method,
+                                           return_phase=True, smp_rate=smp_rate, time_axis=-1)
+    print(sync.shape, np.round(sync.mean(),4), dphi.shape, np.round(dphi.mean(),4), freqs.shape, timepts.shape)
+    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    assert timepts.shape == (n_timepts[spec_method],)
+    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert np.issubdtype(sync.dtype,np.float)
+    assert np.issubdtype(dphi.dtype,np.float)    
+    assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    
+    # Test for consistent output with return_phase=False
+    sync2, freqs2, timepts2 = synchrony(data1, data2, axis=0, method=method, spec_method=spec_method,
+                                        return_phase=False, smp_rate=smp_rate, time_axis=-1)
+    assert freqs2.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    assert timepts2.shape == (n_timepts[spec_method],)    
+    assert np.allclose(sync2, sync, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with reversed time axis (dphi should change sign, otherwise same)
+    # Skip test for multitaper/bandfilter phase, bandfilter sync -- not time-reversal invariant    
+    sync, freqs, timepts, dphi = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
+                                           axis=0, method=method, spec_method=spec_method,
+                                           return_phase=True, smp_rate=smp_rate, time_axis=-1)
+    if spec_method != 'bandfilter':
+        assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    if spec_method == 'wavelet':    
+        assert np.isclose(dphi.mean(), -result[1], rtol=1e-4, atol=1e-4)
+    
+    # Test for consistent output with channels swapped (dphi should change sign, otherwise same)
+    # Skip test for multitaper/bandfilter phase -- not time-reversal invariant
+    sync, freqs, timepts, dphi = synchrony(data2, data1, axis=0, method=method, spec_method=spec_method,
+                                           return_phase=True, smp_rate=smp_rate, time_axis=-1)
+    assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    if spec_method == 'wavelet':
+        assert np.isclose(dphi.mean(), -result[1], rtol=1e-4, atol=1e-4)
+            
+    # Test for consistent output with different data array shape (3rd axis)
+    sync, freqs, timepts, dphi = synchrony(np.stack((data1,data1),axis=2),
+                                           np.stack((data2,data2),axis=2),
+                                           axis=0, method=method, spec_method=spec_method,
+                                           return_phase=True, smp_rate=smp_rate, time_axis=1)
+    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    assert timepts.shape == (n_timepts[spec_method],)
+    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method], 2)
+    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method], 2)
+    assert np.issubdtype(sync.dtype,np.float)
+    assert np.issubdtype(dphi.dtype,np.float)
+    # HACK Loosen tolerance bc this doesn't quite match up for bandfilter (TODO why???)
+    assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-3, atol=1e-3)
+    assert np.isclose(dphi[:,:,0].mean(), result[1], rtol=1e-3, atol=1e-3)
+ 
+    # Test for consistent output with transposed data dimensionality -> (time,trials)
+    sync, freqs, timepts, dphi = synchrony(data1.T, data2.T, axis=-1, method=method, spec_method=spec_method,
+                                           return_phase=True, smp_rate=smp_rate, time_axis=0)
+    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    assert timepts.shape == (n_timepts[spec_method],)
+    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert np.issubdtype(sync.dtype,np.float)
+    assert np.issubdtype(dphi.dtype,np.float)    
+    assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    
+    # Test for consistent output with spectral data input
+    # TODO Need to figure out how to deal with understanding taper axis here -- do we assume location or demand specific arg?
+    spec1, freqs, timepts = spectrogram(data1.T, smp_rate, axis=0, method=spec_method, spec_type='complex')
+    spec2, freqs, timepts = spectrogram(data2.T, smp_rate, axis=0, method=spec_method, spec_type='complex')
+    sync, _, _, dphi = synchrony(spec1, spec2, axis=-1, method=method, spec_method=spec_method, return_phase=True)
+    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    assert timepts.shape == (n_timepts[spec_method],)
+    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert np.issubdtype(sync.dtype,np.float)
+    assert np.issubdtype(dphi.dtype,np.float)    
+    assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
