@@ -4,28 +4,27 @@ A module for analysis of neural oscillations and synchrony
 
 FUNCTIONS
 ### General spectral analysis ###
-spectrum            Complex spectrum (Fourier coefficients) of data
-spectrogram         Complex time-frequency transform (Fourier coeffs)
+spectrum            Frequency spectrum of data
+spectrogram         Time-frequency spectrogram of data
 power_spectrum      Power spectrum of data
 power_spectrogram   Power of time-frequency transform
-phase_spectrum      TODO?
 phase_spectrogram   Phase of time-frequency transform
 
 ### Multitaper spectral analysis ###
-multitaper_spectrum Multitaper (DPSS) Fourier spectrum
+multitaper_spectrum Multitaper (DPSS) frequency spectrum
 multitaper_spectrogram  Multitaper (DPSS) time-frequency spectrogram
 compute_tapers      Computes DPSS tapers for use in multitaper spectral analysis
 
 ### Wavelet spectral analysis ###
-wavelet_spectrum    TODO?
-wavelet_spectrogram Complex time-frequency continuous wavelet transform
+wavelet_spectrum    Wavelet-based frequency spectrum
+wavelet_spectrogram Time-frequency continuous wavelet transform
 compute_wavelets    Computes wavelets for use in wavelet spectral analysis
 wavelet_bandwidth   Computes time,frequency bandwidths for set of wavelets
 wavelet_edge_extent Computes extent of edge effects for set of wavelets
 
 ### Bandpass-filtering spectral analysis ###
-bandfilter_spectrum TODO?
-bandfilter_spectrogram Complex band-filtered, Hilbert-transformed time-freq(band)
+bandfilter_spectrum Band-filtered frequency spectrum
+bandfilter_spectrogram Band-filtered, Hilbert-transformed time-frequency of data
 set_filter_params   Sets filter coefficients for use in band-filtered analysis
 
 ### Field-field synchrony ###
@@ -52,7 +51,9 @@ pool_freq_bands     Averages spectral data within set of frequency bands
 pool_time_epochs    Averages spectral data within set of time epochs
 one_sided_to_two_sided Converts 1-sided Fourier transform output to 2-sided equivalent
     
-### Simulation/testing ###
+### Data simulation ###
+simulate_oscillation Generates simulated oscillation-in-noise data
+
 simulate_mvar        Simulates network activity with given connectivity
 network_simulation   Canned network simulations
 
@@ -66,11 +67,6 @@ Created on Thu Oct  4 15:28:15 2018
 
 @author: sbrincat
 """
-# TODO  Figure out how to switch temporal output (spectrum vs spectrogram,
-#       cont vs window vs epoch?) for each analysis. Code up missing functions:
-#       wavelet_spectrum, waveletSpikeSpectrogram, multitaperSpikeSpectrogram
-# TODO  Also option output signal type to ***Spectrum/ogram func's (complex/power/phase)?
-#       Same for synchrony funcs or stick with return_phase option?
 
 import os
 import time
@@ -3106,13 +3102,13 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
     return data
 
                 
-def simulate_mvar(coeffs, cov=None, n_timepts=100, n_trials=1, burnin=100):
+def simulate_mvar(coeffs, cov=None, n_timepts=100, n_trials=1, burnin=100, seed=None):
     """
     Simulates activity in a network with given connectivity coefficients and
     noise covariance, over the given number of time points, channels, and trials.
     Useful for testing code for measuring synchrony or causality.
 
-    data = simulate_mvar(coeffs,cov=None,n_timepts=100,n_trials=1,burnin=100)
+    data = simulate_mvar(coeffs,cov=None,n_timepts=100,n_trials=1,burnin=100,seed=None)
 
     ARGS
     coeffs      ([n_timepts,]n_lags,n_channels,n_channels) ndarray.
@@ -3128,12 +3124,16 @@ def simulate_mvar(coeffs, cov=None, n_timepts=100, n_trials=1, burnin=100):
     burnin      Scalar. Number of additional timepoints to include at start,
                 but remove from output, to account for burn-in of network dynamics.
 
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for fully random numbers.
+                
     RETURNS
     data        (n_timepts,n_trials,n_channels) ndarray. Simulated data
 
     ACKNOWLEDGMENTS Adapted slightly from spectral_connectivity:simulate_MVAR()
     """
-    # TODO Add way to easily set random seed for repeatability
+    if seed is not None: np.random.seed(seed)
+
     # Does network have stationary or time-varying connectivity matrices?
     is_stationary = coeffs.ndim < 4
     if is_stationary:   n_lags,n_channels,_ = coeffs.shape

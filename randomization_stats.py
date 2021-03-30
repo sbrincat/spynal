@@ -46,9 +46,10 @@ Created on Tue Jul 30 16:28:12 2019
 @author: sbrincat
 """
 # TODO  Parallelize resampling loops! (using joblib?)
-# TODO  Add option to return resamples as actual sequences (not iterators)
+# TODO  Add option to return resamples as actual sequences (not iterators)?
 
 from math import sqrt
+from warnings import warn
 import numpy as np
 
 
@@ -903,7 +904,6 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.3.10, 6.3
     """
-    # TODO There is a bug in this function, returning bogus results  
     # Convert string specifiers to callable functions
     stat_func    = _str_to_two_sample_stat(stat) # Statistic (includes default)
     compare_func = _tail_to_compare(tail)        # Tail-specific comparator
@@ -1020,7 +1020,7 @@ def one_way_test(data, labels, axis=0, method='permutation', **kwargs):
     return test_func(data, labels, axis=axis, **kwargs)
     
     
-def one_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups=None,
+def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
     Mass univariate permutation test on any arbitrary 1-way statistic with
@@ -1051,7 +1051,9 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups
                 'both'  : 2-tail test -- test for abs(stat_obs) > abs(stat_resmp)
                 'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
                 'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
-                Default: 'both' (2-tailed test)
+                Note: For F-test, only right-tailed test really makes sense bc F distn
+                only has positive values and right-sided taile
+                Default: 'right' (1-tailed test)
 
     groups      (n_groups,) array-like. List of labels for each group/level.
                 Default: set of unique values in <labels> (np.unique(labels))
@@ -1081,7 +1083,10 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups
 
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.7.1
-    """    
+    """
+    if (stat == 'F') and (tail != 'right'):
+        warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
+        
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_way_stat(stat)     # Statistic (includes default)
     compare_func = _tail_to_compare(tail)       # Tail-specific comparator
@@ -1204,7 +1209,7 @@ def two_way_test(data, labels, axis=0, method='permutation', **kwargs):
     return test_func(data, labels, axis=axis, **kwargs)
     
 
-def two_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups=None,
+def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
     Mass univariate permutation test on any arbitrary 2-way statistic with
@@ -1237,7 +1242,9 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups
                 'both'  : 2-tail test -- test for abs(stat_obs) > abs(stat_resmp)
                 'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
                 'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
-                Default: 'both' (2-tailed test)
+                Note: For F-test, only right-tailed test really makes sense bc F distn
+                only has positive values and right-sided taile                
+                Default: 'right' (1-tailed test)
 
     groups      [(n_groups(term),),] array-like. List of labels for each group/level,
                 for each model term.
@@ -1277,6 +1284,9 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='both', groups
         of groups/factor levels (ANOVA "cells") cf. recommendation in Manly book
     """
     # TODO  Add mechanism to auto-generate interaction term from factors (if interact arg==True)
+    if (stat == 'F') and (tail != 'right'):
+        warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
+    
     # Convert string specifier to callable function
     stat_func = _str_to_two_way_stat(stat)       # Statistic (includes default))
     compare_func = _tail_to_compare(tail)   # Tail-specific comparator
