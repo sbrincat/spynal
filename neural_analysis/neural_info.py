@@ -6,6 +6,7 @@ neural_info     A module for computing measures of neural information about
 
 
 FUNCTIONS
+### High-level information computation wrapper functions ###
 neural_info     Wrapper function computes neural information using any given method
 neural_info_2groups Wrapper function computes neural info on two data distributions
 
@@ -46,9 +47,12 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
-from patsy import DesignMatrix, dmatrix
+from patsy import DesignMatrix
 
 
+# =============================================================================
+# High-level neural information wrapper functions
+# =============================================================================
 def neural_info(labels, data, axis=0, method='pev', **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
@@ -139,12 +143,12 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 # =============================================================================
 # Mutual information analysis
 # =============================================================================
-def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
+def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, groups=None):
     """
     Mass-univariate mutual information between set of responses 
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
     
-    info = mutual_information(labels,data,axis=0,resp_entropy=None,groups=None)
+    info = mutual_information(labels,data,axis=0,bins='fd',resp_entropy=None,groups=None)
 
     Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
@@ -172,6 +176,13 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
+    bins        (n_bins,2) array-like | string. Non-integer data must be binned for
+                mutual information computation. Bins can be given either explicitly, as an
+                array of bin [left,right] edges, or as a string indicating the type of 
+                binning rule to use in np.histogram_bin_edges() (see there for details).
+                Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
+                Data is binned only if it is non-integer-valued or if a value is input for bins.
+                
     resp_entropy   (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
 
@@ -183,29 +194,56 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     info        (...,1,...) ndarray. Mutual information between responses 
                 and experimental conditions (in bits). 
                 
-    REFERENCE     Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1                
+    REFERENCE   Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
+    (binning)   https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
+    (binning)   https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
     """
     # TODO  Recode for > 2 groups
     labels = np.asarray(labels)
-    
-    # Find set of unique group labels in <labels>
-    if groups is None: groups = np.unique(labels)
-
-    assert len(groups) == 2, \
-        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)
 
     # Reshape data array -> (n_observations,n_data_series) matrix
     data, data_shape = _reshape_data(data,axis)
     if resp_entropy is not None:
         resp_entropy,_ = _reshape_data(resp_entropy,axis)
-    
-    n_series = data.shape[1] if data.ndim > 1 else 1
 
-    # Remove any observations not represented in <groups>
-    idxs = (labels == groups[0]) | (labels == groups[1])
-    if idxs.sum() != data.shape[0]:
-        labels  = labels[idxs]
-        data    = data[idxs,:]
+    n_series = data.shape[1] if data.ndim > 1 else 1
+    
+    # Find set of unique group labels in <labels> if not explicitly set
+    if groups is None:
+        groups = np.unique(labels)
+
+    # If groups set in args, remove any observations not represented in <groups>
+    else:
+        idxs = np.in1d(labels,groups)
+        if idxs.sum() != data.shape[0]:
+            labels  = labels[idxs]
+            data    = data[idxs,...]
+
+    assert len(groups) == 2, \
+        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)    
+
+    # Bin-discretize data if it is not already integer-valued OR if value is input for bins
+    do_bins = (bins is not None) or \
+              (np.issubdtype(data.dtype,np.float) and not np.allclose(np.round(data), data))
+    
+    if do_bins:
+        # If bins are given explicitly, reshape them as needed
+        if isinstance(bins, (list, tuple, np.ndarray)):
+            bins = np.asarray(bins)
+            assert (bins.ndim == 2) and (bins.shape[1] == 2), \
+                ValueError("bins must be given as (n_bins,2) array of [left,right] edges (or as string)")
+            
+            # Convert bins to format expected by np.digitize = edges of all bins in 1 series
+            bins_ = np.hstack((bins[:,0],bins[-1,-1]))
+        
+        # Otherwise, use some heuristic rule to set bins based on data
+        else:            
+           if bins is None: bins = 'fd'
+           bins_ = np.histogram_bin_edges(data.flatten(), bins=bins)
+        
+        # Bin the data. Note: this actually returns bin numbers for each datapoint, 
+        # but MI treats values categorically, so doesn't matter    
+        data = np.digitize(data, bins_)
 
     idxs1 = labels == groups[0]
     idxs2 = labels == groups[1]
@@ -220,9 +258,9 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
     Ps1 = n1/N                  # P(stimulus==s1)
     Ps2 = n2/N                  # P(stimulus==s2)
             
-    info = np.empty((1,n_series))
+    info = np.empty((n_series,))
   
-    for i_series in range(n_series):    
+    for i_series in range(n_series):
         data_series = data[:,i_series] if n_series > 1 else data.squeeze()
 
         # Compute total response entropy H (if not input)
@@ -254,17 +292,18 @@ def mutual_information(labels, data, axis=0, resp_entropy=None, groups=None):
         # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
         info[i_series] = H - Hnoise
 
-    info = _unreshape_data(info,data_shape,axis=axis)
+    # Pre-pend singleton axis to make info expected (1,n_series) shape
+    info = _unreshape_data(info[np.newaxis,:],data_shape,axis=axis)
         
     return info
 
 
-def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
+def mutual_information_2groups(data1, data2, axis=0, bins=None, resp_entropy=None):
     """
     Mass-univariate mutual information between set of responses 
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
         
-    info = mutual_information_2groups(data1,data2,axis=0,resp_entropy=None)
+    info = mutual_information_2groups(data1,data2,axis=0,bins='fd',resp_entropy=None)
 
     Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
@@ -279,9 +318,9 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     fashion across data series in all other data dimensions (channels, time points, 
     frequencies, etc.).
     
-    Note: For convenience, mutual_information() is also provided as a wrapper around this
-    function that accepts standard data,label arguments.
-    
+    Note: This is a wrapper around mutual_information(), which accepts standard
+    data,label arguments
+        
     ARGS
     data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
                 Sets of values for each of two distributions to be compared.  
@@ -289,9 +328,15 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
+    bins        (n_bins,2) array-like | string. Non-integer data must be binned for
+                mutual information computation. Bins can be given either explicitly, as an
+                array of bin [left,right] edges, or as a string indicating the type of 
+                binning rule to use in np.histogram_bin_edges() (see there for details).
+                Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
+                Data is binned only if it is non-integer-valued or if a value is input for bins.
+                
     resp_entropy  (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
-
 
     RETURNS
     info        (...,1,...) ndarray. Mutual information between responses 
@@ -301,71 +346,14 @@ def mutual_information_2groups(data1, data2, axis=0, resp_entropy=None):
     """
     n1 = data1.shape[axis]
     n2 = data2.shape[axis]
-    N  = n1 + n2
-
     assert (n1 != 0) and (n2 != 0), \
         "mutual_information: Data contains no observations (trials) for one or more groups"
 
-    # Reshape data arrays -> (n_observations,n_data_series) matrix
-    data1, data1_shape = _reshape_data(data1,axis)
-    data2, data2_shape = _reshape_data(data2,axis)
-    if resp_entropy is not None:
-        resp_entropy,_ = _reshape_data(resp_entropy,axis)
-
-    if data1.ndim > 1:
-        n_series = data1.shape[1]
-                    
-        assert data1.shape[1] == data2.shape[1], \
-            "mutual_information: Data distributions to compare must have same number of data series (timepts,freqs,channels,etc.) \
-             (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
-    else:
-        n_series = 1
-        
-    # Stimulus probabilities
-    Ps1 = n1/N                  # P(stimulus==s1)
-    Ps2 = n2/N                  # P(stimulus==s2)
-            
-    info = np.empty((1,n_series))
-  
-    for i_series in range(n_series):    
-        data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
-        data2_series = data2[:,i_series] if n_series > 1 else data2.squeeze()
-
-        # Compute total response entropy H (if not input)
-        if resp_entropy is None:
-            # Concatenate data from both conditions together, and find all unique data values
-            data_pooled = np.hstack((data1_series, data2_series))
-            
-            # Response probability distributions
-            _,counts    = np.unique(data_pooled, return_counts=True)
-            Pr          = counts / N            # P(response==r)
-
-            # Response entropy (Dayan & Abbott, eqn. 4.3)
-            H   = entropy(Pr)
-
-        else:
-            H   = resp_entropy[i_series]
-        
-        # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
-        # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
-        _,counts    = np.unique(data1, return_counts=True)
-        Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
-        _,counts    = np.unique(data2, return_counts=True)
-        Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
-                
-        # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
-        Hs1     = entropy(Prs1)
-        Hs2     = entropy(Prs2)
+    labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
     
-        # Noise entropy (Dayan & Abbott, eqn. 4.6)
-        Hnoise  = Ps1*Hs1 + Ps2*Hs2
-
-        # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
-        info[i_series] = H - Hnoise
-
-    info = _unreshape_data(info,data1_shape,axis=axis)
-        
-    return info
+    return mutual_information(labels, np.concatenate((data1,data2), axis=axis),
+                              axis=axis, bins=bins, resp_entropy=resp_entropy, groups=[0,1])
+    
     
   
 # =============================================================================
@@ -495,7 +483,7 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     else:
         n_series = 1
         
-    roc_area = np.empty((1,n_series))        
+    roc_area = np.empty((n_series,))        
   
     for i_series in range(n_series):    
         data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
@@ -524,7 +512,8 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     # If desired, calculate absolute/unsigned area under ROC metric
     if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
   
-    roc_area = _unreshape_data(roc_area,data1_shape,axis=axis)
+    # Pre-pend singleton axis to make info expected (1,n_series) shape
+    roc_area = _unreshape_data(roc_area[np.newaxis,:],data1_shape,axis=axis)
         
     return roc_area
   
@@ -660,6 +649,9 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
 
     # Return unsigned (absolute) d', if requested
     if not signed: d = np.abs(d)
+
+    # For scalar info (vector data), extract value from scalar array -> float for output
+    if d.size == 1: d = d.item()
 
     return d
   
@@ -848,21 +840,31 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         mu  (...,n_groups,...). Group mean for each group/level
         n   (...,n_groups,). Number of observations (trials) in each group/level
     """
-    # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
-    n_obs,n_series = data.shape
-
     assert (labels.ndim == 1) or (labels.shape[1] == 1), \
             "labels should have only a single column for anova1 model (it has %d)" \
             % labels.shape[1]
+    
+    # Reshape data array data -> (n_observations,n_data_series) matrix
+    data, data_shape = _reshape_data(data,axis)
+    
+    # Find set of unique group labels in list of labels
+    if groups is None:
+        groups = np.unique(labels)
+        
+    # Remove any observations not represented in <groups>
+    else:
+        idxs = np.in1d(labels,groups)
+        if idxs.sum() != data.shape[0]:
+            labels  = labels[idxs]
+            data    = data[idxs,:]
+        
+    n_groups = len(groups)        
+    n_obs,n_series = data.shape
+
     assert labels.shape[0] == n_obs, \
             "labels and data array should have same number of rows (%d != %d)" \
             % (labels.shape[0], n_obs)
-
-    # Find set of unique group labels in list of labels
-    if groups is None: groups = np.unique(labels)
-    n_groups = len(groups)
-
+        
     # Compute mean for each group (and for each data series)
     n = np.empty((n_groups,))
     mu = np.empty((n_groups,n_series))
@@ -1426,7 +1428,6 @@ def _reshape_data(data, axis=0):
     data_shape = data.shape         # Shape of original data
     data_ndim  = len(data_shape)    # Number of dimensions in original data
 
-
     if ~data.flags.c_contiguous:
         # If observation axis != 0, permute axis to make it so
         if axis != 0:       data = np.moveaxis(data,axis,0)
@@ -1483,12 +1484,16 @@ def _unreshape_data(data, data_shape, axis=0):
         shape = (axis_len,*data_shape[np.arange(data_ndim) != axis_])
         data = np.reshape(data,shape,order='F')
 
-    # Squeeze (n_obs,1) array back down to 1d (n_obs,) vector
-    elif data_ndim == 1:  data = np.squeeze(data)
+    # Squeeze (n_obs,1) array back down to 1d (n_obs,) vector, 
+    #  and extract value from scalar array -> float
+    elif data_ndim == 1:
+        data = np.squeeze(data)
+        if data.size == 1: data = data.item()
 
     # If observation axis wasn't 0, permute axis back to original position
-    if axis_ != 0: data = np.moveaxis(data,0,axis_)
-
+    if (axis_ != 0) and isinstance(data,np.ndarray):
+        data = np.moveaxis(data,0,axis_)
+    
     return data
 
 
@@ -1502,200 +1507,3 @@ def _unsorted_unique(x):
     x    = np.asarray(x)
     idxs = np.unique(x,return_index=True)[1]
     return x[np.sort(idxs)]
-
-
-#==============================================================================
-# Testing functions
-#==============================================================================
-def test_info(method, test='gain', values=None, arg_type='label', n_reps=100,
-              plot=False, plot_dir=None, **kwargs):
-    """
-    Basic testing for functions estimating neural information.
-    
-    Generates synthetic spike rate data, estimates information using given method,
-    and compares estimated to expected values.
-    
-    info,sd = test_info(method,test='gain',values=None,arg_type='label',n_reps=100,
-                        plot=False,plot_dir=None, **kwargs)
-                              
-    ARGS
-    method  String. Name of information function to test:
-            'pev' | 'anova1' | 'anova2' | 'regress'
-            
-    test    String. Type of test to run. Default: 'gain'. Options:
-            'gain'  Tests multiple values between-condition rate difference (gain)
-                    Checks for monotonically increasing information
-            'n'     Tests multiple values of number of trials (n)
-                    Checks that information doesn't vary with n.                    
-            'bias'  Tests multiple n values with 0 btwn-cond difference
-                    Checks that information is not > 0 (unbiased)
-            'n_conds' Tests multiple values for number of conditions
-                    (no actual checking, just to see behavior of info measure)
-            
-    values  (n_values,) array-like. List of values to test. 
-            Interpretation and defaults are test-specific:
-            'gain'  Btwn-condition rate differences (gains). Default: [1,2,5,10,20]
-            'n'     Trial numbers. Default: [25,50,100,200,400,800]
-            
-    arg_type String. Which input-argument version of info computing function to use:
-            'label'     : Standard version with labels,data arguments [default]
-            '2groups'   : Binary contrast version with data1,data2 arguments
-    
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
-            
-    plot    Bool. Set=True to plot test results. Default: False
-    
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
-        
-    **kwargs All other keyword args passed to information estimation function
-    
-    RETURNS
-    info    (n_values,) ndarray. Estimated information for each tested value
-    sd      (n_values,) ndarray. Across-run SD of information for each tested value
-    
-    ACTION
-    Throws an error if any estimated information value is too far from expected value
-    If <plot> is True, also generates a plot summarizing estimated information
-    """    
-    from spike_analysis import simulate_spike_rates
-    
-    test = test.lower()
-    method = method.lower()
-    arg_type = arg_type.lower()
-    
-    assert arg_type in ['label','labels','2groups'], \
-        ValueError("arg_type value %s not supported. Should be 'label' | '2groups'" % arg_type)
-    if arg_type == '2groups':
-        assert test != 'n_conds', \
-            ValueError("Cannot run 'n_conds' test of condition number with '2groups' arg_type")
-    
-    # Set defaults for tested values and set up rate generator function depending on <test>
-    if test == 'gain':
-        values = [1,2,5,10,20] if values is None else values
-        gen_rates = lambda gain,seed: simulate_spike_rates(gain=float(gain),offset=5.0,
-                                                           n_conds=2,n_trials=1000,
-                                                           seed=seed)
-        
-    elif test in ['n','n_trials','bias']:
-        values = [25,50,100,200,400,800] if values is None else values
-        gain = 0.0 if test == 'bias' else 5.0
-        gen_rates = lambda n_trials,seed: simulate_spike_rates(gain=gain,offset=5.0,
-                                                               n_conds=2,n_trials=n_trials,
-                                                               seed=seed)
-
-    elif test == 'n_conds':
-        values = [2,4,8] if values is None else values
-        gen_rates = lambda n_conds,seed: simulate_spike_rates(gain=10.0,offset=5.0,
-                                                              n_conds=n_conds,n_trials=1000,
-                                                              seed=seed)
-        
-    else:
-        raise ValueError("Unsupported value '%s' set for <test>" % test)
-        
-    method_ = method
-            
-    # Deal with special-case linear models -- funnel into pev function 
-    if method in ['pev','regress','anova1','anova2','anovan']:
-        method_ = 'pev'
-        # For PEV, additional argument to neural_info() specifying linear model to use
-        if method == 'pev': kwargs.update({'model':'anova1'})
-        else:               kwargs.update({'model':method})
-        
-    # For these signed binary methods, reverse default grouping bc in stimulated rates,
-    # group1 > group0, but signed info assumes opposite preference
-    if method in ['dprime','d','cohensd', 'auroc','roc','aucroc','auc']:
-        groups = [1,0]
-        if (arg_type != '2groups') and ('groups' not in kwargs): kwargs.update({'groups':[1,0]})
-    else:
-        groups = [0,1]
-    
-    # UNCOMMENT to test string labels: 
-    # string_labels = np.asarray(['cond1','cond2'])
-    # groups = string_labels[np.asarray(groups)]
-    # if 'groups' in kwargs: kwargs['groups'] = groups
-                           
-    # Expected baseline value for no btwn-condition = 0.5 for AUROC, 0 for other methods
-    baseline = 0.5 if method in ['auroc','roc','aucroc','auc'] else 0
-                 
-    info = np.empty((len(values),n_reps))
-        
-    for i,value in enumerate(values):        
-        for seed in range(n_reps):
-            # Generate simulated spike rates with given test value and random seed
-            rates,labels = gen_rates(value,seed)
-                        
-            # UNCOMMENT to test string labels: labels = string_labels[labels]
-
-            # For regression model, convert labels list -> design matrix, append intercept term 
-            if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
-                            
-            if arg_type == '2groups':
-                info[i,seed] = neural_info_2groups(rates[labels==groups[0]],rates[labels==groups[1]],
-                                                   method=method_,**kwargs)
-            else:                            
-                info[i,seed] = neural_info(labels,rates,method=method_,**kwargs)
-            
-    # Compute mean and std dev across different reps of simulation            
-    sd = info.std(axis=1,ddof=0)
-    info = info.mean(axis=1)
-    
-    if plot:
-        plt.figure()
-        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
-        plt.errorbar(values, info, sd, marker='o')
-        xlabel = 'n' if test == 'bias' else test
-        plt.xlabel(xlabel)
-        plt.ylabel("Information (%s)" % method_)
-        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'info-summary-%s-%s' % (method,test)))
-       
-    # Determine if test actually produced the expected values
-    # 'gain' : Test if information increases monotonically with gain
-    if test == 'gain':
-        assert (np.diff(info) > 0).all(), \
-            AssertionError("Information does not increase monotonically with between-condition rate difference")
-                                
-    # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
-    elif test in ['n','n_trials']:
-        assert info.ptp() < sd.max(), \
-            AssertionError("Information has larger than expected range across n's (likely biased by n)")
-        
-    # 'bias': Test if information is not > baseline if gain = 0, for varying n
-    elif test == 'bias':
-        assert ((info - baseline) < sd).all(), \
-            AssertionError("Information is above baseline for no rate difference between conditions")
-         
-    return info, sd
-
-
-def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs):
-    """ 
-    Runs a battery of given tests on given neural information computation methods
-    
-    info_test_battery(methods=['pev','dprime','auroc','mutual_information'], tests=['gain','n','bias'], **kwargs)
-    
-    ARGS
-    methods     Array-like. List of neural information methods to test.
-                Default: ['pev','dprime','auroc','mutual_information'] (all supported methods)
-                
-    tests       Array-like. List of tests to run.
-                Note: certain combinations of methods,tests are skipped, as they are not expected to pass
-                (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
-                Default: ['gain','n','bias'] (all supported tests)
-                
-    kwargs      Any other kwargs passed directly to test_info()
-    
-    ACTION
-    Throws an error if any estimated information value for any (method,test) is too far from expected value    
-    """
-    if isinstance(methods,str): methods = [methods]
-    if isinstance(tests,str): tests = [tests]
-    
-    for test in tests:
-        for method in methods:
-            print("Running %s test on %s" % (test,method))
-            # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
-            if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']): continue
-            
-            test_info(method, test=test, **kwargs)
-            print('PASSED')
-            
