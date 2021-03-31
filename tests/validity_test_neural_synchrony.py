@@ -27,6 +27,7 @@ from scipy.stats import bernoulli
 from neural_synchrony import simulate_oscillation, simulate_multichannel_oscillation, \
                              power_spectrogram, burst_analysis, synchrony, amp_phase_to_complex
 
+# TODO  Run tests of burst_analysis
 
 def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=None, seed=1,
                amp=5.0, freq=32, phi=0, noise=0.5, n=1000, time_range=3.0, smp_rate=1000, 

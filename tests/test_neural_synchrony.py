@@ -10,6 +10,8 @@ from ..neural_synchrony import simulate_oscillation, simulate_multichannel_oscil
                                spectrogram, power_spectrogram, phase_spectrogram, \
                                synchrony
 
+# TODO  Tests for burst_analysis
+
 # =============================================================================
 # Fixtures for generating simulated data
 # =============================================================================

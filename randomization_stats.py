@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-A module for nonparametric randomization, permutation, and bootstrap statistics
+randomization_stats     A module for nonparametric randomization, permutation, and bootstrap statistics
 
 FUNCTIONS
 ### One-sample tests (analogs of 1-sample t-test) ###
@@ -47,6 +47,8 @@ Created on Tue Jul 30 16:28:12 2019
 """
 # TODO  Parallelize resampling loops! (using joblib?)
 # TODO  Add option to return resamples as actual sequences (not iterators)?
+# TODO  How to pass custom function to paired_sample tests, when they're actually evaluated as 1-samples?
+# TODO  How to enforce dimensionality of custom functions (esp re: keepdims)?
 
 from math import sqrt
 from warnings import warn

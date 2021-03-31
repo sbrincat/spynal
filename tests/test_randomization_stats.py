@@ -4,11 +4,11 @@ import numpy as np
 
 from scipy.stats import norm
 
-from ..randomization_stats import one_sample_test, paired_sample_test, paired_sample_test_labels, \
-                                  two_sample_test, two_sample_test_labels, one_way_test, two_way_test, \
+from ..randomization_stats import one_sample_tstat, one_sample_test, \
+                                  paired_tstat, paired_sample_test, paired_sample_test_labels, \
+                                  two_sample_tstat, two_sample_test, two_sample_test_labels, \
+                                  one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
                                   bootstrap_confints
-
-# TODO  Test other evaluation stats, including custom function; other tails
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -171,7 +171,15 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     assert np.isclose(stat_obs, result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
     
-
+    # Test for consistent output with custom stat function (but setting it equal to defaults)
+    stat_func = lambda data: one_sample_tstat(data, axis=0, mu=0)
+    p, stat_obs, stat_resmp = one_sample_test(data, axis=0, method=method, stat=stat_func, seed=1,
+                                              n_resamples=n_resamples, return_stats=True)
+    assert np.isclose(p[0,0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
+    
+    
 @pytest.mark.parametrize('stat, method, result_p, result_obs, result_resmp',
                          [('paired', 'permutation', 0.05, -2.97, -0.35),
                           ('paired', 'bootstrap', 0.05, -2.97, -0.54),
@@ -241,9 +249,9 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
         
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = test_func(data1.reshape((n,int(n_chnls/2),int(n_chnls/2))),
-                                              data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),
-                                              axis=0, method=method, seed=1,
-                                              n_resamples=n_resamples, return_stats=True)
+                                        data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),
+                                        axis=0, method=method, seed=1,
+                                        n_resamples=n_resamples, return_stats=True)
     assert p.shape == (1,n_chnls/2,n_chnls/2)
     assert stat_obs.shape == (1,n_chnls/2,n_chnls/2)
     assert stat_resmp.shape == (n_resamples-1,n_chnls/2,n_chnls/2)    
@@ -253,7 +261,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
                 
     # Test for consistent output with transposed data dimensionality
     p, stat_obs, stat_resmp = test_func(data1.T, data2.T, axis=-1, method=method, seed=1,
-                                              n_resamples=n_resamples, return_stats=True)
+                                        n_resamples=n_resamples, return_stats=True)
     assert p.shape == (n_chnls,1)
     assert stat_obs.shape == (n_chnls,1)
     assert stat_resmp.shape == (n_chnls,n_resamples-1)    
@@ -263,14 +271,25 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     
     # Test for consistent output with vector-valued data
     p, stat_obs, stat_resmp = test_func(data1[:,0], data2[:,0], axis=0, method=method, seed=1,
-                                              n_resamples=n_resamples, return_stats=True)
+                                        n_resamples=n_resamples, return_stats=True)
     assert isinstance(p,float)
     assert isinstance(stat_obs,float)
     assert stat_resmp.shape == (n_resamples-1,)    
     assert np.isclose(p, result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs, result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
-                                                
+              
+    # Test for consistent output with custom stat function (but setting it equal to defaults)
+    if stat == 'paired':    stat_func = lambda data1,data2: paired_tstat(data1, data2, axis=0, d=0)
+    else:                   stat_func = lambda data1,data2: two_sample_tstat(data1, data2, axis=0, d=0)
+    # TEMP HACK Skip this for paired tests
+    if stat == 'two_sample':
+        p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, stat=stat_func, seed=1,
+                                            n_resamples=n_resamples, return_stats=True)
+        assert np.isclose(p[0,0], result_p, rtol=1e-2, atol=1e-2)
+        assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
+        assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
+                                                    
         
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('permutation', 0.05, 11.50, 0.41)])                        
@@ -287,7 +306,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     # Only test values for 1st simulated channel for simplicity    
     p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, seed=1,
                                            n_resamples=n_resamples, return_stats=True)
-    print(p[0,0], stat_obs[0,0], stat_resmp[:,0].mean())
+    # print(p[0,0], stat_obs[0,0], stat_resmp[:,0].mean())
     assert p.shape == (1,n_chnls)
     assert stat_obs.shape == (1,n_chnls)
     assert stat_resmp.shape == (n_resamples-1,n_chnls)    
@@ -355,6 +374,14 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.isclose(stat_obs, result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
     
+    # Test for consistent output with custom stat function (but setting it equal to defaults)
+    stat_func = lambda data,labels: one_way_fstat(data, labels, axis=0)
+    p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, stat=stat_func,
+                                           seed=1, n_resamples=n_resamples, return_stats=True)
+    assert np.isclose(p[0,0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
+        
     
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('permutation', (0.05,0.05,0.4), (3.10,24.91,0.18), (0.25,0.19,0.20))])                        
@@ -372,7 +399,7 @@ def test_two_way_test(two_way_data, method, result_p, result_obs, result_resmp):
     # Only test values for 1st simulated channel for simplicity    
     p, stat_obs, stat_resmp = two_way_test(data, labels, axis=0, method=method, seed=1,
                                            n_resamples=n_resamples, return_stats=True)
-    print(np.round(p[:,0],2), np.round(stat_obs[:,0],2), np.round(stat_resmp[:,0,:].mean(axis=-1),2))
+    # print(np.round(p[:,0],2), np.round(stat_obs[:,0],2), np.round(stat_resmp[:,0,:].mean(axis=-1),2))
     assert p.shape == (n_terms,n_chnls)
     assert stat_obs.shape == (n_terms,n_chnls)
     assert stat_resmp.shape == (n_terms,n_chnls,n_resamples-1)
@@ -435,6 +462,14 @@ def test_two_way_test(two_way_data, method, result_p, result_obs, result_resmp):
     assert stat_obs.shape == (n_terms-1,n_chnls)
     assert stat_resmp.shape == (n_terms-1,n_chnls,n_resamples-1)
     
+    # Test for consistent output with custom stat function (but setting it equal to defaults)
+    stat_func = lambda data,labels: two_way_fstat(data, labels, axis=0)
+    p, stat_obs, stat_resmp = two_way_test(data, labels, axis=0, method=method, stat=stat_func,
+                                           seed=1, n_resamples=n_resamples, return_stats=True)
+    assert np.allclose(p[:,0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.allclose(stat_obs[:,0], result_obs, rtol=1e-2, atol=1e-2)
+    assert np.allclose(stat_resmp[:,0,:].mean(axis=-1), result_resmp, rtol=1e-2, atol=1e-2)
+        
     
 @pytest.mark.parametrize('method, result_ci, result_obs, result_resmp',
                          [('bootstrap', (8.53,12.18), 10.35, 10.36)])                        
@@ -453,6 +488,7 @@ def test_bootstrap_confints(one_sample_data, method, result_ci, result_obs, resu
     assert ci.shape == (2,n_chnls)
     assert stat_obs.shape == (1,n_chnls)
     assert stat_resmp.shape == (n_resamples,n_chnls)
+    print(ci.shape, stat_obs.shape, stat_resmp.shape)    
     print(ci[:,0], stat_obs[0,0], stat_resmp[:,0].mean())
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
@@ -494,4 +530,13 @@ def test_bootstrap_confints(one_sample_data, method, result_ci, result_obs, resu
     assert np.isclose(stat_obs, result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
     
+    # Test for consistent output with custom stat function (but setting it equal to defaults)
+    stat_func = lambda data: np.mean(data, axis=0, keepdims=True)
+    ci, stat_obs, stat_resmp = bootstrap_confints(data, axis=0, stat=stat_func, n_resamples=n_resamples,
+                                                  seed=1, return_stats=True)
+    print(ci.shape, stat_obs.shape, stat_resmp.shape)
+    print(ci[:,0], stat_obs[0,0], stat_resmp[:,0].mean())
+    assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
     

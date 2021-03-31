@@ -27,6 +27,8 @@ bandfilter_spectrum Band-filtered frequency spectrum
 bandfilter_spectrogram Band-filtered, Hilbert-transformed time-frequency of data
 set_filter_params   Sets filter coefficients for use in band-filtered analysis
 
+burst_analysis      Computes oscillatory burst analysis of Lundqvist et al 2016
+
 ### Field-field synchrony ###
 synchrony           Synchrony between pair of channels using given method
 
@@ -2679,7 +2681,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     data    (...,n_freqbands,...) ndarray | xarray DataArray.
             Data with values averaged within each of given frequency bands
     """
-    # todo  Deal with more complicated band edge situations (currently assumed non-overlapping)
+    # TODO  Deal with more complicated band edge situations (currently assumed non-overlapping)
 
     # Convert list of frequency band ranges to {'name':freq_range} dict
     if not isinstance(bands,dict):
@@ -2692,20 +2694,22 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     # xarray: Pool values in bands using DataArray groupby_bins() method
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
-        # TODO Generalize to allow frequency dim to be named 'frequency'
-        if freqs is None: freqs = data.coords['freq'].values
-        # Find 'freq' dimension if not given explicitly
-        if axis is None:  axis = (dims == 'freq').nonzero()[0][0]
+        # Find frequency dimension if not given explicitly
+        if axis is None:  axis = ((dims == 'freq') | (dims == 'frequency')).nonzero()[0][0]
+        freq_dim = dims[axis]   # Name of frequency dim
+                
+        if freqs is None: freqs = data.coords[freq_dim].values
+
         # Permute array dims so freq is 1st dim
         if axis != 0:
-            temp_dims = np.concatenate(([dims[axis]], dims[dims != 'freq']))
+            temp_dims = np.concatenate(([dims[axis]], dims[dims != freq_dim]))
             data = data.transpose(*temp_dims)
         else:
             temp_dims = dims
 
         # Initialize new DataArray with freq dim = freq bands, indexed by band names
         coords = {dim : data.coords[dim].values for dim in data.coords}
-        coords['freq'] = list(bands.keys())
+        coords[freq_dim] = list(bands.keys())
         data_shape = (len(bands), *data.shape[1:])
         band_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
                                  dims=temp_dims, coords=coords)

@@ -13,8 +13,7 @@ FUNCTIONS
 test_rate           Contains tests of spike rate estimation functions
 rate_test_battery   Runs standard battery of tests of rate estimation functions
 """
-# TODO  Generalize testing framework cf other validity test functions
-# TODO  Code up n_trials test, test battery function
+# TODO  Generalize testing framework cf other validity test functions (test battery function, n_trials test)
 import os
 import time
 from math import sqrt
