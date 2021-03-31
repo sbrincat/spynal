@@ -1,11 +1,11 @@
 # neural_analysis
 Tools for basic analysis of systems/cogntive neurophysiology data in Python
 
-Features include:
+Features include:  
 Simple interface: no object-oriented programming or complicated data/params structures  
 No buy-in necessary: can use specific functionality w/o requiring an entire processing chain  
-Simple, uniform Matlab-like function call structure: analysis(data, axis, extra_param=default)
-Vectorized mass-univariate analysis: input data for all channels at once, no for loop needed
+Simple, uniform Matlab-like function call structure: analysis(data, axis, extra_param=default)  
+Vectorized mass-univariate analysis: input data for all channels at once, no for loop needed  
 
 Package includes the following modules:  
 spike_analysis -- Basic analyses of neural spiking activity  
