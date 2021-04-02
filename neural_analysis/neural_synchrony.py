@@ -51,6 +51,7 @@ remove_evoked       Removes phase-locked evoked potentials from signals
 ### Postprocesssing ###
 pool_freq_bands     Averages spectral data within set of frequency bands
 pool_time_epochs    Averages spectral data within set of time epochs
+one_over_f_norm     Normalizes to correct for 1/f distribution of spectral power
 one_sided_to_two_sided Converts 1-sided Fourier transform output to 2-sided equivalent
     
 ### Data simulation ###
@@ -72,6 +73,7 @@ Created on Thu Oct  4 15:28:15 2018
 
 import os
 import time
+from warnings import warn
 from math import floor,ceil,log2,pi,sqrt
 from collections import OrderedDict
 from multiprocessing import cpu_count
@@ -901,7 +903,7 @@ def compute_wavelets(n, smp_rate, freqs=2**np.arange(1,7.5,0.25),
         if do_fft:
             wavelets = norm*np.exp(exponent) * (k > 0)
         else:
-            raise "non-FFT wavelet output not coded up yet (TODO)"
+            raise NotImplementedError("non-FFT wavelet output not coded up yet (TODO)")
 
     else:
         raise ValueError("Unsupported value '%s' given for <wavelet>." \
@@ -2198,22 +2200,29 @@ def frequency_plot_settings(freqs):
     """ Returns settings for plotting a frequency axis: plot freqs, ticks, tick labels """
     freq_scale = _infer_freq_scale(freqs)
     
-    # For log-sampled freqs, plot in log(freq) but label with actual freqs
+    # For log-sampled freqs, plot in log2(freq) but label with actual freqs
     if freq_scale == 'log':
-        freqs           = np.log2(freqs)
+        freqs           = np.log2(freqs)            # Log2-transform plotting freqs
         fmin            = ceil(freqs[0])
         fmax            = floor(freqs[-1])
-        freq_ticks      = np.arange(fmin,fmax+1)
+        freq_ticks      = np.arange(fmin,fmax+1)    # Plot ticks every octave: [2,4,8,16,...]
         freq_tick_labels= 2**np.arange(fmin,fmax+1)
         
     # For linear-sampled freqs, just plot in actual freqs    
-    else:
-        fmin            = ceil(freqs[0]/10.0)*10.0
+    elif freq_scale == 'linear':
+        fmin            = ceil(freqs[0]/10.0)*10.0  # Plot ticks every 10 Hz
         fmax            = floor(freqs[-1]/10.0)*10.0                
         freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
-        freq_tick_labels= freq_ticks           
+        freq_tick_labels= freq_ticks
+        
+    # For arbitrary unevenly-sampled freqs (eg bandfilter or burst analyis),
+    # plot freqs categorically as range 0 - n_freqs-1, but label with actual freqs 
+    else:
+        freq_tick_labels= freqs
+        freq_ticks      = np.arange(len(freqs))
+        freqs           = np.arange(len(freqs))
 
-    return freqs,freq_ticks,freq_tick_labels
+    return freqs, freq_ticks, freq_tick_labels
 
 
 # =============================================================================
@@ -2670,11 +2679,12 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
     axis    Int. Data axis corresponding to frequency.
             Only needed if <data> is not an xarray DataArray
+            with dimension named 'freq' or 'frequency'
 
     freqs   (n_freqs,) array-like. Frequency sampling in <data>.
             Only needed if <data> is not an xarray DataArray
 
-    func    String | calable. Function to apply to each freqBand.
+    func    String | callable. Function to apply to each freqBand.
             Default: mean
 
     RETURNS
@@ -2824,6 +2834,52 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
     return epoch_data
 
 
+def one_over_f_norm(data, axis=None, freqs=None, exponent=1.0):
+    """
+    Normalizes for ~ 1/frequency**alpha baseline distribution of power
+    by multiplying by frequency, raised to a given exponent
+
+    data = one_over_f_norm(data, axis=None, freqs=None, exponent=1)
+
+    ARGS
+    data    (...,n_freqs,...) ndarray | xarray DataArray.
+            Raw power data to normalize. Any arbitary shape.
+
+    axis    Int. Data axis corresponding to frequency.
+            Only needed if <data> is not an xarray DataArray
+            with dimension named 'freq' or 'frequency'
+
+    freqs   (n_freqs,) array-like. Frequency sampling in <data>.
+            Only needed if <data> is not an xarray DataArray
+
+    exponent Float. Exponent ('alpha') to raise freqs to for normalization.
+            Default: 1
+
+    RETURNS
+    data    1/f normalized data. Same shape as input.
+    """
+    if HAS_XARRAY and isinstance(data,xr.DataArray):
+        dims = np.asarray(data.dims)
+        # Find frequency dimension if not given explicitly
+        if axis is None:  axis = ((dims == 'freq') | (dims == 'frequency')).nonzero()[0][0]
+        freq_dim = dims[axis]   # Name of frequency dim
+        if freqs is None: freqs = data.coords[freq_dim].values
+        
+    assert axis is not None, \
+        ValueError("Frequency axis must be given in <axis> (or input xarray data)")
+    assert freqs is not None, \
+        ValueError("Frequency sampling vector must be given in <freqs> (or input xarray data)")
+     
+    # Ensure that freqs will broadcast against data 
+    freqs = np.asarray(freqs)    
+    if data.ndim != freqs.ndim:
+        slicer          = [np.newaxis]*data.ndim    # Create (data.ndim,) list of np.newaxis
+        slicer[axis]    = slice(None)               # Set <axis> element to slice as if set=':'
+        freqs           = freqs[tuple(slicer)]      # Expand freqs to dimensionality of data
+                      
+    return data * freqs**exponent
+        
+        
 def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
     """
     Converts a one-sided Fourier or wavelet transform output to the equivalent
@@ -3471,7 +3527,7 @@ def _next_power_of_2(n):
 
 
 def _infer_freq_scale(freqs):
-    """ Determines if frequency sampling vector is linear or logarithmic """
+    """ Determines if frequency sampling vector is linear, logarithmic, or uneven """
     # Determine if frequency scale is linear (all equally spaced)
     if np.allclose(np.diff(np.diff(freqs)),0):
         return 'linear'
@@ -3480,8 +3536,10 @@ def _infer_freq_scale(freqs):
     elif np.allclose(np.diff(np.diff(np.log2(freqs))),0):
         return 'log'
     
+    # Otherwise assume arbitrary unevenly-sampled frequency axis (as in bandfilter/burst analysis)
     else:
-        raise "Unable to determine scale of frequency sampling vector"
+        warn("Unable to determine scale of frequency sampling vector. Assuming it's arbitrary")
+        return 'uneven'
 
 
 def _freq_to_scale(freqs, wavelet='morlet', wavenumber=6):

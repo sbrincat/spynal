@@ -659,15 +659,18 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
 # =============================================================================
 # Percent explained variance (PEV) and specific linear model functions for PEV analysis
 # =============================================================================
-def pev(labels, data, axis=0, model=None, as_pct=True, return_stats=False, **kwargs):
+def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=False, **kwargs):
     """
     Mass-univariate percent explained variance (PEV) analysis.
 
     Computes the percentage (or proportion) of variance explained in data by
     predictors in design matrix/list of labels, using one of a few types of linear models.
 
-    exp_var = pev(labels,data,axis=0,model=None,as_pct=True,return_stats=False,**kwargs)
-    exp_var,stats = pev(labels,data,axis=0,model=None,as_pct=True,return_stats=False,**kwargs)
+    exp_var = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
+                  return_stats=False,**kwargs)
+                  
+    exp_var,stats = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
+                        return_stats=False,**kwargs)
 
     ARGS
     labels  (n_obs,n_terms) array-like. Design matrix (group labels for ANOVA models,
@@ -688,6 +691,10 @@ def pev(labels, data, axis=0, model=None, as_pct=True, return_stats=False, **kwa
             'regress'   : linear regression model (labels is (n_obs,nModelParams) array)
             Default: we attempt to infer from <labels>. Safest to set explicitly.
 
+    omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
+            otherwise uses eta-squared/R-squared formula, which is positively biased.
+            Default: True
+            
     as_pct  Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
             Otherwise PEV returned as a proportion (range ~ 0-1)
 
@@ -725,13 +732,16 @@ def pev(labels, data, axis=0, model=None, as_pct=True, return_stats=False, **kwa
     
     # Compute PEV based on 1-way ANOVA model
     if model == 'anova1':
-        return anova1(labels,data,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
+        return anova1(labels,data,axis=axis,omega=omega,as_pct=as_pct,
+                      return_stats=return_stats,**kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'anova2':
-        return anova2(labels,data,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
+        return anova2(labels,data,axis=axis,omega=omega,as_pct=as_pct,
+                      return_stats=return_stats,**kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'regress':
-        return regress(labels,data,axis=axis,as_pct=as_pct,return_stats=return_stats,**kwargs)
+        return regress(labels,data,axis=axis,omega=omega,as_pct=as_pct,
+                       return_stats=return_stats,**kwargs)
     else:
         raise ValueError("'%s' model is not supported for computing PEV" % model)
 
@@ -1116,17 +1126,17 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
         return exp_var, stats
 
 
-def regress(labels, data, axis=0, col_terms=None, constant=True, total=False,
-            omega=True, partial=False, as_pct=True, return_stats=False):
+def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
+            partial=False, total=False, as_pct=True, return_stats=False):
     """
     Mass-univariate ordinary least squares regression analyses of one or more
     data vector(s) on single design matrix
 
-    exp_var = regress(labels,data,axis=0,col_terms=None,constant=True,total=False,
-                  omega=True,partial=False,as_pct=True,return_stats=False)
+    exp_var = regress(labels,data,axis=0,col_terms=None,omega=True,constant=True,
+                      partial=False,total=False,as_pct=True,return_stats=False)
 
-    exp_var,stats = regress(labels,data,axis=0,col_terms=None,constant=True,total=False,
-                        omega=True,partial=False,as_pct=True,return_stats=False)
+    exp_var,stats = regress(labels,data,axis=0,col_terms=None,omega=True,constant=True,
+                            partial=False,total=False,as_pct=True,return_stats=False)
 
     ARGS
     labels  (n_obs,n_params) array-like. Regression design matrix. Each row corresponds
@@ -1149,21 +1159,21 @@ def regress(labels, data, axis=0, col_terms=None, constant=True, total=False,
             for all columns/predictors of each term pooled together.
             Default: np.arange(n_params) = 0:n_params (1:1 mapping from term:column)
 
-    constant Bool. If True, ensures there is a constant column in labels to fit an
-            intercept/bias term (appends if missing, does nothing if present).
-            Default: True (include constant/intercept term)
-
-    total   Bool. If True, appends total model explained variance (sum of all
-            individual terms) to end of term axis. Default: False
-
     omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
             otherwise uses R-squared formula, which is positively biased.
             Default: True
+
+    constant Bool. If True, ensures there is a constant column in labels to fit an
+            intercept/bias term (appends if missing, does nothing if present).
+            Default: True (include constant/intercept term)
 
     partial Bool. If True, uses partial-factor formula for PEV, where each term
             EV is expressed relative to only that term + error variance, and
             thus changes in one term's EV do not necessarily affect other terms.
             Otherwise, the standard full-model PEV formula is used. Default: False
+
+    total   Bool. If True, appends total model explained variance (sum of all
+            individual terms) to end of term axis. Default: False
 
     as_pct  Bool. If True, returns PEV as a percent (range ~ 0-100), else PEV
             is returned as a proportion (range ~ 0-1). Default: True
