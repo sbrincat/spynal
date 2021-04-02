@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-neural_info     A module for computing measures of neural information about
-                given task/behavioral variables. Computations are all mass-
-                univariate across channels (units/LFPs/etc.).
-
+info    A module for computing measures of neural information about task/behavioral variables
 
 FUNCTIONS
 ### High-level information computation wrapper functions ###

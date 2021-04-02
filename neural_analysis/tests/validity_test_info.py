@@ -1,7 +1,7 @@
 """
-validity_test_neural_info.py
+validity_test_info.py
 
-Suite of tests to assess "face validity" of neural information computation functions in neural_info.py
+Suite of tests to assess "face validity" of neural information computation functions in info.py
 Usually used to test new or majorly updated functions to ensure they perform as expected.
 
 Includes tests that parametrically estimate information as a function of difference in distribution
@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm, poisson
 from patsy import dmatrix
 
-from neural_info import neural_info, neural_info_2groups
+from ..info import neural_info, neural_info_2groups
 
 
 def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):

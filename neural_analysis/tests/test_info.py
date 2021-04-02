@@ -1,10 +1,10 @@
-""" Unit tests for neural_info.py module """
+""" Unit tests for info.py module """
 import pytest
 import numpy as np
 
 from scipy.stats import norm
 
-from ..neural_info import neural_info, neural_info_2groups
+from ..info import neural_info, neural_info_2groups
 
 # TODO Test specific pev models, including multifactor ANOVA2, regress and their stats output
 
