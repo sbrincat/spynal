@@ -1572,7 +1572,7 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwarg
     
         
 def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
-              method='wavelet', data_type=None, smp_rate=None, time_axis=None,
+              method='wavelet', data_type=None, smp_rate=None, time_axis=None, taper_axis=None,
               **kwargs):
     """
     Computes pairwise coherence between pair of channels of raw or
@@ -1581,7 +1581,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     coh,freqs,timepts[,dphi] = coherence(data1,data2,axis=0,return_phase=False,
                                          single_trial=None,ztransform=False,
                                          method='wavelet',data_type=None,smp_rate=None,
-                                         time_axis=None,**kwargs)
+                                         time_axis=None,taper_axis=None,**kwargs)
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -1595,30 +1595,33 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
             along each dimension other than observation <axis> (eg different
             frequencies, timepoints, conditions, etc.)
 
-    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+    axis    Int. Axis corresponding to distinct observations/trials. Default: 0
 
     return_phase Bool. If True, returns additional output with mean phase difference
 
     single_trial String or None. What type of coherence estimator to compute:
-            None        standard across-trial estimator [default]
-            'pseudo'    single-trial estimates using jackknife pseudovalues
-            'richter'   single-trial estimates using actual jackknife estimates
-                        as in Richter & Fries 2015
+                None        standard across-trial estimator [default]
+                'pseudo'    single-trial estimates using jackknife pseudovalues
+                'richter'   single-trial estimates using actual jackknife estimates
+                            as in Richter & Fries 2015
 
-    ztransform Bool. If True, returns z-transformed coherence using Jarvis &
-            Mitra (2001) method. If false [default], returns raw coherence.
+    ztransform  Bool. If True, returns z-transformed coherence using Jarvis &
+                Mitra (2001) method. If false [default], returns raw coherence.
 
-    data_type Str. What kind of data are we given in data1,data2:
-            'raw' or 'spectral'
-            Default: assume 'raw' if data is real; 'spectral' if complex
+    data_type   Str. What kind of data are we given in data1,data2:
+                'raw' or 'spectral'
+                Default: assume 'raw' if data is real; 'spectral' if complex
 
     Following args are only used for spectral analysis for data_type == 'raw'
 
-    method  String. Spectral method. 'wavelet' [default] | 'multitaper'
+    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
 
-    smp_rate Scalar. Sampling rate of data (only needed for raw data)
+    smp_rate    Scalar. Sampling rate of data (only needed for raw data)
 
-    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
+    time_axis   Int. Axis of data corresponding to time (ONLY needed for raw data)
+
+    taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for 
+                multitaper spectral data)
 
     Any other kwargs passed as-is to spectrogram() function.
 
@@ -1661,18 +1664,23 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
                                           data_type='lfp', spec_type='complex', **kwargs)
         data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=method,
                                           data_type='lfp', spec_type='complex', **kwargs)
-        # Account for new frequency (and/or taper) axis
+        # Account for new frequency (and/or taper) axis prepended before time_axis
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
+        if method == 'multitaper': taper_axis = time_axis-1
+        
     else:
         freqs = []
         timepts = []
+        if method == 'multitaper':
+            assert taper_axis is not None, \
+                ValueError("Must set value for taper_axis for multitaper spectral inputs")
 
     # For multitaper, compute means across trials, tapers; df = 2*n_trials*n_tapers
     if method == 'multitaper':
-        reduce_axes = (axis,time_axis-1)
-        df = 2*data1.shape[axis]*data1.shape[time_axis-1]
+        reduce_axes = (axis,taper_axis)
+        df = 2*data1.shape[axis]*data1.shape[taper_axis]
     # Otherwise, just compute means across trials; df = 2*n_trials (TODO is this true?)
     else:
         reduce_axes = axis
@@ -1799,7 +1807,7 @@ def _csd_to_coh(S12, S1, S2, axis=0):
 
 def phase_locking_value(data1, data2, axis=0, return_phase=False,
                         single_trial=None, method='wavelet', data_type=None,
-                        smp_rate=None, time_axis=None, **kwargs):
+                        smp_rate=None, time_axis=None, taper_axis=None, **kwargs):
     """
     Computes phase locking value (PLV) between raw or spectral (time-frequency) LFP data
 
@@ -1811,7 +1819,8 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     plv,freqs,timepts[,dphi] = phase_locking_value(data1,data2,axis=0,return_phase=False,
                                                  single_trial=None,
                                                  method='wavelet',data_type=None,
-                                                 smp_rate=None,time_axis=None,**kwargs)
+                                                 smp_rate=None,time_axis=None,
+                                                 taper_axis=None,**kwargs)
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -1825,7 +1834,7 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
             along each dimension other than observation <axis> (eg different
             frequencies, timepoints, conditions, etc.)
 
-    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+    axis    Int. Axis corresponding to distinct observations/trials. Default: 0
 
     return_phase Bool. If True, returns additional output with mean phase difference
 
@@ -1837,14 +1846,17 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
 
     Following args are only used for spectral analysis for data_type == 'raw'
 
-    method  String. Spectral method. 'wavelet' [default] | 'multitaper'
+    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
 
-    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
-            Default: assume 'raw' if data is real; 'spectral' if complex
+    data_type   Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
+                Default: assume 'raw' if data is real; 'spectral' if complex
 
-    smp_rate Scalar. Sampling rate of data (only needed for raw data)
+    smp_rate    Scalar. Sampling rate of data (only needed for raw data)
 
-    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
+    time_axis   Int. Axis of data corresponding to time (only needed for raw data)
+
+    taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for 
+                multitaper spectral data)
 
     Any other kwargs passed as-is to spectrogram() function.
 
@@ -1889,12 +1901,17 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
+        if method == 'multitaper': taper_axis = time_axis-1
+        
     else:
         freqs = []
         timepts = []
+        if method == 'multitaper':
+            assert taper_axis is not None, \
+                ValueError("Must set value for taper_axis for multitaper spectral inputs")
 
     # For multitaper, compute means across trials, tapers
-    if method == 'multitaper':  reduce_axes = (axis,time_axis-1)
+    if method == 'multitaper':  reduce_axes = (axis,taper_axis)
     # Otherwise, just compute means across trials
     else:                       reduce_axes = axis
         
@@ -1951,7 +1968,7 @@ def _spec_to_plv_with_phase(data1, data2, axis=0, keepdims=False):
 def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
                                single_trial=None, method='wavelet',
                                data_type=None, smp_rate=None, time_axis=None,
-                               **kwargs):
+                               taper_axis=None, **kwargs):
     """
     Computes pairwise phase consistency (PPC) between raw or spectral
     (time-frequency) LFP data, which is unbiased by n (unlike PLV and coherence)
@@ -1961,9 +1978,10 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
         PPC = (n*PLV^2 - 1) / (n-1)
 
     ppc,freqs,timepts[,dphi] = pairwise_phase_consistency(data1,data2,axis=0,
-                                                        return_phase=False,single_trial=None,
-                                                        method='wavelet',data_type=None,
-                                                        smp_rate=None,time_axis=None,**kwargs)
+                                                          return_phase=False,single_trial=None,
+                                                          method='wavelet',data_type=None,
+                                                          smp_rate=None,time_axis=None,
+                                                          taper_axis=None,**kwargs)
 
     ARGS
     data1,data2   (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -1977,28 +1995,31 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
             along each dimension other than observation <axis> (eg different
             frequencies, timepoints, conditions, etc.)
 
-    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+    axis        Int. Axis corresponding to distinct observations/trials. Default: 0
 
     return_phase Bool. If True, returns additional output with mean phase difference
 
     single_trial String or None. What type of estimator to compute:
-            None        standard across-trial estimator [default]
-            'pseudo'    single-trial estimates using jackknife pseudovalues
-            'richter'   single-trial estimates using actual jackknife estimates
-                        as in Richter & Fries 2015
+                None        standard across-trial estimator [default]
+                'pseudo'    single-trial estimates using jackknife pseudovalues
+                'richter'   single-trial estimates using actual jackknife estimates
+                            as in Richter & Fries 2015
 
     Following args are only used for spectral analysis for data_type == 'raw'
 
-    method  String. Spectral method. 'wavelet' [default] | 'multitaper'
+    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
 
-    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
-            Default: assume 'raw' if data is real; 'spectral' if complex
+    data_type   Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
+                Default: assume 'raw' if data is real; 'spectral' if complex
 
-    smp_rate Scalar. Sampling rate of data (only needed for raw data)
+    smp_rate    Scalar. Sampling rate of data (only needed for raw data)
 
-    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
+    time_axis   Int. Axis of raw data corresponding to time (ONLY needed for raw data)
 
-    Any other kwargs passed as-is to spectrogram() function.
+    taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for 
+                multitaper spectral data)
+                
+    **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
     ppc     Pairwise phase consistency between data1 and data2.
@@ -2009,10 +2030,10 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     freqs   (n_freqs,). List of frequencies in ppc (only for raw data)
     timepts (n_timepts,). List of timepoints in ppc (only for raw data)
 
-    dphi   ndarray. Mean phase difference between data1 and data2 in radians.
-           Positive values correspond to data1 leading data2.
-           Negative values correspond to data1 lagging behind data2.
-           Optional: Only returned if return_phase is True.
+    dphi    ndarray. Mean phase difference between data1 and data2 in radians.
+            Positive values correspond to data1 leading data2.
+            Negative values correspond to data1 lagging behind data2.
+            Optional: Only returned if return_phase is True.
 
     REFERENCES
     Original concept:   Vinck et al. (2010) NeuroImage
@@ -2044,12 +2065,17 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
         n_new_axes = 2 if method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
+        if method == 'multitaper': taper_axis = time_axis-1
+        
     else:
         freqs = []
         timepts = []
+        if method == 'multitaper':
+            assert taper_axis is not None, \
+                ValueError("Must set value for taper_axis for multitaper spectral inputs")        
 
     # For multitaper, compute means across trials, tapers
-    if method == 'multitaper':  reduce_axes = (axis,time_axis-1)
+    if method == 'multitaper':  reduce_axes = (axis,taper_axis)
     # Otherwise, just compute means across trials
     else:                       reduce_axes = axis
     

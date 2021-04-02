@@ -327,11 +327,15 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
     
     # Test for consistent output with spectral data input
-    # TODO Need to figure out how to deal with understanding taper axis here -- do we assume location or demand specific arg?
-    spec1, freqs, timepts = spectrogram(data1.T, smp_rate, axis=0, method=spec_method, spec_type='complex')
-    spec2, freqs, timepts = spectrogram(data2.T, smp_rate, axis=0, method=spec_method, spec_type='complex')
-    sync, _, _, dphi = synchrony(spec1, spec2, axis=-1, method=method, spec_method=spec_method, return_phase=True)
-    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
+    spec1, freqs, timepts = spectrogram(data1, smp_rate, axis=1, method=spec_method,
+                                        spec_type='complex', keep_tapers=True)
+    spec2, freqs, timepts = spectrogram(data2, smp_rate, axis=1, method=spec_method,
+                                        spec_type='complex', keep_tapers=True)
+    print(data1.shape, spec2.shape)
+    sync, _, _, dphi = synchrony(spec1, spec2, axis=0, taper_axis=2, method=method, spec_method=spec_method, 
+                                 return_phase=True)
+    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else \
+           freqs.shape == (n_freqs[spec_method],)
     assert timepts.shape == (n_timepts[spec_method],)
     assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
     assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
