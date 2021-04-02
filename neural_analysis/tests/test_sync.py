@@ -1,4 +1,4 @@
-""" Unit tests for neural_synchrony.py module """
+""" Unit tests for sync.py module """
 import pytest
 from math import pi
 import numpy as np

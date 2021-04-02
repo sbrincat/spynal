@@ -1,4 +1,4 @@
-""" Unit tests for neural_synchrony.py module """
+""" Unit tests for spectra.py module """
 import pytest
 import numpy as np
 
