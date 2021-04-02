@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-A module for basic analyses of neural spiking activity
+spikes  A module for basic analyses of neural spiking activity
 
 FUNCTIONS
 ### Rate analysis ###

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-randomization_stats     A module for nonparametric randomization, permutation, and bootstrap statistics
+randstats     A module for nonparametric randomization, permutation, and bootstrap statistics
 
 FUNCTIONS
 ### One-sample tests (analogs of 1-sample t-test) ###

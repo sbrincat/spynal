@@ -1,7 +1,7 @@
 """
-validity_test_spike_analysis.py
+validity_test_spikes.py
 
-Suite of tests to assess "face validity" of spiking data analysis functions in spike_analysis.py
+Suite of tests to assess "face validity" of spiking data analysis functions in spikes.py
 Usually used to test new or majorly updated functions to ensure they perform as expected.
 
 Includes tests that parametrically estimate spike rate as a function of the simulated data mean,
@@ -20,7 +20,7 @@ from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
-from spike_analysis import simulate_spike_trains, times_to_bool, rate
+from ..spikes import simulate_spike_trains, times_to_bool, rate
 
 
 def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,

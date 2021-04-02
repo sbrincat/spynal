@@ -51,7 +51,7 @@ simulate_oscillation Generates simulated oscillation-in-noise data
 
 DEPENDENCIES
 pyfftw              Python wrapper around FFTW, the speedy FFT library
-spike_analysis      A module for basic analyses of neural spiking activity
+spikes              A module for basic analyses of neural spiking activity
 
 
 Created on Thu Oct  4 15:28:15 2018
@@ -90,10 +90,10 @@ except ImportError:
     HAS_XARRAY = False
 
 try:
-    from .spike_analysis import _spike_data_type, times_to_bool
+    from .spikes import _spike_data_type, times_to_bool
 # TEMP    
 except ImportError:
-    from spike_analysis import _spike_data_type, times_to_bool
+    from spikes import _spike_data_type, times_to_bool
     
 
 # Set default arguments for pyfftw functions: Fast planning, use all available threads

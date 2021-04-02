@@ -1,7 +1,7 @@
 """
-validity_test_randomization_stats.py
+validity_test_randstats.py
 
-Suite of tests to assess "face validity" of randomization statistic functions in randomization_stats.py
+Suite of tests to assess "face validity" of randomization statistic functions in randstats.py
 Usually used to test new or majorly updated functions to ensure they perform as expected.
 
 Includes tests that parametrically estimate statistics as a function of difference in distribution
@@ -10,7 +10,7 @@ means, assays of bias, etc. to establish methods produce expected pattern of res
 Plots results and runs assertions that basic expected results are reproduced
 
 FUNCTIONS
-test_randomization_stats    Contains tests of randomization statistic computation functions
+test_randstats    Contains tests of randomization statistic computation functions
 stat_test_battery           Runs standard battery of tests of randomization stat functions
 """
 
@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import norm, poisson
 
-from randomization_stats import one_sample_test, paired_sample_test, two_sample_test, \
-                                one_way_test, two_way_test
+from ..randstats import one_sample_test, paired_sample_test, two_sample_test, \
+                        one_way_test, two_way_test
 
 
 def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
@@ -145,17 +145,17 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     return data, labels
 
 
-def test_randomization_stats(stat, method, test='gain', test_values=None, term=0, distribution='normal', 
-                             n_reps=100, alpha=0.05, seed=None, plot=False, plot_dir=None, **kwargs):
+def test_randstats(stat, method, test='gain', test_values=None, term=0, distribution='normal',
+                   n_reps=100, alpha=0.05, seed=None, plot=False, plot_dir=None, **kwargs):
     """
     Basic testing for randomization statistic computation functions
     
     Generates synthetic data, computes statistics, p values, and significance using given method,
     and compares computed to expected values.
     
-    means,sds = test_randomization_stats(stat,method,test='gain',test_values=None,term=0,
-                                         distribution='normal',n_reps=100,alpha=0.05,seed=None,
-                                         plot=False,plot_dir=None, **kwargs)
+    means,sds = test_randstats(stat,method,test='gain',test_values=None,term=0,
+                               distribution='normal',n_reps=100,alpha=0.05,seed=None,
+                               plot=False,plot_dir=None, **kwargs)
                               
     ARGS
     stat    String. Type of statistical test to evaluate:
@@ -391,7 +391,7 @@ def stat_test_battery(stats=['one_sample','paired_sample','two_sample','one_way'
     tests       Array-like. List of tests to run.
                 Default: ['gain','n','bias'] (all supported tests)
                 
-    kwargs      Any other kwargs passed directly to test_randomization_stats()
+    kwargs      Any other kwargs passed directly to test_randstats()
     
     ACTION
     Throws an error if any estimated value for any (stat,method,test) is too far from expected value    
@@ -410,9 +410,9 @@ def stat_test_battery(stats=['one_sample','paired_sample','two_sample','one_way'
                 # Run separate tests for each term of 2-way stats (2 main effects and interaction)
                 if stat == 'two_way':
                     for term in range(3):
-                        test_randomization_stats(stat, method, test=test, term=term, **kwargs)
+                        test_randstats(stat, method, test=test, term=term, **kwargs)
                 else:
-                    test_randomization_stats(stat, method, test=test, **kwargs)
+                    test_randstats(stat, method, test=test, **kwargs)
                     
                 print('PASSED')
                 if 'plot_dir' in kwargs: plt.close('all')

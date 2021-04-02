@@ -1,14 +1,14 @@
-""" Unit tests for randomization_stats.py module """
+""" Unit tests for randstats.py module """
 import pytest
 import numpy as np
 
 from scipy.stats import norm
 
-from ..randomization_stats import one_sample_tstat, one_sample_test, \
-                                  paired_tstat, paired_sample_test, paired_sample_test_labels, \
-                                  two_sample_tstat, two_sample_test, two_sample_test_labels, \
-                                  one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
-                                  bootstrap_confints
+from ..randstats import one_sample_tstat, one_sample_test, \
+                        paired_tstat, paired_sample_test, paired_sample_test_labels, \
+                        two_sample_tstat, two_sample_test, two_sample_test_labels, \
+                        one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
+                        bootstrap_confints
 
 # =============================================================================
 # Fixtures for generating simulated data

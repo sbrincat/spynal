@@ -1,9 +1,9 @@
-""" Unit tests for spike_analysis.py module """
+""" Unit tests for spikes.py module """
 import pytest
 import numpy as np
 
-from ..spike_analysis import simulate_spike_trains, setup_sliding_windows, \
-                             times_to_bool, bool_to_times, bin_rate, density
+from ..spikes import simulate_spike_trains, setup_sliding_windows, \
+                     times_to_bool, bool_to_times, bin_rate, density
 
 # TODO  Tests for cut_trials, realign_data, pool_electrode_units
 
