@@ -44,13 +44,14 @@ from .spectra import spectrogram, simulate_oscillation
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================
-def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwargs):
+def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', return_phase=False,
+              **kwargs):
     """
     Computes pairwise synchrony between pair of channels of continuous raw or
     spectral (time-frequency) data, using given estimation method
 
-    sync,freqs,timepts= synchrony(data1,data2,axis=0,method='PPC',
-                                  spec_method='wavelet',**kwargs)
+    sync,freqs,timepts[,dphi] = synchrony(data1,data2,axis=0,method='PPC',
+                                          spec_method='wavelet',return_phase=False,**kwargs)
                                   
     Convenience wrapper function around specific synchrony estimation functions
     coherence, phase_locking_value, pairwise_phase_consistency
@@ -71,7 +72,7 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwarg
 
     method  String. Synchrony estimation method. Options: 'PPC' [default] | 'PLV' | 'coherence'
             
-    **kwargs    All other kwargs passed as-is to synchrony estimation function;=.
+    **kwargs    All other kwargs passed as-is to synchrony estimation function.
             See there for details.
 
     RETURNS
@@ -80,9 +81,16 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwarg
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in coh (only for raw data)
-    timepts (n_timepts,). List of timepoints in coh (only for raw data)
-
+    freqs   (n_freqs,). List of frequencies in <sync>.  
+            Only returned for raw data, [] otherwise.
+            
+    timepts (n_timepts,). List of timepoints in <sync> (in s, referenced to start of
+            data). Only returned for raw data, [] otherwise.
+            
+    dphi   ndarray. Mean phase difference (or coherence phase) between data1 and data2 in radians.
+           Positive values correspond to data1 leading data2.
+           Negative values correspond to data1 lagging behind data2.
+           Optional: Only returned if return_phase is True.            
     """
     if method.lower() in ['ppc','pairwise_phase_consistency']:  sync_fun = pairwise_phase_consistency
     elif method.lower() in ['plv','phase_locking_value']:       sync_fun = phase_locking_value
@@ -90,7 +98,7 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', **kwarg
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
     
-    return sync_fun(data1, data2, axis=axis, method=spec_method, **kwargs)
+    return sync_fun(data1, data2, axis=axis, method=spec_method, return_phase=return_phase, **kwargs)
     
         
 def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
@@ -153,10 +161,13 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in coh (only for raw data)
-    timepts (n_timepts,). List of timepoints in coh (only for raw data)
+    freqs   (n_freqs,). List of frequencies in <coh>.  
+            Only returned for raw data, [] otherwise.
+            
+    timepts (n_timepts,). List of timepoints in <coh> (in s, referenced to start of
+            data). Only returned for raw data, [] otherwise.
 
-    dphi   ndarray. Mean phase difference between data1 and data2 in radians.
+    dphi   ndarray. Coherence phase in radians.
            Positive values correspond to data1 leading data2.
            Negative values correspond to data1 lagging behind data2.
            Optional: Only returned if return_phase is True.
@@ -377,8 +388,11 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in plv (only for raw data)
-    timepts (n_timepts,). List of timepoints in plv (only for raw data)
+    freqs   (n_freqs,). List of frequencies in <plv>.  
+            Only returned for raw data, [] otherwise.
+            
+    timepts (n_timepts,). List of timepoints in <plv> (in s, referenced to start of
+            data). Only returned for raw data, [] otherwise.
 
     dphi   ndarray. Mean phase difference between data1 and data2 in radians.
            Positive values correspond to data1 leading data2.
@@ -529,8 +543,11 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in ppc (only for raw data)
-    timepts (n_timepts,). List of timepoints in ppc (only for raw data)
+    freqs   (n_freqs,). List of frequencies in <coh>.  
+            Only returned for raw data, [] otherwise.
+            
+    timepts (n_timepts,). List of timepoints in <coh> (in s, referenced to start of
+            data). Only returned for raw data, [] otherwise.
 
     dphi    ndarray. Mean phase difference between data1 and data2 in radians.
             Positive values correspond to data1 leading data2.

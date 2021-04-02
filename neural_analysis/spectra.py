@@ -208,8 +208,8 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).                
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window centers
-                for each time index in <spec>
+    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+                (in s, referenced to start of data).
     """
     method = method.lower()
     assert data_type in ['lfp','spike'], \
@@ -295,8 +295,8 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window
-                centers for each time index in <spec>
+    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+                (in s, referenced to start of data).
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
 
@@ -336,8 +336,8 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window centers
-                for each time index in <spec>
+    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+                (in s, referenced to start of data).
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', **kwargs)
 
@@ -549,8 +549,8 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
 
-    timepts     (n_timewins,...) ndarray. List of timepoints (center of each
-                time window) in <spec>.
+    timepts     (n_timewins,...) ndarray. List of timepoints in <spec> (in s, referenced 
+                to start of data). Timepoints here are centers of each time window.
 
     REFERENCE   Mitra & Pesaran (1999) "Analysis of dynamic brain imaging data"
                 Jarvis & Mitra (2001) Neural Computation
@@ -771,8 +771,8 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
 
-    timepts     (n_timepts_out,...) ndarray. List of timepoints (indexes into original
-                data time series) in <spec>.
+    timepts     (n_timepts_out,...) ndarray. List of timepoints in <spec> (in s, referenced 
+                to start of data).
 
     REFERENCE   Torrence & Compo (1998) "A Practical Guide to Wavelet Analysis"
     """
@@ -790,7 +790,8 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     data, data_shape = _reshape_data(data,axis)
     n_timepts_in = data.shape[0]
 
-    timepts_out = np.arange(buffer,n_timepts_in-buffer,downsmp)
+    # Time indexes to extract from spectrogram for output (accounting for buffer, downsampling)
+    time_idxs_out = np.arange(buffer,n_timepts_in-buffer,downsmp)
 
     # Set FFT length = data length if no padding; else pad to next power of two
     if not pad: n_fft = n_timepts_in
@@ -816,14 +817,16 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if data.ndim == 3: wavelets_fft = wavelets_fft[:,:,np.newaxis]
 
     # Convolve data with wavelets (multiply in Fourier domain) -> inverse FFT to get wavelet transform
-    spec = ifft(data*wavelets_fft, n=n_fft,axis=1, **_FFTW_KWARGS_DEFAULT)[:,timepts_out,...]
+    spec = ifft(data*wavelets_fft, n=n_fft,axis=1, **_FFTW_KWARGS_DEFAULT)[:,time_idxs_out,...]
 
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)
     
     spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
 
-    return spec, freqs, timepts_out
+    timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
+    
+    return spec, freqs, timepts
 
 
 def compute_wavelets(n, smp_rate, freqs=2**np.arange(1,7.5,0.25),
@@ -1146,8 +1149,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     freqs       (n_freqbands,2) ndarray. List of (low,high) cut frequencies (Hz)
                 for each band used.
 
-    timepts     (n_timepts_out,...) ndarray. List of timepoints (indexes into original
-                data time series) in <spec>.
+    timepts     (n_timepts_out,...) ndarray. List of timepoints in <spec> (in s, referenced 
+                to start of data).
     """
     if axis < 0: axis = data.ndim + axis
     
@@ -1199,8 +1202,9 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     n_timepts_in,n_series = data.shape
     
-    timepts_out     = np.arange(buffer,n_timepts_in-buffer,downsmp)
-    n_timepts_out   = len(timepts_out)
+    # Time indexes to extract from spectrogram for output (accounting for buffer, downsampling)    
+    time_idxs_out   = np.arange(buffer,n_timepts_in-buffer,downsmp)
+    n_timepts_out   = len(time_idxs_out)
 
     if removeDC: data = remove_dc(data,axis=0)
     
@@ -1212,8 +1216,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     for i_freq,(b,a) in enumerate(zip(params['b'],params['a'])):
         bandfilt = filtfilt(b, a, data, axis=0, method='gust')
         # Note: skip Hilbert transform for real output
-        spec[i_freq,:,:] = bandfilt[timepts_out,:] if spec_type == 'real' else \
-                           hilbert(bandfilt[timepts_out,:],axis=0) 
+        spec[i_freq,:,:] = bandfilt[time_idxs_out,:] if spec_type == 'real' else \
+                           hilbert(bandfilt[time_idxs_out,:],axis=0) 
 
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)
@@ -1221,9 +1225,11 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     if vector_data: spec = spec.squeeze(axis=-1)    
     spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
 
-    return spec, freqs, timepts_out
+    timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
 
-bandfilter = bandfilter_spectrogram  # Alias function to bandfilter()
+    return spec, freqs, timepts
+
+bandfilter = bandfilter_spectrogram  # Alias function as bandfilter()
 
 
 def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
