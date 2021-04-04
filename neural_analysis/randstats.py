@@ -26,7 +26,7 @@ one_way_permutation_test        Permutation 1-way multi-level test
 two_way_permutation_test        Permutation 2-way multi-level/multi-factor test
 
 ### Confidence intervals ###
-bootstrap_confints              Bootstrap confidence intervals for any stat
+bootstrap_confints              Bootstrap confidence intervals for any one-sample stat
 
 ### Functions to compute frequently-used stats ###
 one_sample_tstat                Mass univariate 1-sample t-statistic

@@ -38,9 +38,13 @@ from scipy.interpolate import interp1d
 from scipy.signal.windows import dpss
 from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
 from scipy.stats import norm,mode
- 
-from .spectra import spectrogram, simulate_oscillation
 
+try: 
+    from .spectra import spectrogram, simulate_oscillation
+# TEMP    
+except ImportError:
+    from spectra import spectrogram, simulate_oscillation
+    
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================

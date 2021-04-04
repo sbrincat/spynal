@@ -5,10 +5,11 @@ Features include:
 Simple interface: no object-oriented programming or complicated data/params structures  
 No buy-in necessary: can use specific functionality w/o requiring an entire processing chain  
 Simple, uniform Matlab-like function call structure: analysis(data, axis, extra_param=default)  
-Vectorized mass-univariate analysis: input data for all channels at once, no for loops needed  
+Vectorized mass-univariate analysis: analysis runs in parallel across all channels, no for loops needed  
 
 Package includes the following modules:  
-spike_analysis -- Basic analyses of neural spiking activity  
-neural_synchrony -- Analysis of neural oscillations and synchrony  
-neural_info -- Measures of neural information about task/behavior variables  
-randomization_stats -- Nonparametric randomization, permutation, and bootstrap stats  
+spikes -- Basic preprocessing and analyses of neural spiking activity  
+spectra -- Spectral analysis and LFP/continuous data preprocessing 
+sync -- Analysis of oscillatory neural synchrony
+info -- Measures of neural information about task/behavior variables  
+randstats -- Nonparametric randomization, permutation, and bootstrap stats 
