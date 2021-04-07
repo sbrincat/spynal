@@ -206,18 +206,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
     
     return rates, bins
     
-    
-def _histogram_count(data, bins):
-    """ Count spikes in equal-width, disjoint bins """
-    return np.histogram(data,bins)[0]
-
-
-def _custom_bin_count(data, bins):
-    """ Count spikes in any arbitrary custom bins """
-    return np.asarray([((start <= data) & (data < end)).sum() 
-                       for (start,end) in bins], dtype='uint16')
-                    
-    
+      
 psth = bin_rate
 """ Aliases function bin_rate as psth """
 
@@ -323,10 +312,29 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                                    np.arange(n_samples-2, n_samples-2-n_buffer, -1)))
             data = data.take(idxs,axis=axis)           
                         
-    # Convert string specifier to kernel (window) function (convert width to samples)
-    kernel = _str_to_kernel(kernel,width*smp_rate,**kwargs)
+    # Convert kernel specifier to actual kernel (window) function 
+    width_smps = width*smp_rate # convert width to samples    
+    # DEL kernel = _str_to_kernel(kernel,width*smp_rate,**kwargs)
+    # Kernel is already a (custom) array of values
+    if isinstance(kernel,np.ndarray):       kernel_ = kernel
+    
+    # Kernel is a function/callable -- call it with width in samples
+    elif callable(kernel):                  kernel_ = kernel(width_smps,**kwargs)
+    
+    # Kernel is a string specifier -- call appropriate kernel-generating function
+    elif isinstance(kernel,str):
+        kernel = kernel.lower()
+
+        if kernel in ['hann','hanning']:
+            kernel_ = hann(int(round(width_smps*2.0)))
+        elif kernel in ['gaussian','normal']:
+            kernel_ = gaussian(int(round(width_smps*6.0)),width_smps)
+        else:
+            raise ValueError("Unsupported value '%s' given for kernel. \
+                            Should be 'hanning'|'gaussian'" % kernel)
+    
     # Normalize kernel to integrate to 1
-    kernel = kernel / (kernel.sum()/smp_rate)
+    kernel_ = kernel_ / (kernel_.sum()/smp_rate)
         
     # Convert spike times to binary spike trains -> (...,n_timepts)
     if data_type == 'timestamp':
@@ -342,7 +350,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     
     # Compute density as convolution of spike trains with kernel
     # Note: 1d kernel implies 1d convolution across multi-d array data
-    rates = convolve(data,kernel[slicer],mode='same')
+    rates = convolve(data,kernel_[slicer],mode='same')
 
     # Remove any time buffer from spike density and time sampling vector
     # (also do same for data bc of 0-fixing bit below)
@@ -1318,9 +1326,9 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
     return np.stack((win_starts,win_ends),axis=1)
 
 
-#==============================================================================
+# =============================================================================
 # Synthetic data generation and testing functions
-#==============================================================================
+# =============================================================================
 def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
                          window=1.0, count=False, seed=None):
     """
@@ -1501,7 +1509,21 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     return trains, labels
 
 
-# ===========================================================================
+# =============================================================================
+# Rate computation helper functions
+# =============================================================================
+def _histogram_count(data, bins):
+    """ Count spikes in equal-width, disjoint bins """
+    return np.histogram(data,bins)[0]
+
+
+def _custom_bin_count(data, bins):
+    """ Count spikes in any arbitrary custom bins """
+    return np.asarray([((start <= data) & (data < end)).sum() 
+                       for (start,end) in bins], dtype='uint16')
+                    
+
+# =============================================================================
 # Data reshaping helper functions
 # =============================================================================
 def _index_axis(data, axis, idxs):
@@ -1733,18 +1755,18 @@ def _remove_buffer(data, buffer, axis=-1):
         return (data.swapaxes(-1,axis)[...,buffer:-buffer]
                     .swapaxes(axis,-1))
 
+# DELETE
+# def _str_to_kernel(kernel, width, **kwargs):
+#     """ Converts string specifier to scipy.signal.windows function """
+#     if isinstance(kernel,str):  kernel = kernel.lower()
 
-def _str_to_kernel(kernel, width, **kwargs):
-    """ Converts string specifier to scipy.signal.windows function """
-    if isinstance(kernel,str):  kernel = kernel.lower()
-
-    if isinstance(kernel,np.ndarray):       return kernel
-    elif callable(kernel):                  return kernel(width,**kwargs)
-    elif kernel in ['hann','hanning']:      return hann(int(round(width*2.0)))
-    elif kernel in ['gaussian','normal']:   return gaussian(int(round(width*6.0)),width)
-    else:
-        raise ValueError("Unsupported value '%s' given for kernel. \
-                         Should be 'hanning'|'gaussian'" % kernel)
+#     if isinstance(kernel,np.ndarray):       return kernel
+#     elif callable(kernel):                  return kernel(width,**kwargs)
+#     elif kernel in ['hann','hanning']:      return hann(int(round(width*2.0)))
+#     elif kernel in ['gaussian','normal']:   return gaussian(int(round(width*6.0)),width)
+#     else:
+#         raise ValueError("Unsupported value '%s' given for kernel. \
+#                          Should be 'hanning'|'gaussian'" % kernel)
 
 
 def _check_window_lengths(windows,tol=1):

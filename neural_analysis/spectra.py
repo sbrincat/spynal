@@ -2613,41 +2613,9 @@ def _unreshape_data_newaxis(data,data_shape,axis=0):
     return data
 
 
-def _remove_buffer(data, buffer, axis=1):
-    """
-    Removes a temporal buffer (eg of zeros or additional samples) symmmetrically
-    prepended/appended to data to avoid edge effects.
-
-    data = _remove_buffer(data,buffer,axis=1)
-
-    ARGS
-    data    Data array where a buffer has been appended on both ends of time dimension.
-            Can be any arbitrary size, typically (n_freqs,n_timepts+2*buffer,...).
-    buffer  Int. Length (number of samples) of buffer appended to each end.
-    axis    Int. Array axis to remove buffer from (ie time dim). Default: 1
-
-    RETURNS
-    data    Data array with buffer removed, reducing time axis to n_timepts
-            (typically shape (n_freqs,n_timepts,...))
-    """
-    if axis == 1:
-        return data[:,buffer:-buffer,...] # special case for default
-    elif axis == 0:
-        return data[buffer:-buffer,...]
-    else:
-        return (data.swapaxes(0,axis)[buffer:-buffer,...]
-                    .swapaxes(axis,0))
-
-
 # =============================================================================
 # Other helper functions
 # =============================================================================
-def _infer_data_type(data):
-    """ Infers type of data signal given -- 'raw' (real) | 'spectral' (complex) """
-    if np.isrealobj(data):  return 'raw'
-    else:                   return 'spectral'
-
-
 def _iarange(start=0, stop=0, step=1):
     """
     Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
@@ -2683,33 +2651,6 @@ def _infer_freq_scale(freqs):
     else:
         warn("Unable to determine scale of frequency sampling vector. Assuming it's arbitrary")
         return 'uneven'
-
-
-def _freq_to_scale(freqs, wavelet='morlet', wavenumber=6):
-    """
-    Converts wavelet center frequency(s) to wavelet scales. Typically used to
-    convert set of frequencies you want to set of scales, which pycwt understands.
-    Currently only supports Morlet wavelets.
-
-    scales = _freq_to_scale(freqs,mother,wavenumber)
-
-    ARGS
-    freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
-
-    wavelet     String. Type of wavelet. Default: 'morlet'
-
-    wavenumber  Scalar. Wavelet wave number parameter ~ number of oscillations
-                in each wavelet. Must be >= 6 to meet "admissibility constraint".
-                Default: 6
-
-    RETURNS
-    scales      (n_freqs,) ndarray. Set of equivlent wavelet scales
-    """
-    freqs = np.asarray(freqs)
-    if wavelet.lower() == 'morlet':
-        return (wavenumber + sqrt(2 + wavenumber**2)) / (4*pi*freqs)
-    else:
-        raise ValueError("Unsupported value set for <wavelet>: '%s'" % wavelet)
 
 
 def _interp1(x, y, xinterp, **kwargs):
