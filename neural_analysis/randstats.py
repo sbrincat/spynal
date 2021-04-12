@@ -54,6 +54,12 @@ from math import sqrt
 from warnings import warn
 import numpy as np
 
+try:
+    from .utils import set_random_seed
+# TEMP    
+except ImportError:
+    from utils import set_random_seed
+
 
 # =============================================================================
 # One-sample randomization tests
@@ -924,7 +930,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     # Create generators with n_resamples-1 random resamplings with replacement
     # of ints 0:n1-1 and 0:n2-1
     # Note: Seed random number generator only *once* before generating both random samples
-    if seed is not None: np.random.seed(seed)    
+    if seed is not None: set_random_seed(seed)    
     resamples1 = bootstraps(n1,n_resamples-1)
     resamples2 = bootstraps(n2,n_resamples-1)
 
@@ -1775,7 +1781,7 @@ def permutations(n, n_resamples=9999, seed=None):
     resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
                 contains a distinct random permutation of integers 0:n-1
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
     
     for _ in range(n_resamples):
         yield np.random.permutation(n)
@@ -1804,7 +1810,7 @@ def bootstraps(n, n_resamples=9999, seed=None):
                 contains a distinct random resampling with replacemnt from
                 integers 0:n-1
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
     
     for _ in range(n_resamples):
         yield np.random.randint(n, size=(n,))
@@ -1832,7 +1838,7 @@ def signs(n, n_resamples=9999, seed=None):
     resamples   (n_resamples,) generator of (n,) vector of bool. Each iteration
                 contains a distinct random resampling of n Bernoulli binary RVs
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
     
     for _ in range(n_resamples):
         yield np.random.binomial(1,0.5, size=(n,)).astype(bool)

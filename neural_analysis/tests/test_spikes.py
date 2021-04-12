@@ -2,8 +2,8 @@
 import pytest
 import numpy as np
 
-from ..spikes import simulate_spike_trains, setup_sliding_windows, \
-                     times_to_bool, bool_to_times, bin_rate, density
+from ..utils import setup_sliding_windows
+from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, bin_rate, density
 
 # TODO  Tests for cut_trials, realign_data, pool_electrode_units
 

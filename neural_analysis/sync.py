@@ -40,9 +40,11 @@ from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
 from scipy.stats import norm,mode
 
 try: 
+    from .utils import set_random_seed
     from .spectra import spectrogram, simulate_oscillation
 # TEMP    
 except ImportError:
+    from utils import set_random_seed
     from spectra import spectrogram, simulate_oscillation
     
 # =============================================================================
@@ -757,7 +759,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
         if not np.isscalar(seed) and (len(seed) > 1):
             seed = seed[0]
             print("Using only first value given for <seed> (%d). Multiple values not permitted" % seed)
-        np.random.seed(seed)
+        set_random_seed(seed)
     
     # Ensure all channels have same values for these parameters that determine data size
     for param in ['time_range','smp_rate','n_trials']:

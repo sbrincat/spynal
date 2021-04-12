@@ -34,7 +34,6 @@ cut_trials          Cut LFPs/continuous data into trial segments
 realign_data        Realigns LFPs/continuous data to new within-trial event
 
 get_freq_sampling   Frequency sampling vector for a given FFT-based computation
-setup_sliding_windows Generates set of sliding windows from given parameters
 
 remove_dc           Removes constant DC component of signals
 remove_evoked       Removes phase-locked evoked potentials from signals
@@ -68,10 +67,9 @@ from multiprocessing import cpu_count
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.interpolate import interp1d
 from scipy.signal.windows import dpss
 from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
-from scipy.stats import norm,mode
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression
 from pyfftw.interfaces.scipy_fftpack import fft,ifft # ~ 46/16 s on benchmark
 
@@ -90,9 +88,15 @@ except ImportError:
     HAS_XARRAY = False
 
 try:
+    from .utils import set_random_seed, iarange, index_axis, axis_index_slices, \
+                       standardize_array, undo_standardize_array, interp1
+    from .helpers import _check_window_lengths
     from .spikes import _spike_data_type, times_to_bool
 # TEMP    
 except ImportError:
+    from utils import set_random_seed, iarange, index_axis, axis_index_slices, \
+                      standardize_array, udo_standardize_array, interp1
+    from helpers import _check_window_lengths
     from spikes import _spike_data_type, times_to_bool
     
 
@@ -787,7 +791,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
 
     # Reshape data array -> (n_timepts_in,n_dataseries) matrix
-    data, data_shape = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
     n_timepts_in = data.shape[0]
 
     # Time indexes to extract from spectrogram for output (accounting for buffer, downsampling)
@@ -822,7 +826,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)
     
-    spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
+    spec = _undo_standardize_array_newaxis(spec,data_shape,axis=axis)
 
     timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
     
@@ -1195,7 +1199,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     if freqs is not None: freqs[freqs > smp_rate/2] = smp_rate/2
 
     # Reshape data array -> (n_timepts_in,n_dataseries) matrix
-    data, data_shape = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
     # Temporarily append singleton axis to vector-valued data to simplify code
     vector_data = data.ndim == 1
     if vector_data: data = data[:,np.newaxis]
@@ -1223,7 +1227,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     spec    = complex_to_spec_type(spec,spec_type)
     
     if vector_data: spec = spec.squeeze(axis=-1)    
-    spec = _unreshape_data_newaxis(spec,data_shape,axis=axis)
+    spec = _undo_standardize_array_newaxis(spec,data_shape,axis=axis)
 
     timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
 
@@ -1690,7 +1694,7 @@ def cut_trials(data, trial_lims, smp_rate, axis=0):
     
     # Extract segment of continuous data for each trial
     for trial,lim in enumerate(trial_idxs):
-        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
+        cut_data[...,trial] = index_axis(data, axis, slice(lim[0],lim[1]+1))
         
         # Note: The following is several orders of magnitude slower (mainly bc need to form explicit index):
         # cut_data[...,trial] = data.take(np.arange(lim[0],lim[1]+1), axis=axis)
@@ -1877,77 +1881,6 @@ def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):
     return freqs,freq_bool
 
 
-def setup_sliding_windows(width, lims, step=None, reference=None,
-                          force_int=False, exclude_end=None):
-    """
-    Generates set of sliding windows using given parameters
-
-    windows = setup_sliding_windows(width,lims,step=None,
-                                  reference=None,force_int=False,exclude_end=None)
-
-    ARGS
-    width       Scalar. Full width of each window. Required arg.
-
-    lims        (2,) array-like. [start end] of full range of domain you want
-                windows to sample. Required.
-
-    step        Scalar. Spacing between start of adjacent windows
-                Default: step = width (ie, perfectly non-overlapping windows)
-
-    reference   Bool. Optionally sets a reference value at which one window
-                starts and the rest of windows will be determined from there.
-                eg, set = 0 to have a window start at x=0, or
-                    set = -width/2 to have a window centered at x=0
-                Default: None = just start at lim[0]
-
-    force_int   Bool. If True, rounds window starts,ends to integer values.
-                Default: False (don't round)
-
-    exclude_end Bool. If True, excludes the endpoint of each (integer-valued)
-                sliding win from the definition of that win, to prevent double-sampling
-                (eg, the range for a 100 ms window is [1 99], not [1 100])
-                Default: True if force_int==True, otherwise default=False
-
-    OUTPUT
-    windows     (n_wins,2) ndarray. Sequence of sliding window [start end]
-    """
-    # Default: step is same as window width (ie windows perfectly disjoint)
-    if step is None: step = width
-    # Default: Excluding win endpoint is default for integer-valued win's,
-    #  but not for continuous wins
-    if exclude_end is None:  exclude_end = True if force_int else False
-
-    # Standard sliding window generation
-    if reference is None:
-        if exclude_end: win_starts = _iarange(lims[0], lims[-1]-width+1, step)
-        else:           win_starts = _iarange(lims[0], lims[-1]-width, step)
-
-    # Origin-anchored sliding window generation
-    #  One window set to start at given 'reference', position of rest of windows
-    #  is set around that window
-    else:
-        if exclude_end:
-            # Series of windows going backwards from ref point (flipped to proper order),
-            # followed by Series of windows going forwards from ref point
-            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
-                                        _iarange(reference+step, lims[-1]-width+1, step))
-
-        else:
-            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
-                                        _iarange(reference+step, lims[-1]-width, step))
-
-    # Set end of each window
-    if exclude_end: win_ends = win_starts + width - 1
-    else:           win_ends = win_starts + width
-
-    # Round window starts,ends to nearest integer
-    if force_int:
-        win_starts = np.round(win_starts)
-        win_ends   = np.round(win_ends)
-
-    return np.stack((win_starts,win_ends),axis=1)
-
-
 def remove_dc(data, axis=None):
     """
     Removes constant DC component of signals, estimated as across-time mean
@@ -2005,26 +1938,26 @@ def remove_evoked(data, axis=0, method='mean', design=None):
         assert (design.ndim == 1) or ((design.ndim == 2) and (design.shape[1] == 1)), \
             "Design matrix <design> must be vector-like (1d or 2d w/ shape[1]=1)"
 
-        data,data_shape = _reshape_data(data,axis=axis)
+        data, data_shape = standardize_array(data, axis=axis, target_axis=0)
 
         groups = np.unique(design)
         for group in groups:
             idxs = design == group
             data[idxs,...] -= np.mean(data[idxs,...],axis=0,keepdims=True)
 
-        data = _unreshape_data(data,data_shape,axis=axis)
+        data = undo_standardize_array(data, data_shape, axis=axis, target_axis=0)
 
     # Regress data on given design matrix and return residuals
     elif method.lower() == 'regress':
         assert design.ndim in [1,2], \
             "Design matrix <design> must be matrix-like (2d) or vector-like (1d)"
 
-        data,data_shape = _reshape_data(data,axis=axis)
+        data, data_shape = standardize_array(data, axis=axis, target_axis=0)
 
         model = LinearRegression()
         data -= model.fit(design,data).predict(design)
 
-        data = _unreshape_data(data,data_shape,axis=axis)
+        data = undo_standardize_array(data, data_shape, axis=axis, target_axis=0)
 
     return data
 
@@ -2309,20 +2242,20 @@ def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
 
     # If f=0 is not in data, numerically extrapolate values for it
     if not np.isclose(freqs,0).any():
-        f0 = _interp1(freqs,data,0,axis=freq_axis,kind='cubic',fill_value='extrapolate')
+        f0 = interp1(freqs,data,0,axis=freq_axis,kind='cubic',fill_value='extrapolate')
         f0 = np.expand_dims(f0,freq_axis)
         data = np.concatenate((f0,data),axis=freq_axis)
         freqs = np.concatenate(([0],freqs))
 
     # Convert values at Nyquist freq to complex conjugate at negative frequency
-    slices = _axis_slices(freq_axis,-1,data.ndim)
+    slices = axis_index_slices(freq_axis,-1,data.ndim)
     data[slices] = data[slices].conj()
     freqs[-1] *= -1
 
     # Replicate values for all freqs (s.t. 0 < f < nyquist)
     # as complex conjugates at negative frequencies
     idxs    = slice(-2,1,-1)
-    slices  = _axis_slices(freq_axis,idxs,data.ndim)
+    slices  = axis_index_slices(freq_axis,idxs,data.ndim)
     data    = np.concatenate((data, data[slices].conj()), axis=freq_axis)
     freqs   = np.concatenate((freqs, -freqs[idxs]))
 
@@ -2374,7 +2307,7 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
     RETURNS
     data        (n_timepts,n_trials) ndarray. Simulated oscillation-in-noise data.           
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
     
     def _randn(*args):
         """ 
@@ -2431,156 +2364,14 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
 
     return data
 
-            
-# =============================================================================
-# Data reshaping helper functions
-# =============================================================================
-def _index_axis(data, axis, idxs):
-    """ 
-    Utility to dynamically index into a arbitrary axis of an ndarray 
-    
-    data = _index_axis(data, axis, idxs)
-    
-    ARGS
-    data    ndarray. Array of arbitrary shape, to index into given axis of.
-    
-    axis    Int. Axis of ndarray to index into.
-    
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
-    
-    RETURNS
-    data    ndarray. Input array with indexed values selected from given axis.
-    """
-    # Generate list of slices, with ':' for all axes except <idxs> for <axis>
-    slices = _axis_slices(axis, idxs, data.ndim)
 
-    # Use slices to index into data, and return sliced data
-    return data[slices]
-
-
-def _axis_slices(axis, idxs, ndim):
-    """
-    Generate list of slices, with ':' for all axes except <idxs> for <axis>,
-    to use for dynamic indexing into an arbitary axis of an ndarray
-    
-    slices = _axis_slices(axis, idxs, ndim)
-    
-    ARGS
-    axis    Int. Axis of ndarray to index into.
-    
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
-    
-    ndim    Int. Number of dimensions in ndarray to index into
-    
-    RETURNS
-    slices  Tuple of slices. Index tuple to use to index into given 
-            axis of ndarray as: selected_values = array[slices]  
-    """
-    # Initialize list of null slices, equivalent to [:,:,:,...]
-    slices = [slice(None)] * ndim
-
-    # Set slice for <axis> to desired indexing
-    slices[axis] = idxs
-
-    # Convert to tuple bc indexing arrays w/ a list is deprecated
-    return tuple(slices)
-
-
-def _reshape_data(data, axis=0):
-    """
-    Reshapes multi-dimensional data array to 2D (matrix) form for analysis
-
-    data, data_shape = _reshape_data(data,axis=0)
-
-    ARGS
-    data    (...,n,...) ndarray. Data array of arbitrary shape.
-
-    axis    Int. Axis of data to move to axis 0 for subsequent analysis. Default: 0
-
-    RETURNS
-    data    (n,m) ndarray. Data array w/ <axis> moved to axis=0, 
-            and all axes > 0 unwrapped into single dimension, where 
-            m = prod(shape[1:])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-    """
-    if axis < 0: axis = data.ndim + axis    
-    
-    # Save original shape/dimensionality of <data>
-    data_ndim  = data.ndim
-    data_shape = data.shape
-
-    if ~data.flags.c_contiguous:
-        # If observation axis != 0, permute axis to make it so
-        if axis != 0:       data = np.moveaxis(data,axis,0)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix
-        if data_ndim > 2:   data = np.reshape(data,(data_shape[axis],-1),order='F')
-
-    # Faster method for c-contiguous arrays
-    else:
-        # If observation axis != last dim, permute axis to make it so
-        if axis != data_ndim - 1: data = np.moveaxis(data,axis,-1)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
-        if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T
-        else:               data = data.T
-
-    return data, data_shape
-
-
-def _unreshape_data(data, data_shape, axis=0):
-    """
-    Reshapes data array from unwrapped 2D (matrix) form back to ~ original
-    multi-dimensional form
-
-    data = _unreshape_data(data,data_shape,axis=0)
-
-    ARGS
-    data    (axis_len,m) ndarray. Data array w/ <axis> moved to axis=0, 
-            and all axes > 0 unwrapped into single dimension, where 
-            m = prod(shape[1:])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    axis    Int. Axis of original data moved to axis 0, which will be shifted 
-            back to original axis.. Default: 0
-
-    RETURNS
-    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
-    """
-    data_shape  = np.asarray(data_shape)
-    if axis < 0: axis = data.ndim + axis    
-
-    data_ndim   = len(data_shape) # Number of dimensions in original data
-    axis_len    = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
-
-    # If data array data had > 2 dims, reshape matrix back into ~ original shape
-    # (but with length of dimension <axis> = <axis_length>)
-    if data_ndim > 2:
-        # Reshape data -> (axis_len,<original shape w/o <axis>>)
-        shape = (axis_len,*data_shape[np.arange(data_ndim) != axis])
-        # Note: I think you want the order to be 'F' regardless of memory layout
-        # TODO test this!!!
-        data  = np.reshape(data,shape,order='F')
-
-    # If <axis> wasn't 0, move axis back to original position
-    if axis != 0: data = np.moveaxis(data,0,axis)
-
-    return data
-
-
-def _unreshape_data_newaxis(data,data_shape,axis=0):
+def _undo_standardize_array_newaxis(data,data_shape,axis=0):
     """
     Reshapes data array from unwrapped form back to ~ original
     multi-dimensional form in special case where a new frequency axis was
     inserted before time axis (<axis>)
 
-    data = _unreshape_data_newaxis(data,data_shape,axis=0)
+    data = _undo_standardize_array_newaxis(data,data_shape,axis=0)
 
     ARGS
     data    (axis_len,m) ndarray. Data array w/ all axes > 0 unwrapped into
@@ -2607,8 +2398,15 @@ def _unreshape_data_newaxis(data,data_shape,axis=0):
         shape   = (n_freqs, n_timepts, *data_shape[np.arange(data_ndim) != axis])
         data    = np.reshape(data,shape,order='F')
 
+    # Squeeze (n,1) array back down to 1d (n,) vector, 
+    #  and extract value from scalar array -> float
+    elif data_ndim == 1:
+        data = data.squeeze(axis=-1)
+        if data.size == 1: data = data.item()
+
     # If <axis> wasn't 0, move axis back to original position
-    if axis != 0: data = np.moveaxis(data,(0,1),(axis,axis+1))
+    if (axis != 0) and isinstance(data,np.ndarray):
+        data = np.moveaxis(data,(0,1),(axis,axis+1))
     
     return data
 
@@ -2616,19 +2414,6 @@ def _unreshape_data_newaxis(data,data_shape,axis=0):
 # =============================================================================
 # Other helper functions
 # =============================================================================
-def _iarange(start=0, stop=0, step=1):
-    """
-    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
-    output, except ends at stop, not stop - 1 (or more generally stop - step)
-
-    r = _iarange(start=0,stop=0,step=1)
-    
-    Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)    
-    """
-    if isinstance(step,int):    return np.arange(start,stop+1,step)
-    else:                       return np.arange(start,stop+1e-12,step)
-
-
 def _next_power_of_2(n):
     """
     Rounds x up to the next power of 2 (smallest power of 2 greater than n)
@@ -2651,15 +2436,6 @@ def _infer_freq_scale(freqs):
     else:
         warn("Unable to determine scale of frequency sampling vector. Assuming it's arbitrary")
         return 'uneven'
-
-
-def _interp1(x, y, xinterp, **kwargs):
-    """
-    Interpolates 1d data vector <y> sampled at index values <x> to
-    new sampling vector <xinterp>
-    Convenience wrapper around scipy.interpolate.interp1d w/o weird call structure
-    """
-    return interp1d(x,y,**kwargs).__call__(xinterp)
 
 
 def _extract_triggered_data(data, smp_rate, event_times, window):
@@ -2689,38 +2465,4 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
 
     return data_out
 
-
-def _check_window_lengths(windows,tol=1):
-    """ 
-    Ensures a set of windows are the same length. If not equal, but within given tolerance,
-    windows are trimmed or expanded to the modal window length.
-    
-    ARGS
-    windows (n_wins,2) array-like. Set of windows to test, given as series of [start,end].
-    
-    tol     Scalar. Max tolerance of difference of each window length from the modal value.
-    
-    RETURNS
-    windows (n_wins,2) ndarray. Same windows, possibly slightly trimmed/expanded to uniform length
-    """    
-    windows = np.asarray(windows)
-    
-    window_lengths  = np.diff(windows,axis=1).squeeze()
-    window_range    = np.ptp(window_lengths)
-    
-    # If all window lengths are the same, windows are OK and we are done here
-    if np.allclose(window_lengths, window_lengths[0]): return windows
-    
-    # Compute mode of windows lengths and max difference from it
-    modal_length    = mode(window_lengths)[0][0]    
-    max_diff        = np.max(np.abs(window_lengths - modal_length))
-    
-    # If range is beyond our allowed tolerance, throw an error
-    assert max_diff <= tol, \
-        ValueError("Variable-length windows unsupported (range=%.1f). All windows must have same length" \
-                    % window_range)
-        
-    # If range is between 0 and tolerance, we trim/expand windows to the modal length
-    windows[:,1]    = windows[:,1] + (modal_length - window_lengths)
-    return windows
     

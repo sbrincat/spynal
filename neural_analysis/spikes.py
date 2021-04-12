@@ -16,8 +16,6 @@ cut_trials          Cuts spiking data into trials
 realign_data        Realigns data to new within-trial times (new t=0)
 pool_electrode_units Pools all units on each electrode into a multi-unit
 
-setup_sliding_windows Generates set of sliding windows with given parameters
-
 ### Plotting ###
 plot_raster         Generates a raster plot
 plot_mean_waveforms Plots mean spike waveforms from one/more units
@@ -40,8 +38,18 @@ import matplotlib.pyplot as plt
 
 from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
-from scipy.stats import poisson, bernoulli, norm, expon, mode
+from scipy.stats import poisson, bernoulli, norm, expon
 
+try:
+    from .utils import set_random_seed, iarange, unsorted_unique, index_axis, \
+                       standardize_array, undo_standardize_array, setup_sliding_windows
+    from .helpers import _check_window_lengths
+# TEMP    
+except ImportError:
+    from utils import set_random_seed, iarange, unsorted_unique, index_axis, \
+                      standardize_array, undo_standardize_array, setup_sliding_windows
+    from helpers import _check_window_lengths
+    
 
 # =============================================================================
 # Spike count/rate computation functions
@@ -314,7 +322,6 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                         
     # Convert kernel specifier to actual kernel (window) function 
     width_smps = width*smp_rate # convert width to samples    
-    # DEL kernel = _str_to_kernel(kernel,width*smp_rate,**kwargs)
     # Kernel is already a (custom) array of values
     if isinstance(kernel,np.ndarray):       kernel_ = kernel
     
@@ -592,7 +599,7 @@ def bool_to_times(spike_bool, t, axis=-1):
         
     # Reshape input data -> 2d array (n_spike_trains,n_timepts)
     # (where spike trains = trials,units,etc.)
-    spike_bool,spike_bool_shape = _reshape_data(spike_bool,axis=axis)
+    spike_bool,spike_bool_shape = standardize_array(spike_bool, axis=axis, target_axis=-1)    
     n_spike_trains,n_timepts = spike_bool.shape
     
     spike_times = np.empty((n_spike_trains,), dtype=object)
@@ -815,7 +822,7 @@ def cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
     
     # Extract segment of continuous data for each trial
     for trial,lim in enumerate(trial_idxs):
-        cut_data[...,trial] = _index_axis(data, axis, slice(lim[0],lim[1]+1))
+        cut_data[...,trial] = index_axis(data, axis, slice(lim[0],lim[1]+1))
                         
     return cut_data
     
@@ -1099,11 +1106,11 @@ def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=Non
                 transform any corresponding metadata appropriately.
     """
     # Find set of electrodes in data, if not explicitly input
-    if elec_set is None: elec_set = _unsorted_unique(electrodes)
+    if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
     
     # Reshape spike data array -> 2D matrix (n_dataseries,n_units)
-    data_sua,data_shape = _reshape_data(data_sua,axis=axis)    
+    data_sua,data_shape = standardize_array(data_sua, axis=axis, target_axis=-1)
     n_series,_ = data_sua.shape
     
     data_mua = np.empty((n_series,n_elecs),dtype=object)
@@ -1122,7 +1129,7 @@ def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=Non
             if sort: data_mua[i_series,i_elec].sort()
 
     # Reshape output data array to original shape (now with len(data[axis] = n_elecs)
-    data_mua = _unreshape_data(data_mua,data_shape,axis=axis)
+    data_mua = undo_standardize_array(data_mua, data_shape, axis=axis, target_axis=-1)
     
     # Generate list of indexes of 1st occurrence of each electrode, if requested
     if return_idxs:
@@ -1167,7 +1174,7 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
                 electrode in <elec_set> within <electrodes>. Can be used to
                 transform any corresponding metadata appropriately.                                      
     """
-    if elec_set is None: elec_set = _unsorted_unique(electrodes)
+    if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
 
     data_shape = list(data_sua.shape)
@@ -1227,7 +1234,7 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
                 electrode in <elec_set> within <electrodes>. Can be used to
                 transform any corresponding metadata appropriately.                                    
     """
-    if elec_set is None: elec_set = _unsorted_unique(electrodes)
+    if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
 
     data_shape = list(data_sua.shape)
@@ -1255,75 +1262,7 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
         return data_mua    
 
 
-def setup_sliding_windows(width, lims, step=None, reference=None,
-                          force_int=False, exclude_end=None):
-    """
-    Generates set of sliding windows using given parameters
 
-    windows = setup_sliding_windows(width,lims,step=None,
-                                    reference=None,force_int=False,exclude_end=None)
-
-    ARGS
-    width       Scalar. Full width of each window. Required arg.
-
-    lims        (2,) array-like. [start end] of full range of domain you want
-                windows to sample. Required.
-
-    step        Scalar. Spacing between start of adjacent windows
-                Default: step = width (ie, perfectly non-overlapping windows)
-
-    reference   Bool. Optionally sets a reference value at which one window
-                starts and the rest of windows will be determined from there.
-                eg, set = 0 to have a window start at x=0, or
-                    set = -width/2 to have a window centered at x=0
-                Default: None = just start at lims[0]
-
-    force_int   Bool. If True, rounds window starts,ends to integer values.
-                Default: False (don't round)
-
-    exclude_end Bool. If True, excludes the endpoint of each (integer-valued)
-                sliding win from the definition of that win, to prevent double-sampling
-                (eg, the range for a 100 ms window is [1 99], not [1 100])
-                Default: True if force_int==True, otherwise default=False
-
-    OUTPUT
-    windows     (n_wins,2) ndarray. Sequence of sliding window [start end]'s
-    """
-    # Default: step is same as window width (ie windows perfectly disjoint)
-    if step is None: step = width
-    # Default: Excluding win endpoint is default for integer-valued win's,
-    #  but not for continuous wins
-    if exclude_end is None:  exclude_end = True if force_int else False
-
-    # Standard sliding window generation
-    if reference is None:
-        if exclude_end: win_starts = _iarange(lims[0], lims[-1]-width+1, step)
-        else:           win_starts = _iarange(lims[0], lims[-1]-width, step)
-
-    # Origin-anchored sliding window generation
-    #  One window set to start at given 'reference', position of rest of windows
-    #  is set around that window
-    else:
-        if exclude_end:
-            # Series of windows going backwards from ref point (flipped to proper order),
-            # followed by Series of windows going forwards from ref point
-            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
-                                        _iarange(reference+step, lims[-1]-width+1, step))
-
-        else:
-            win_starts = np.concatenate(np.flip(_iarange(reference, lims[0], -step)),
-                                        _iarange(reference+step, lims[-1]-width, step))
-
-    # Set end of each window
-    if exclude_end: win_ends = win_starts + width - 1
-    else:           win_ends = win_starts + width
-
-    # Round window starts,ends to nearest integer
-    if force_int:
-        win_starts = np.round(win_starts)
-        win_ends   = np.round(win_ends)
-
-    return np.stack((win_starts,win_ends),axis=1)
 
 
 # =============================================================================
@@ -1367,7 +1306,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     # Is gain scalar-valued or array-like?
     scalar_gain = not isinstance(gain, (list, tuple, np.ndarray))
@@ -1442,7 +1381,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     labels  (n_trials,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     assert data_type in ['timestamp','bool'], \
         ValueError("Unsupported value '%s' given for <data_type>. Should be 'timestamp' or 'bool'" \
@@ -1523,145 +1462,6 @@ def _custom_bin_count(data, bins):
                        for (start,end) in bins], dtype='uint16')
                     
 
-# =============================================================================
-# Data reshaping helper functions
-# =============================================================================
-def _index_axis(data, axis, idxs):
-    """ 
-    Utility to dynamically index into a arbitrary axis of an ndarray 
-    
-    data = _index_axis(data, axis, idxs)
-    
-    ARGS
-    data    ndarray. Array of arbitrary shape, to index into given axis of.
-    
-    axis    Int. Axis of ndarray to index into.
-    
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
-    
-    RETURNS
-    data    ndarray. Input array with indexed values selected from given axis.
-    """
-    # Generate list of slices, with ':' for all axes except <idxs> for <axis>
-    slices = _axis_slices(axis, idxs, data.ndim)
-
-    # Use slices to index into data, and return sliced data
-    return data[slices]
-
-
-def _axis_slices(axis, idxs, ndim):
-    """
-    Generate list of slices, with ':' for all axes except <idxs> for <axis>,
-    to use for dynamic indexing into an arbitary axis of an ndarray
-    
-    slices = _axis_slices(axis, idxs, ndim)
-    
-    ARGS
-    axis    Int. Axis of ndarray to index into.
-    
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
-    
-    ndim    Int. Number of dimensions in ndarray to index into
-    
-    RETURNS
-    slices  Tuple of slices. Index tuple to use to index into given 
-            axis of ndarray as: selected_values = array[slices]  
-    """
-    # Initialize list of null slices, equivalent to [:,:,:,...]
-    slices = [slice(None)] * ndim
-
-    # Set slice for <axis> to desired indexing
-    slices[axis] = idxs
-
-    # Convert to tuple bc indexing arrays w/ a list is deprecated
-    return tuple(slices)
-
-
-def _reshape_data(data, axis=-1):
-    """
-    Reshapes multi-dimensional data array to 2D (matrix) form for analysis
-
-    data, data_shape = _reshape_data(data,axis=-1)
-
-    ARGS
-    data    (...,n,...) ndarray. Data array of arbitrary shape.
-
-    axis    Int. Axis of data to move to axis -1 for subsequent analysis. Default: -1
-
-    RETURNS
-    data    (m,n) ndarray. Data array w/ <axis> moved to axis=-1, 
-            and all axes < -1 unwrapped into single dimension, where 
-            m = prod(shape[:-1])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-    """
-    # Save original shape/dimensionality of <data>
-    data_ndim  = data.ndim
-    data_shape = data.shape
-
-    # Faster method for f-contiguous arrays
-    if data.flags.f_contiguous:
-        # If observation axis != first dim, permute axis to make it so
-        if axis != 0: data = np.moveaxis(data,axis,0)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix, then transpose
-        if data_ndim > 2:   data = np.reshape(data,(data_shape[axis],-1),order='F').T
-        else:               data = data.T
-
-    else:
-        # If observation axis != -1, permute axis to make it so
-        if axis not in [-1, data_ndim - 1]: data = np.moveaxis(data,axis,-1)
-
-        # If data array data has > 2 dims, keep axis -1 and unwrap other dims into a matrix
-        if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C')
-
-    return data, data_shape
-
-
-def _unreshape_data(data, data_shape, axis=-1):
-    """
-    Reshapes data array from unwrapped 2D (matrix) form back to ~ original
-    multi-dimensional form
-
-    data = _unreshape_data(data,data_shape,axis=-1)
-
-    ARGS
-    data    (m,axis_len) ndarray. Data array w/ <axis> moved to axis=-1, 
-            and all axes < -1 unwrapped into single dimension, where 
-            m = prod(shape[:-1])
-
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    axis    Int. Axis of original data moved to axis -1, which will be shifted 
-            back to original axis.. Default: -1
-
-    RETURNS
-    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
-    """
-    data_shape  = np.asarray(data_shape)
-
-    data_ndim   = len(data_shape) # Number of dimensions in original data
-    axis_len    = data.shape[-1]  # Length of dim -1 (will become dim <axis> again)
-
-    # If data array data had > 2 dims, reshape matrix back into ~ original shape
-    # (but with length of dimension <axis> = <axis_length>)
-    if data_ndim > 2:
-        # Reshape data -> (<original shape w/o <axis>>,axis_len)
-        shape = (*data_shape[np.arange(data_ndim) != axis],axis_len)
-        # Note: I think you want the order to be 'C' regardless of memory layout
-        # TODO test this!!!
-        data  = np.reshape(data,shape,order='C')
-
-    # If observation axis wasn't -1, permute axis back to original position
-    if axis != -1: data = np.moveaxis(data,-1,axis)
-
-    return data
-
-
 #==============================================================================
 # Other helper functions
 #==============================================================================
@@ -1694,32 +1494,6 @@ def _isbinary(data):
     return (data.dtype == bool) or \
            (np.issubdtype(data.dtype,np.number) and \
             np.all(np.in1d(data,[0,1,0.0,1.0,True,False])))
-
-
-def _unsorted_unique(data):
-    """
-    Implements np.unique(data) without sorting, ie maintains original order of
-    unique elements as they are found in data.
-
-    SOURCE
-    stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
-    """
-    data = np.asarray(data)
-    idxs = np.unique(data,return_index=True)[1]
-    return data[np.sort(idxs)]
-
-
-def _iarange(start=0, stop=0, step=1):
-    """
-    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
-    output, except ends at stop, not stop - 1 (or more generally stop - step)
-    
-    Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)
-
-    r = _iarange(start=0,stop=0,step=1)
-    """
-    if isinstance(step,int):    return np.arange(start,stop+1,step)
-    else:                       return np.arange(start,stop+1e-12,step)
 
 
 def _enclose_in_object_array(data):
@@ -1755,51 +1529,3 @@ def _remove_buffer(data, buffer, axis=-1):
         return (data.swapaxes(-1,axis)[...,buffer:-buffer]
                     .swapaxes(axis,-1))
 
-# DELETE
-# def _str_to_kernel(kernel, width, **kwargs):
-#     """ Converts string specifier to scipy.signal.windows function """
-#     if isinstance(kernel,str):  kernel = kernel.lower()
-
-#     if isinstance(kernel,np.ndarray):       return kernel
-#     elif callable(kernel):                  return kernel(width,**kwargs)
-#     elif kernel in ['hann','hanning']:      return hann(int(round(width*2.0)))
-#     elif kernel in ['gaussian','normal']:   return gaussian(int(round(width*6.0)),width)
-#     else:
-#         raise ValueError("Unsupported value '%s' given for kernel. \
-#                          Should be 'hanning'|'gaussian'" % kernel)
-
-
-def _check_window_lengths(windows,tol=1):
-    """ 
-    Ensures a set of windows are the same length. If not equal, but within given tolerance,
-    windows are trimmed or expanded to the modal window length.
-    
-    ARGS
-    windows (n_wins,2) array-like. Set of windows to test, given as series of [start,end].
-    
-    tol     Scalar. Max tolerance of difference of each window length from the modal value.
-    
-    RETURNS
-    windows (n_wins,2) ndarray. Same windows, possibly slightly trimmed/expanded to uniform length
-    """    
-    windows = np.asarray(windows)
-    
-    window_lengths  = np.diff(windows,axis=1).squeeze()
-    window_range    = np.ptp(window_lengths)
-    
-    # If all window lengths are the same, windows are OK and we are done here
-    if np.allclose(window_lengths, window_lengths[0]): return windows
-    
-    # Compute mode of windows lengths and max difference from it
-    modal_length    = mode(window_lengths)[0][0]    
-    max_diff        = np.max(np.abs(window_lengths - modal_length))
-    
-    # If range is beyond our allowed tolerance, throw an error
-    assert max_diff <= tol, \
-        ValueError("Variable-length windows unsupported (range=%.1f). All windows must have same length" \
-                    % window_range)
-        
-    # If range is between 0 and tolerance, we trim/expand windows to the modal length
-    windows[:,1]    = windows[:,1] + (modal_length - window_lengths)
-    return windows
-    

@@ -132,14 +132,16 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
     # Use scipy.io.loadmat() to load v7 and older MAT-files
     else:               data = _load7(filename,variables,typemap,order)
 
+    if variables is None: variables = list(data.keys())
+
     # Extract values from 1-item arrays as their given dtype
     if extract_elem:
-        for vbl in data.keys():
+        for vbl in variables:
             if isinstance(data[vbl], np.ndarray) and (data[vbl].size == 1):
                 data[vbl] = data[vbl].item()
         
     if verbose:
-        for vbl in data.keys():
+        for vbl in variables:
             if isinstance(data[vbl], np.ndarray):       # Numpy array variables
                 vblstr = vbl + ' : numpy.array(' + \
                         ''.join('%3d,' % x for x in data[vbl].shape) + ')' + \
@@ -154,8 +156,6 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
                 vblstr = vbl            
             vblstr = vblstr + '\n'
             print(vblstr)
-
-    variables = list(data.keys())
 
     if asdict:                  return data
     elif len(variables) == 1:   return data[variables[0]]
@@ -506,7 +506,7 @@ def _load73(filename, variables=None, typemap=None, order='C'):
             for key in file[vbl].keys():
                 # Nested struct
                 if isinstance(file[vbl][key], h5py.Group):
-                    data[vbl][key] = _process_object(file[vbl][key],file)
+                    data[vbl][key] = _process_h5py_object(file[vbl][key],file)
 
                 # Generic object (non-numeric) dtypes (Matlab struct fields)
                 elif file[vbl][key].dtype == object:
@@ -523,22 +523,30 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                         if isstring: break
 
                     # Load each value, convert as needed, concatenate into a list
-                    tmp_list = []
+                    # DEL tmp_list = []
                     # String (Matlab char arrays) are loaded in h5py as ascii.
                     # Convert ascii coded strings -> actual string, append to list
                     if isstring:
-                        for elem in range(n_elems):
+                        tmp_list = []
+                        for elem in range(n_elems):                            
                             for ref in file[vbl][key][elem]:
                                 tmp_list.append(_convert_string(file[ref]))
-
+                                
+                        data[vbl][key] = np.asarray(tmp_list,dtype=object).reshape(file[vbl][key].shape)
+                        
                     # Otherwise (other element types): Just append values to list
                     else:
+                        data[vbl][key] = np.empty((file[vbl][key].size,), dtype=object)                        
                         for elem in range(n_elems):
+                            tmp_list = []
                             for ref in file[vbl][key][elem]:
-                                tmp_list.append([_process_object(file[ref],file)])
+                                tmp_list.append(_process_h5py_object(file[ref],file))
+                            data[vbl][key][elem] = np.asarray(tmp_list,dtype=object).squeeze() # tmp_list # DEL np.asarray(tmp_list)
 
+                    # Reshape to original object array shape
+                    data[vbl][key] = data[vbl][key].reshape(file[vbl][key].shape)
                     # Convert list -> Numpy array (of objects) and reshape to original shape
-                    data[vbl][key] = np.asarray(tmp_list,dtype=object).reshape(file[vbl][key].shape)                                            
+                    # DEL data[vbl][key] = np.asarray(tmp_list,dtype=object).reshape(file[vbl][key].shape)                                            
 
                 # 1-item arrays -- extract item as array dtype
                 elif file[vbl][key].size == 1:
@@ -561,7 +569,9 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                 # (this is apparently indicated by this 'MATLAB_int_decode' attribute)
                 elif ('MATLAB_int_decode' in file[vbl][key].attrs) and \
                      (file[vbl][key].attrs['MATLAB_int_decode'] > 1):
-                    data[vbl][key] = _convert_string(data[vbl][key])
+                    # HACK Convert ascii from original HDF5 dataset bc scalar extract above messes it up
+                    data[vbl][key] = _convert_string(file[vbl][key][()])
+                    # DEL  _convert_string(file[vbl][key])
 
                 if isinstance(data[vbl][key],np.ndarray):
                     # Single-items arrays: extract single value as type <dtype>
@@ -597,15 +607,15 @@ def _convert_string(value, encoding='UTF-16'):
     # return ''.join(map(chr,value))                        # time test ~ 7.3 s
 
 
-def _process_object(value,file):
+def _process_h5py_object(value,file):
     """ Properly handles arbitrary objects loaded from HDF5 files in recursive fashion """
     # For h5py Dataset (contains Matlab array), extract and process data
     if isinstance(value, h5py.Dataset):
-        return _process_object(value[()],file)
+        return _process_h5py_object(value[()],file)
 
     # For h5py Group (Matlab struct), recurse thru fields and return as dict
     elif isinstance(value, h5py.Group):
-        return {key : _process_object(value[key],file) for key in value.keys()}
+        return {key : _process_h5py_object(value[key],file) for key in value.keys()}
 
     # For a HDF5 Reference, get the name of the referenced object and read directly from file
     # stackoverflow.com/questions/28541847/how-convert-this-type-of-data-hdf5-object-reference-to-something-more-readable
@@ -624,11 +634,19 @@ def _process_object(value,file):
     elif isinstance(value,np.ndarray):
         # For length-1 ndarray, extract and process its single array element
         if value.size == 1:
-            return _process_object(value.item(),file)
+            return _process_h5py_object(value.item(),file)
 
         # For object ndarray, iterate thru and process each array element individually
         elif value.dtype == object:
-            return np.reshape([_process_object(elem,file) for elem in value], value.shape)
+            obj = [_process_h5py_object(elem,file) for elem in value]
+            try:
+                return np.asarray(obj,dtype=object).reshape(value.shape).squeeze()
+            # HACK When each element of input has same length j, asarray creates an
+            # (i,j) array instead of (i,) array of (j,) objects (see lfpSchema.userData.removedFreqs).
+            # TEMP Workaround til I can find better way to deal with this
+            except:
+                out = np.empty(value.squeeze().shape,dtype=object)
+                for j in range(value.size): out[j] = obj[j]
 
         # For general numerical ndarray, return array with any singleton axes removed
         else:
@@ -692,22 +710,19 @@ def _structuredarray_to_dict(sarray):
     dic = {name:sarray[name] for name in sarray.dtype.names}
 
     for name in dic.keys():
-        # For ndarrays, remove redundant axes and extract value from single-item arrays
+        # For ndarrays, first remove redundant axes
         if isinstance(dic[name],np.ndarray):
-            # Single-item arrays: extract single value as type <dtype>
-            if dic[name].size == 1:
-                dic[name] = dic[name].item()
-
             # 2d arrays: Squeeze out any singleton axes
-            elif dic[name].ndim > 1:
+            if dic[name].ndim > 1:
                 dic[name] = dic[name].squeeze()
 
             # Also squeeze out extra singleton axes in object arrays
-            if isinstance(dic[name],np.ndarray) and isinstance(dic[name].dtype.type,object):
+            if isinstance(dic[name].dtype.type,object):
                 flatiter = dic[name].flat       # 1D iterator to iterate arbitrary-shape array
                 for _ in range(dic[name].size):
                     coords = flatiter.coords    # Multidim coordinates into array
-                    dic[name][coords] = dic[name][coords].squeeze()
+                    if isinstance(dic[name][coords],np.ndarray):
+                        dic[name][coords] = dic[name][coords].squeeze()
                     next(flatiter)              # Iterate to next element
 
         # Convert dict entries that are themselves structured arrays
@@ -718,29 +733,52 @@ def _structuredarray_to_dict(sarray):
             isinstance(dic[name],np.void):
             dic[name] = _structuredarray_to_dict(dic[name])
 
-        # If variable remains any other ndarray, convert special case data types
+        # If variable is any other ndarray, convert special case data types
         elif isinstance(dic[name],np.ndarray):
+            # For single-item arrays: extract single value as type <dtype>
+            if dic[name].size == 1: dic[name] = dic[name].item()
+            
             # Heuristically convert binary-valued variables to bool type
-            if (dic[name].dtype != bool) and _isbinary(dic[name]) and not (dic[name] == 0).all():
-                dic[name] = dic[name] != 0
+            elif (dic[name].dtype != bool) and _isbinary(dic[name]) and not (dic[name] == 0).all():
+                dic[name] = dic[name].astype(bool)
 
             # Cell-string array fields import as Numpy arrays of objects, where
             # each object is a trivial (1-length) array containing a string.
             # Just extract the strings, converting to array of string types
+            # TODO Need to deal with possibility of mixed-type cell arrays (some string, some other)
             elif isinstance(dic[name].dtype.type,object) and (dic[name].size != 0) \
                and (dic[name][0].dtype.type == np.str_):
+                # print(name, dic[name].shape, dic[name].size, dic[name].dtype)
+                # print([(dic[name][j].shape, dic[name][j].size, dic[name][j].dtype) for j in range(dic[name].size)])
+                # print(dic[name])
+                # dic[name] = _extract_strings(dic[name])   
+
                 # Empty strings in cell-string arrays are imported as empty array,
                 # so need this extra step to test for that
-                isstring = False
                 for elem in range(len(dic[name])):
-                    # # If elem is itself a string, convert it
-                    if dic[name][elem].shape == () and isinstance(dic[name][elem].item(),str):
+                    # Extract item from single-element arrays
+                    if dic[name][elem].shape == ():
                         dic[name][elem] = dic[name][elem].item()
-                    # This skips empty arrays, only tests for string type on non-emptys
-                    elif (len(dic[name][elem]) != 0) and isinstance(dic[name][elem][0],str):
-                        isstring = True
-                        break
-                if isstring: dic[name] = _extract_strings(dic[name])
+                    # Deal with empty strings
+                    elif len(dic[name][elem]) == 0:
+                        dic[name][elem] = ''
+                    # General strings
+                    # TODO Feel like we need a recursion here?
+                    else:
+                        dic[name][elem] = dic[name][elem][0]
+
+                # Empty strings in cell-string arrays are imported as empty array,
+                # so need this extra step to test for that
+                # isstring = False
+                # for elem in range(len(dic[name])):
+                #     # If elem is itself a string, convert it
+                #     if dic[name][elem].shape == () and isinstance(dic[name][elem].item(),str):
+                #         dic[name][elem] = dic[name][elem].item()
+                #     # This skips empty arrays, only tests for string type on non-emptys
+                #     elif (len(dic[name][elem]) != 0) and isinstance(dic[name][elem][0],str):
+                #         isstring = True
+                #         break
+                # if isstring: dic[name] = _extract_strings(dic[name])
 
     return dic
 
@@ -848,7 +886,7 @@ def _dict_to_dataframe(dic):
         df.metadata = metadata
         # If 'Properties' had a 'RowNames' field, use that as DataFrame row index.
         if ('RowNames' in metadata) and not np.array_equal(metadata['RowNames'],[0,0]):
-            df.index = metadata['RowNames']
+            df.index = np.squeeze(metadata['RowNames'])
 
     return df
 

@@ -46,7 +46,13 @@ from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
 from patsy import DesignMatrix
 
-
+try:
+    from .utils import unsorted_unique, standardize_array, undo_standardize_array
+# TEMP    
+except ImportError:
+    from utils import unsorted_unique, standardize_array, undo_standardize_array
+    
+    
 # =============================================================================
 # High-level neural information wrapper functions
 # =============================================================================
@@ -199,9 +205,9 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
     labels = np.asarray(labels)
 
     # Reshape data array -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
     if resp_entropy is not None:
-        resp_entropy,_ = _reshape_data(resp_entropy,axis)
+        resp_entropy,_ = standardize_array(resp_entropy, axis=axis, target_axis=0)
 
     n_series = data.shape[1] if data.ndim > 1 else 1
     
@@ -290,7 +296,7 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
         info[i_series] = H - Hnoise
 
     # Pre-pend singleton axis to make info expected (1,n_series) shape
-    info = _unreshape_data(info[np.newaxis,:],data_shape,axis=axis)
+    info = undo_standardize_array(info[np.newaxis,:], data_shape, axis=axis, target_axis=0)
         
     return info
 
@@ -465,8 +471,9 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
         "auroc: Data contains no observations (trials) for one or more groups"
 
     # Reshape data arrays -> (n_observations,n_data_series) matrix
-    data1, data1_shape = _reshape_data(data1,axis)
-    data2, data2_shape = _reshape_data(data2,axis)
+    data1, data1_shape = standardize_array(data1, axis=axis, target_axis=0)
+    data2, data2_shape = standardize_array(data2, axis=axis, target_axis=0)    
+
 
     n1 = data1.shape[0]
     n2 = data2.shape[0]
@@ -510,7 +517,7 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
   
     # Pre-pend singleton axis to make info expected (1,n_series) shape
-    roc_area = _unreshape_data(roc_area[np.newaxis,:],data1_shape,axis=axis)
+    roc_area = undo_standardize_array(roc_area[np.newaxis,:], data1_shape, axis=axis, target_axis=0)
         
     return roc_area
   
@@ -852,7 +859,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
             % labels.shape[1]
     
     # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
     
     # Find set of unique group labels in list of labels
     if groups is None:
@@ -915,7 +922,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     # Convert proportion [0-1] -> percent [0-100]
     if as_pct:   exp_var = 100.0*exp_var
 
-    exp_var = _unreshape_data(exp_var,data_shape,axis=axis)
+    exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
 
     if not return_stats:
         return exp_var
@@ -927,9 +934,9 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         F[:,undefined] = 0                  # Set F = 0 for data w/ data variance = 0
         p       = Ftest.sf(F,df_groups,df_error) # p value for given F stat
 
-        F       = _unreshape_data(F,data_shape,axis=axis)
-        p       = _unreshape_data(p,data_shape,axis=axis)
-        mu      = _unreshape_data(mu,data_shape,axis=axis)
+        F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
+        p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
+        mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
 
         stats   = {'p':p, 'F':F, 'mu':mu, 'n':n}
         return exp_var, stats
@@ -1008,7 +1015,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
     """
     # TODO Add <groups> arg with list of group labels to use?
     # Reshape data array data -> (n_observation,n_data_series) matrix
-    data, data_shape  = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
     n_obs,n_series= data.shape
 
     # If interaction term is given in labels, its an interaction model
@@ -1100,7 +1107,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
     if as_pct:   exp_var = 100.0*exp_var     # Convert proportion [0-1] -> percent [0-100]
 
-    exp_var = _unreshape_data(exp_var,data_shape,axis=axis)
+    exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
 
     # Append summed PEV across all model terms to end of term axis
     if total:   exp_var = np.concatenate((exp_var, np.sum(exp_var,axis=0,keepdims=True)), axis=0)
@@ -1115,9 +1122,9 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
         F[:,undefined] = 0              # Set F = 0 for data w/ data variance = 0
         p       = Ftest.sf(F,df_groups,df_error)    # p value for given F stat
 
-        F       = _unreshape_data(F,data_shape,axis=axis)
-        p       = _unreshape_data(p,data_shape,axis=axis)
-        mu      = [_unreshape_data(mu[i_term],data_shape,axis=axis) for i_term in range(n_terms)]
+        F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
+        p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
+        mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
 
         stats   = {'p':p, 'F':F, 'mu':mu, 'n':n}
         return exp_var, stats
@@ -1194,7 +1201,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
                       wikipedia.org/wiki/Effect_size
     """
     # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = _reshape_data(data,axis)
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
     n_obs,n_series = data.shape
 
     assert labels.shape[0] == n_obs, \
@@ -1215,7 +1222,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     n_params    = labels.shape[1]
 
-    term_set    = _unsorted_unique(col_terms[~constant_col])
+    term_set    = unsorted_unique(col_terms[~constant_col])
     n_terms     = len(term_set)
 
     grand_mean  = np.mean(data, axis=0)
@@ -1274,7 +1281,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     if as_pct:   exp_var = 100.0*exp_var     # Convert proportion [0-1] -> percent [0-100]
 
-    exp_var = _unreshape_data(exp_var,data_shape,axis=axis)
+    exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
 
     # Append summed PEV across all model terms to end of term axis
     if total:
@@ -1294,9 +1301,9 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
         F[:,undefined] = 0                    # Set F = 0 for data w/ data variance = 0
         p           = Ftest.sf(F,df_extra,df_error) # p value for given F stat
 
-        F       = _unreshape_data(F,data_shape,axis=axis)
-        p       = _unreshape_data(p,data_shape,axis=axis)
-        B       = _unreshape_data(B,data_shape,axis=axis)
+        F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
+        p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
+        mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
 
         stats   = {'p':p, 'F':F, 'B':B}
         return exp_var, stats
@@ -1403,114 +1410,3 @@ def omega_squared_partial(SS_model, SS_total, MS_error, df_model, n_obs):
     """
     return ((SS_model - np.outer(df_model,MS_error)) /
             (SS_total + np.outer((n_obs-df_model),MS_error)))
-
-
-
-# =============================================================================
-# Data reshaping helper functions
-# =============================================================================
-def _reshape_data(data, axis=0):
-    """
-    Reshapes multi-dimensional data array to 2D array form for analysis
-
-    data, data_shape = _reshape_data(data,axis=0)
-
-    ARGS
-    data    (...,n_obs,...) ndarray. Data array where <axis> is observations (trials),
-            and rest of axes (if any) represent independent data series.
-
-    axis    Int. Axis of data coresponding to observations/trials, which is
-            to be moved to axis 0 for subsequent analysis. Default: 0
-
-    RETURNS
-    data    (n_obs,n_series) ndarray. Data array with <axis> moved to axis=0, and
-            all other axes unwrapped into single axis, where n_series = prod(shape[1:])
-
-    data_shape Tuple. Original shape of data array
-
-    Note:   Even 1d (vector) data is expanded into 2d (n_obs,1) array to
-            standardize for calling code.
-    """
-    data = np.asarray(data)
-    data_shape = data.shape         # Shape of original data
-    data_ndim  = len(data_shape)    # Number of dimensions in original data
-
-    if ~data.flags.c_contiguous:
-        # If observation axis != 0, permute axis to make it so
-        if axis != 0:       data = np.moveaxis(data,axis,0)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix
-        if data_ndim > 2:   data = np.reshape(data,(data_shape[axis],-1),order='F')
-
-    # Faster method for c-contiguous arrays
-    else:
-        # If observation axis != last dim, permute axis to make it so
-        lastdim = data_ndim - 1
-        if axis != lastdim: data = np.moveaxis(data,axis,lastdim)
-
-        # If data array data has > 2 dims, keep axis 0 and unwrap other dims into a matrix
-        if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T
-
-    # Expand (n_obs,) vector data to (n_obs,1) to simplify downstream code
-    if data_ndim == 1:  data = data[:,np.newaxis]
-
-    return data, data_shape
-
-
-def _unreshape_data(data, data_shape, axis=0):
-    """
-    Reshapes data array from unwrapped 2D (matrix) form back to ~ original
-    multi-dimensional form
-
-    data = _unreshape_data(data,data_shape,axis=0)
-
-    ARGS
-    data    (axis_len,n_series) ndarray. Data array w/ all axes > 0 unwrapped into
-            single dimension, where n_series = prod(shape[1:])
-
-    data_shape Tuple. Original shape of data array
-
-    axis    Int. Axis of original data corresponding to distinct observations,
-            which has become axis 0, but will be permuted back to original axis.
-            Default: 0
-
-    RETURNS
-    data       (axis_len,...) ndarray. Data array reshaped back to original shape
-    """
-    # Wrap negative axis back into 0 to ndim-1
-    axis_ = len(data_shape) + axis if axis < 0 else axis
-    data_shape  = np.asarray(data_shape)
-
-    data_ndim = len(data_shape) # Number of dimensions in original data
-    axis_len  = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
-
-    # If data array data had > 2 dims, reshape matrix back into ~ original shape
-    # (but with length of dimension <axis> = <axisLength>)
-    if data_ndim > 2:
-        # Reshape data -> (axis_len,<original shape w/o <axis>>)
-        shape = (axis_len,*data_shape[np.arange(data_ndim) != axis_])
-        data = np.reshape(data,shape,order='F')
-
-    # Squeeze (n_obs,1) array back down to 1d (n_obs,) vector, 
-    #  and extract value from scalar array -> float
-    elif data_ndim == 1:
-        data = np.squeeze(data)
-        if data.size == 1: data = data.item()
-
-    # If observation axis wasn't 0, permute axis back to original position
-    if (axis_ != 0) and isinstance(data,np.ndarray):
-        data = np.moveaxis(data,0,axis_)
-    
-    return data
-
-
-def _unsorted_unique(x):
-    """
-    Implements np.unique(x) without sorting, ie maintains original order of unique
-    elements as they are found in x.
-
-    SOURCE  stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
-    """
-    x    = np.asarray(x)
-    idxs = np.unique(x,return_index=True)[1]
-    return x[np.sort(idxs)]
