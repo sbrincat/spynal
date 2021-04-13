@@ -885,7 +885,8 @@ def _dict_to_dataframe(dic):
         df.metadata = SimpleNamespace()
         df.metadata = metadata
         # If 'Properties' had a 'RowNames' field, use that as DataFrame row index.
-        if ('RowNames' in metadata) and not np.array_equal(metadata['RowNames'],[0,0]):
+        if ('RowNames' in metadata) and not np.array_equal(metadata['RowNames'],[0,0]) \
+            and (len(metadata['RowNames']) == df.shape[0]):
             df.index = np.squeeze(metadata['RowNames'])
 
     return df
