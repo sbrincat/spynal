@@ -18,6 +18,10 @@ setuptools.setup(
       author_email= ['sbrincat@mit.edu', 'jtauber@mit.edu'],
       license='LICENSE', 
       packages=setuptools.find_packages(),
+      install_requires=[
+          'numpy', 'scipy', 'pandas', 'h5py', 'patsy', 'sklearn', 
+          'matplotlib', 'pyfftw'
+      ],
       classifiers = [
           'Intended Audience :: Me',
           'License :: OSI Approved :: MIT License',
