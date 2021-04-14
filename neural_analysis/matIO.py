@@ -41,7 +41,13 @@ except ImportError:
     _HAS_XARRAY = False
     # print("xarray module is not installed. No support for loading/saving xarray format")
 
+try:
+    from .helpers import _enclose_in_object_array
+# TEMP    
+except ImportError:
+    from helpers import _enclose_in_object_array
 
+    
 # =============================================================================
 # Matfile loading functions
 # =============================================================================
@@ -858,8 +864,12 @@ def _dict_to_dataframe(dic):
     else:
         metadata = None
 
+    # Convert any scalar dict values -> ndarrays, and ensure ndarrays are 
+    # at least 1D (0-dimensional array mess up DF conversion and are weird)
     for key in dic.keys():
-        if not isinstance(dic[key],np.ndarray): dic[key] = np.asarray(dic[key])
+        if not isinstance(dic[key],np.ndarray) or (dic[key].ndim == 0):
+            dic[key] = np.atleast_1d(dic[key])
+        # DEL if not isinstance(dic[key],np.ndarray): dic[key] = np.asarray(dic[key])
 
     # Find length of each value in dict <dic> (to become DataFrame columns)
     lengths = [value.shape[0] if value.ndim > 0 else 1 for value in dic.values()]
@@ -873,6 +883,13 @@ def _dict_to_dataframe(dic):
            (dic[key].shape[0] == height) and (dic[key].shape[1] > 1):
             dic[key] = _array_to_tuple_vector(dic[key])
 
+    # Special case: height=1 DF with some tuple-valued columns--convert to (1,) object arrays
+    if height == 1:
+        for key in dic.keys():
+            if dic[key].shape[0] > height: dic[key] = _enclose_in_object_array(dic[key])
+            # HACK Convert empty (0-length) arrays to (1,) array with value = nan
+            elif dic[key].shape[0] == 0:    dic[key] = np.atleast_1d(np.nan)
+            
     columns = list(dic.keys())
 
     # Create a DataFrame with length-consistent key/value pairs as columns
@@ -885,9 +902,13 @@ def _dict_to_dataframe(dic):
         df.metadata = SimpleNamespace()
         df.metadata = metadata
         # If 'Properties' had a 'RowNames' field, use that as DataFrame row index.
-        if ('RowNames' in metadata) and not np.array_equal(metadata['RowNames'],[0,0]) \
-            and (len(metadata['RowNames']) == df.shape[0]):
-            df.index = np.squeeze(metadata['RowNames'])
+        if ('RowNames' in metadata):
+            metadata['RowNames'] = np.atleast_1d(metadata['RowNames'])
+            if metadata['RowNames'].ndim > 1: metadata['RowNames'] = metadata['RowNames'].squeeze()
+            # Ensure RowNames was not empty, has expected length
+            if not np.array_equal(metadata['RowNames'],[0,0]) and \
+                (len(metadata['RowNames']) == df.shape[0]):
+                df.index = metadata['RowNames']
 
     return df
 

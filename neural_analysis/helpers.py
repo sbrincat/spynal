@@ -1,16 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-utils   A module of Python utilities helpful for data
-
-FUNCTIONS
-### Data reshaping functions ###
-synchrony           Synchrony between pair of channels using given method
-
-coherence           Time-frequency coherence between pair of channels
-ztransform_coherence Z-transform coherence so ~ normally distributed
-
-phase_locking_value Phase locking value (PLV) between pair of channels
-pairwise_phase_consistency Pairwise phase consistency (PPC) btwn pair of channels
+helpers   Private helper functions for neural_analysis code
 
 
 Created on Fri Apr  9 14:08:15 2021
@@ -55,3 +45,10 @@ def _check_window_lengths(windows,tol=1):
     # If range is between 0 and tolerance, we trim/expand windows to the modal length
     windows[:,1]    = windows[:,1] + (modal_length - window_lengths)
     return windows
+
+
+def _enclose_in_object_array(data):
+    """ Enclose array within an object array """
+    out = np.empty((1,),dtype=object)
+    out[0] = data
+    return out

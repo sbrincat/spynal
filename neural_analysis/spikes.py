@@ -43,12 +43,12 @@ from scipy.stats import poisson, bernoulli, norm, expon
 try:
     from .utils import set_random_seed, iarange, unsorted_unique, index_axis, \
                        standardize_array, undo_standardize_array, setup_sliding_windows
-    from .helpers import _check_window_lengths
+    from .helpers import _check_window_lengths, _enclose_in_object_array
 # TEMP    
 except ImportError:
-    from utils import set_random_seed, iarange, unsorted_unique, index_axis, \
+    from neural_analysis.utils import set_random_seed, iarange, unsorted_unique, index_axis, \
                       standardize_array, undo_standardize_array, setup_sliding_windows
-    from helpers import _check_window_lengths
+    from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
     
 
 # =============================================================================
@@ -1494,13 +1494,6 @@ def _isbinary(data):
     return (data.dtype == bool) or \
            (np.issubdtype(data.dtype,np.number) and \
             np.all(np.in1d(data,[0,1,0.0,1.0,True,False])))
-
-
-def _enclose_in_object_array(data):
-    """ Enclose array within an object array """
-    out = np.empty((1,),dtype=object)
-    out[0] = data
-    return out
 
 
 def _remove_buffer(data, buffer, axis=-1):
