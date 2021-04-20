@@ -677,9 +677,10 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
                         return_stats=False,**kwargs)
 
     ARGS
-    labels  (n_obs,n_terms) array-like. Design matrix (group labels for ANOVA models,
-            or regressors for regression model) for each observation (trial).
-            labels.shape[0] must be same length as observation <axis> of data.
+    labels  (n_obs,n_terms) array-like | patsy DesignMatrix object. Design matrix 
+            (group labels for ANOVA models, or regressors for regression model) for 
+            each observation (trial). labels.shape[0] must be same length as observation 
+            <axis> of data.
 
     data    (...,n_obs,...) ndarray. Data to fit with linear model. Axis <axis> should
             correspond to observations (trials), while any other axes can be any
@@ -715,7 +716,7 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
             See model function for specific stats returned by each.
     """
     # TODO Add anovan model
-    labels = np.asarray(labels)
+    if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
 
     # Attempt to infer proper linear model based on labels
     if model is None:
@@ -931,7 +932,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     else:
         MS_groups= SS_groups / df_groups    # Groups mean square
         F       = MS_groups / MS_error      # F statistic
-        F[:,undefined] = 0                  # Set F = 0 for data w/ data variance = 0
+        F[undefined] = 0                    # Set F = 0 for data w/ data variance = 0
         p       = Ftest.sf(F,df_groups,df_error) # p value for given F stat
 
         F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
@@ -1031,12 +1032,14 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
     # If interaction term is requested, but not provided, create one here
     if interact and labels.shape[1] == 2:
-        labels = np.concatenate((labels, np.zeros((n_obs,),dtype=int)))
-        group_pairs = np.unique(labels[:,0:2])   # All unique combinations of factor 1 & 2
+        labels = np.concatenate((labels, np.zeros((n_obs,1),dtype=labels.dtype)), axis=1)
+        # All unique combinations of factor 1 & 2
+        group_pairs = unsorted_unique(labels[:,0:2], axis=0)
         for i_pair,pair in enumerate(group_pairs):
-            idxs = np.all(labels == pair, axis=1)# Find and label all observations (trials)
-            labels[idxs,2] = i_pair              # with given pair of groups/levels
-
+            # Find and label all observations (trials) with given pair of groups/levels
+            idxs = np.all(labels[:,0:2] == pair, axis=1)
+            labels[idxs,2] = i_pair
+        
     groups = [np.unique(labels[:,i_term]) for i_term in range(n_terms)]
     n_groups = np.asarray([len(term_groups) for term_groups in groups])
 
@@ -1124,7 +1127,8 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
         F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
         p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
-        mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
+        mu  = [undo_standardize_array(mu[term], data_shape, axis=axis, target_axis=0) 
+               for term in range(n_terms)]
 
         stats   = {'p':p, 'F':F, 'mu':mu, 'n':n}
         return exp_var, stats
@@ -1143,9 +1147,10 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
                             partial=False,total=False,as_pct=True,return_stats=False)
 
     ARGS
-    labels  (n_obs,n_params) array-like. Regression design matrix. Each row corresponds
-            to a distinct observation (trial), and each column to a distinct
-            predictor (coefficient to fit). If <constant> == True, a constant
+    labels  (n_obs,n_params) array-like | patsy DesignMatrix object. 
+            Regression design matrix. Each row corresponds to a distinct 
+            observation (trial), and each column to a distinct predictor
+            (coefficient to fit). If <constant> == True, a constant
             (intercept) column will be appended to end of labels, if not already present.
             Number of rows(labels.shape[0] = n_obs) be same length as data.shape[axis].
 
@@ -1161,7 +1166,8 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
             be 1:1 due to multiple dummy-variable columns arising from
             categorical terms with > 2 levels. PEV/stats are computed separately
             for all columns/predictors of each term pooled together.
-            Default: np.arange(n_params) = 0:n_params (1:1 mapping from term:column)
+            Default: If DesignMatrix, obtained from its attributes.
+            Otherwise, assume 1:1 mapping from term:column (col_terms = np.arange(n_params))
 
     omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
             otherwise uses R-squared formula, which is positively biased.
@@ -1208,8 +1214,10 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
             "Design matrix <labels> and data array should have same number of rows (%d != %d)" \
             % (labels.shape[0], n_obs)
 
-    # If col_terms not set, assume each column in labels is a distinct term
-    if col_terms is None: col_terms = np.arange(labels.shape[1])
+    # If col_terms not set, obtain from DesignMatrix or assume each column is a distinct term
+    if col_terms is None: 
+        if isinstance(labels,DesignMatrix): col_terms = patsy_terms_to_columns(labels)
+        else:                               col_terms = np.arange(labels.shape[1])
     col_terms = np.asarray(col_terms)
 
     # If a constant is requested and not already present in design matrix <labels>,
@@ -1303,7 +1311,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
         F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
         p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
-        mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
+        B   = undo_standardize_array(B, data_shape, axis=axis, target_axis=0)
 
         stats   = {'p':p, 'F':F, 'B':B}
         return exp_var, stats

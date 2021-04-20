@@ -42,7 +42,12 @@ remove_evoked       Removes phase-locked evoked potentials from signals
 pool_freq_bands     Averages spectral data within set of frequency bands
 pool_time_epochs    Averages spectral data within set of time epochs
 one_over_f_norm     Normalizes to correct for 1/f distribution of spectral power
-one_sided_to_two_sided Converts 1-sided Fourier transform output to 2-sided equivalent
+complex_to_spec_type    Converts complex Fourier transform output to power/phase/real/imag/etc.
+one_sided_to_two_sided  Converts 1-sided Fourier transform output to 2-sided equivalent
+    
+### Plotting ###
+plot_spectrum       Plots frequency spectrum as a line plot, handling freq axis properly
+plot_spectrogram    Plots time-frequency spectrogram as a pseudocolor plot
     
 ### Data simulation ###
 simulate_oscillation Generates simulated oscillation-in-noise data
@@ -2365,6 +2370,9 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
     return data
 
 
+# =============================================================================
+# Helper functions
+# =============================================================================
 def _undo_standardize_array_newaxis(data,data_shape,axis=0):
     """
     Reshapes data array from unwrapped form back to ~ original
@@ -2411,9 +2419,6 @@ def _undo_standardize_array_newaxis(data,data_shape,axis=0):
     return data
 
 
-# =============================================================================
-# Other helper functions
-# =============================================================================
 def _next_power_of_2(n):
     """
     Rounds x up to the next power of 2 (smallest power of 2 greater than n)
@@ -2464,5 +2469,4 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
         data_out[:,i_event,...] = data[idxs,...]
 
     return data_out
-
-    
+  

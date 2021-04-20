@@ -412,7 +412,7 @@ def iarange(start=0, stop=0, step=1):
     else:                       return np.arange(start,stop+1e-12,step)
 
 
-def unsorted_unique(x):
+def unsorted_unique(x, **kwargs):
     """
     Implements np.unique(x) without sorting, ie maintains original order of unique
     elements as they are found in x.
@@ -420,9 +420,14 @@ def unsorted_unique(x):
     SOURCE  stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
     """
     x    = np.asarray(x)
-    idxs = np.unique(x,return_index=True)[1]
-    return x[np.sort(idxs)]
-
+    if 'axis' in kwargs:
+        idxs = np.unique(x, return_index=True, **kwargs)[1]
+        return index_axis(x, kwargs['axis'], np.sort(idxs))
+    else:
+        x = x.flatten()
+        idxs = np.unique(x, return_index=True, **kwargs)[1]        
+        return x[np.sort(idxs)]
+        
 
 def setup_sliding_windows(width, lims, step=None, reference=None,
                           force_int=False, exclude_end=None):
