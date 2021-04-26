@@ -64,7 +64,7 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     info = neural_info(labels,data,axis=0,method='pev',**kwargs)
 
     ARGS
-    labels  (n_obs,n_terms) array-like. List of labels or design matrix.
+    labels  (n_obs,) | (n_obs,n_terms) array-like. List of labels or design matrix.
             Must be same length as data.shape[0] along dimension <axis>.
 
     data    (...,n_obs,...) ndarray. Neural data to fit. Axis <axis> should
@@ -72,7 +72,7 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
             independent data series (channels, time points, frequencies, etc.)
             that will be fit separately using the same list of group labels.
 
-    axis    Scalar. Axis of data array to perform analysis on, corresponding
+    axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
                 
     method  String. Method to use to compute information.
@@ -113,7 +113,7 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     data1/2 (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
             Sets of values for each of two distributions to be compared. 
 
-    axis    Scalar. Axis of data array to perform analysis on, corresponding
+    axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
                 
     method  String. Method to use to compute information.

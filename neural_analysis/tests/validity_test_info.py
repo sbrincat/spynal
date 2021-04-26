@@ -106,7 +106,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     labels  (n*n_conds,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO Add ability to simulate independent data series, different n for each cond, 
+    # todo Add ability to simulate independent data series, different n for each cond, 
     if seed is not None: np.random.seed(seed)
         
     # Single gain = incremental difference btwn cond 0 and 1, 1 and 2, etc.
@@ -212,7 +212,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # TODO Should we move some/all of these into function arguments, instead of hard-coding?
+    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     sim_args = dict(gain=5.0, offset=5.0, spreads=5.0, n_conds=2, n=500, 
                     distribution=distribution, seed=None)
        

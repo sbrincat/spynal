@@ -3,9 +3,10 @@ import pytest
 import numpy as np
 
 from ..utils import setup_sliding_windows
-from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, bin_rate, density
+from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
+                     cut_trials, realign_data, bin_rate, density
 
-# TODO  Tests for cut_trials, realign_data, pool_electrode_units
+# TODO  Tests for pool_electrode_units
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -55,6 +56,60 @@ def spike_data(spike_timestamp, spike_bool):
     SOURCE      https://stackoverflow.com/a/42400786
     """    
     return {'spike_timestamp': spike_timestamp, 'spike_bool': spike_bool}
+
+             
+@pytest.fixture(scope='session')
+def spike_timestamp_trial_uncut(spike_timestamp):
+    """ 
+    Simulates set of spike trains as spike timestamps not cut into trials
+    
+    RETURNS
+    data    (2,) ndarray of (n_spikes,) objects. Simulated spike timestamps
+            (eg simulating 2 units, uncut into trials)
+    
+    t       None. Second argout returned only to match output of spike_bool
+    """
+    data, _ = spike_timestamp
+    n_trials,n_units = data.shape
+    data_uncut = np.empty((n_units,),dtype=object)
+    for unit in range(n_units):
+        data_uncut[unit] = np.hstack([data[trial,unit]+trial for trial in range(n_trials)])
+
+    return data_uncut, None
+
+
+@pytest.fixture(scope='session')
+def spike_bool_trial_uncut(spike_bool):
+    """
+    Fixture simulates set of spike trains as binary trains to use for all unit tests
+    
+    RETURNS
+    data    (2,1001) ndarray of bool. Simulated binary spike trains
+            (eg simulating 2 units x 1001 timepts, uncut into trials).
+    
+    timepts (1001,) ndarray of float. Time sampling vector for data (in s).
+    """
+    data, timepts = spike_bool
+    n_trials,n_units,n_timepts = data.shape
+    data = data.transpose((1,2,0)).reshape((n_units,n_timepts*n_trials),order='F')
+    timepts = np.hstack([timepts + trial*n_timepts for trial in range(n_trials)])
+    return data, timepts
+
+
+@pytest.fixture(scope='session')
+def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
+    """
+    "Meta-fixture" that returns both timestamp and boolean spiking data types
+    in a dictionary.
+    
+    RETURNS
+    data_dict   {'data_type' : (data,timepts)} dict containing outputs from
+                each of constituent fixtures
+                
+    SOURCE      https://stackoverflow.com/a/42400786
+    """    
+    return {'spike_timestamp': spike_timestamp_trial_uncut, 
+            'spike_bool': spike_bool_trial_uncut}
 
              
 # =============================================================================
@@ -163,8 +218,8 @@ def test_density(spike_data, data_type, kernel, result):
     assert tout.shape == (101,)
     assert rates.shape == (10, 2, 101)
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
-  
-    
+                  
+        
 def test_bool_to_times(spike_timestamp, spike_bool):
     """ Unit tests for bool_to_times function to convert spike timestamps to binary trains """
     data_timestamp, _   = spike_timestamp
@@ -200,3 +255,70 @@ def test_times_to_bool(spike_timestamp, spike_bool):
     # Test for correct handling of single spike trains and list-valued data
     assert (times_to_bool(data_timestamp[0,0], lims=(0,1))[0] == data_bool[0,0,:]).all()
     assert (times_to_bool(list(data_timestamp[0,0]), lims=(0,1))[0] == data_bool[0,0,:]).all()
+
+
+@pytest.mark.parametrize('data_type',
+                         [('spike_timestamp'),('spike_bool')])                        
+def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):    
+    """ Unit tests for cut_trials function """
+    data, _ = spike_data[data_type]
+    uncut_data, _ = spike_data_trial_uncut[data_type]
+    n_trials, n_units = 10, 2
+    
+    if data_type == 'spike_timestamp':
+        trial_lims = np.asarray([0,1])[np.newaxis,:] + np.arange(n_trials)[:,np.newaxis]        
+        cut_data = cut_trials(uncut_data, trial_lims, trial_refs=np.arange(0,n_trials)).T
+        for trial in range(n_trials):
+            for unit in range(n_units):
+                assert np.allclose(cut_data[trial,unit], data[trial,unit])
+        
+    else:
+        trial_lims = np.asarray([0,1])[np.newaxis,:] + 1.001*np.arange(n_trials)[:,np.newaxis]        
+        cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1).transpose((2,0,1))
+        assert (cut_data == data).all()
+
+    assert cut_data.shape == data.shape
+
+
+@pytest.mark.parametrize('data_type',
+                         [('spike_timestamp'),('spike_bool')])                        
+def test_realign_data(spike_data, data_type):    
+    """ Unit tests for realign_data function """
+    data, timepts = spike_data[data_type]
+    n_trials, n_units = 10, 2
+        
+    # For timestamp data, realign timestamps, then realign back to original timebase and test if same
+    if data_type == 'spike_timestamp':
+        realigned = realign_data(data, 0.5*np.ones((n_trials,)), trial_axis=0)
+        realigned = realign_data(realigned, -0.5*np.ones((n_trials,)), trial_axis=0)
+        assert realigned.shape == data.shape
+        for trial in range(n_trials):
+            for unit in range(n_units):
+                assert np.allclose(realigned[trial,unit], data[trial,unit])
+    
+        # Test for consistent output with transposed data dimensionality
+        realigned = realign_data(data.T, 0.5*np.ones((n_trials,)), trial_axis=-1)
+        realigned = realign_data(realigned, -0.5*np.ones((n_trials,)), trial_axis=-1)
+        assert realigned.shape == data.T.shape
+        for trial in range(n_trials):
+            for unit in range(n_units):
+                assert np.allclose(realigned[unit,trial], data[trial,unit])
+        
+    # For boolean data, realign to 2 distinct times, then concatenate together and test if same  
+    else:
+        realigned1 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                  timepts=timepts, time_axis=-1, trial_axis=0)
+        realigned2 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(0,0.5),
+                                  timepts=timepts, time_axis=-1, trial_axis=0)
+        realigned = np.concatenate((realigned1,realigned2), axis=-1)
+        assert realigned.shape == data.shape
+        assert (realigned == data).all()
+        
+        # Test for consistent output with transposed data dimensionality
+        realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                  timepts=timepts, time_axis=0, trial_axis=-1)
+        realigned2 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(0,0.5),
+                                  timepts=timepts, time_axis=0, trial_axis=-1)
+        realigned = np.concatenate((realigned1,realigned2), axis=0)
+        assert realigned.shape == data.T.shape
+        assert (realigned == data.T).all()        

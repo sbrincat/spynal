@@ -107,7 +107,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     labels  (n*n_conds,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.
     """
-    # TODO Add ability to simulate independent data series, different n for each cond, 
+    # todo Add ability to simulate independent data series, different n for each cond, 
     if seed is not None: np.random.seed(seed)
         
     # For single-condition data, treat gain as scalar increase over baseline response
@@ -220,7 +220,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # TODO Should we move some/all of these into function arguments, instead of hard-coding?
+    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     if stat == 'two_way':       n_conds = 4         # Simulate 2-way design w/ 4 conds (2x2)
     elif stat == 'one_sample':  n_conds = 1
     else:                       n_conds = 2

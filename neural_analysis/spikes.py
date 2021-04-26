@@ -806,8 +806,11 @@ def cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
         
     # Convert trial_lims in s -> indices into continuous data samples
     trial_idxs = np.round(smp_rate*trial_lims).astype(int)
-    assert trial_idxs.min() >= 0, ValueError("trial_lims are attempting to index before start of data")
-    assert trial_idxs.max() < data.shape[axis], ValueError("trial_lims are attempting to index beyond end of data")
+    assert trial_idxs.min() >= 0, \
+        ValueError("trial_lims are attempting to index (%d) before start of data (0)" % trial_idxs.min())
+    assert trial_idxs.max() < data.shape[axis], \
+        ValueError("trial_lims are attempting to index (%d) beyond end of data (%d)" % 
+                   (trial_idxs.max(),data.shape[axis]))
     # Ensure all windows have same length
     trial_idxs = _check_window_lengths(trial_idxs,tol=1)
                         
@@ -937,7 +940,7 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
     For example, data aligned to a start-of-trial event might
     need to be relaligned to the behavioral response.
 
-    realigned = realign_data(data,align_times,time_range,timepts,time_axis=0,trial_axis=-1)
+    realigned = realign_spike_bool(data,align_times,time_range,timepts,time_axis=0,trial_axis=-1)
 
     ARGS
     data        ndarray. Binary (1/0) spiking data segmented into trials.
@@ -952,7 +955,7 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
                 Must set value for this.
                         
     timepts     (n_timepts) array-like. Time sampling vector for data (in s).
-                Must set value for this.]
+                Must set value for this.
                                 
     time_axis   Int. Axis of data corresponding to time samples.
                 Default: 0 (1st axis of array)       
@@ -977,8 +980,11 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
     if trial_axis < 0:  trial_axis = data.ndim + trial_axis
     
     # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
-    if time_axis != 0:              data = np.moveaxis(data,0,time_axis)
-    if trial_axis != data.ndim-1:   data = np.moveaxis(data,-1,trial_axis)
+    if (time_axis == data.ndim-1) and (trial_axis == 0):
+        data = np.swapaxes(data,time_axis,trial_axis)
+    else:
+        if time_axis != 0:              data = np.moveaxis(data,0,time_axis)
+        if trial_axis != data.ndim-1:   data = np.moveaxis(data,-1,trial_axis)
     
     # Convert align times and time epochs to nearest integer sample indexes
     dt = np.mean(np.diff(timepts))
@@ -994,17 +1000,20 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
             
     n_timepts_out   = range_smps[1] - range_smps[0] + 1    
     return_shape    = (n_timepts_out, *(data.shape[1:]))    
-    realigned       = np.empty(return_shape)
-    
+    realigned       = np.empty(return_shape,dtype=data.dtype)
+
     # Extract timepoints corresponding to realigned time epoch from each trial in data     
-    for iTrial,t in enumerate(trial_range_smps):
+    for trial,t in enumerate(trial_range_smps):
         # Note: '+1' below makes the selection inclusive of the right endpoint in each trial
-        realigned[...,iTrial] = data[t[0]:t[1]+1,...,iTrial]    
+        realigned[...,trial] = data[t[0]:t[1]+1,...,trial]    
     
     # Move array axes back to original locations
-    if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
-    if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
-        
+    if (time_axis == data.ndim-1) and (trial_axis == 0):
+        realigned = np.swapaxes(realigned,trial_axis,time_axis)
+    else:
+        if time_axis != 0:              realigned = np.moveaxis(realigned,time_axis,0)
+        if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,trial_axis,-1)
+                
     return realigned
 
 
@@ -1506,13 +1515,13 @@ def _remove_buffer(data, buffer, axis=-1):
     ARGS
     data    Data array where a buffer has been appended on both ends of time
             dimension. Can be any arbitrary size, typically
-            (n_trials,nNeurons,n_timepts+2*buffer).
+            (n_trials,n_units,n_timepts+2*buffer).
     buffer  Scalar. Length (number of samples) of buffer appended to each end.
     axis    Int. Array axis to remove buffer from (ie time dim). Default: -1
 
     RETURNS
     data    Data array with buffer removed, reducing time axis to n_timepts
-            (typically shape (n_trials,nNeurons,n_timepts))
+            (typically shape (n_trials,n_units,n_timepts))
     """
     if axis < 0: axis = data.ndim + axis
     

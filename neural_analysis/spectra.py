@@ -221,18 +221,26 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
                 (in s, referenced to start of data).
     """
     method = method.lower()
-    assert data_type in ['lfp','spike'], \
-        ValueError("<data_type> must be 'lfp' or 'spike' ('%s' given)" % data_type)
 
-    if method == 'wavelet':         spec_fun = wavelet_spectrogram
-    elif method == 'multitaper':    spec_fun = multitaper_spectrogram
-    elif method == 'bandfilter':    spec_fun = bandfilter_spectrogram
+    # Special case: Lundqvist oscillatory burst analysis    
+    if spec_type == 'burst':
+        assert data_type == 'lfp', ValueError("<data_type> must be 'lfp' for burst analysis")
+        
+        spec,freqs,timepts = burst_analysis(data, smp_rate, axis=axis, removeDC=removeDC, **kwargs)
+
     else:
-        raise ValueError("Unsupported value set for <method>: '%s'" % method)
+        assert data_type in ['lfp','spike'], \
+            ValueError("<data_type> must be 'lfp' or 'spike' ('%s' given)" % data_type)
+        
+        if method == 'wavelet':         spec_fun = wavelet_spectrogram
+        elif method == 'multitaper':    spec_fun = multitaper_spectrogram
+        elif method == 'bandfilter':    spec_fun = bandfilter_spectrogram
+        else:
+            raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
-    spec,freqs,timepts = spec_fun(data,smp_rate,axis=axis,data_type=data_type,spec_type=spec_type,
-                                  removeDC=removeDC, **kwargs)
-
+        spec,freqs,timepts = spec_fun(data, smp_rate, axis=axis, data_type=data_type,
+                                      spec_type=spec_type, removeDC=removeDC, **kwargs)
+    
     return spec, freqs, timepts
 
 
@@ -1447,7 +1455,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     
     # Normalize computed power by 1/f**exp to normalize out 1/f distribution of power
     if freq_exp is not None:
-        data = data*freqs[:,np.newaxis,np.newaxis]**freq_exp
+        data = one_over_f_norm(data, axis=freq_axis, freqs=freqs, exponent=freq_exp)
         
     # If requested, pool data within given frequency bands 
     # (skip for bandfilter spectral analysis, which already returns frequency bands)
@@ -1499,7 +1507,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         burst_len = offset - onset + 1
         if burst_len < min_samples:  data[onset:(offset+1)] = False
         
-        # TODO  trimming bursts to half-max point? (using Gaussian fits or raw power?)
+        # todo trim bursts to half-max point? (using Gaussian fits or raw power?)
 
         # If offset is less than minimum burst length from end of data, we are done, return data
         if (len(data) - offset) < min_samples:  return data

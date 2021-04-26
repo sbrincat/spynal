@@ -8,7 +8,6 @@ from patsy import dmatrix
 from .data_fixtures import one_sample_data, two_sample_data, one_way_data, two_way_data
 from ..info import neural_info, neural_info_2groups
 
-# TODO Test linear model stats
 
 # =============================================================================
 # Unit tests
@@ -265,7 +264,7 @@ def test_two_way_info(two_way_data, method, interact, result):
             mu = [[[21.61,23.34,15.24,20.02], [28.92,27.08,29.84,30.76]], 
                   [[14.90,16.08,12.26,13.97], [35.63,34.34,32.82,36.81]]]
         else:
-            F = [[19.05, 7.82,61.94,52.94], [153.03,187.17,122.84,239.53]]
+            F = [[18.60, 8.11,61.44,50.44], [149.45,194.08,121.84,228.22], [ 1.11, 3.40, 1.69, 0.21]]
             p = [[1.20e-4,7.24e-3,2.70e-9,2.41e-8],
                  [2.24e-14,4.52e-16,14.16e-13,3.70e-17],
                  [2.99e-1,7.33e-2,2.02e-1,6.52e-1]]
@@ -274,7 +273,7 @@ def test_two_way_info(two_way_data, method, interact, result):
                   [[10.35,13.00, 3.74,8.95], [19.45,19.15,20.77,19.00],
                    [32.87,33.69,26.73,31.10], [38.40,35.00,38.91,42.52]]]
         assert np.allclose(stats['F'].squeeze(), F, rtol=1e-2, atol=1e-2)
-        assert np.allclose(stats['p'].squeeze(), p, rtol=1e-5, atol=1e-5)
+        assert np.allclose(stats['p'].squeeze(), p, rtol=1e-3, atol=1e-3)
         for term in range(len(mu)):
             assert np.allclose(stats['mu'][term].squeeze(), mu[term], rtol=1e-2, atol=1e-2)
            
