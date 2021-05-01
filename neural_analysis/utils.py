@@ -69,6 +69,83 @@ def interp1(x, y, xinterp, **kwargs):
 
 
 # =============================================================================
+# Pre/post-processing utility functions
+# =============================================================================
+def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
+           ddof=0, return_stats=False):
+    """
+    Z-scores data along given axis (or whole array) but avoids divide-by-zero
+    errors by not normalizing rows/cols/etc with SD=0
+    
+    Optionally also returns mean,SD (eg, to compute on training set, apply to test set)    
+    
+    data = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
+                  ddof=0, return_stats=False)
+                  
+    data, mu, sd = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
+                          ddof=0, return_stats=True)
+    
+    ARGS
+    data        Array-like (arbitrary dimensionality). Data to z-score.
+    
+    axis        Int. Array axis to compute mean/SD along for z-scoring (usually corresponding to
+                distict trials/observations). If None [default], computes mean/SD across entire
+                array (analogous to np.mean/std).
+            
+    time_range  (2,) array-like. Optionally allows for computing mean/SD within a given time
+                window, then using these z-score ALL timepoints (eg compute mean/SD within
+                a "baseline" window, then use to z-score all timepoints). Set=[start,end] 
+                of time window. If set, MUST also provide values for time_axis and timepts.
+                Default: None (compute mean/SD over all time points)
+            
+    time_axis   Int. Axis corresponding to timepoints. Only necessary if time_range is set.
+    
+    timepts     (n_timepts,) array-like. Time sampling vector for data. Only necessary if
+                time_range is set, unused otherwise.
+                
+    return_stats Bool. If True, also returns computed mean, SD. If False [default], only returns
+                z-scored data.                
+        
+    RETURNS
+    data        Z-scored data. Same shape as input data.
+    
+    - optional outputs only returned if return_stats=True    
+    mean        Computed means for z-score
+    sd          Computed standard deviations for z-score
+    TODO dimensionality of mean,sd
+    """
+    # Compute mean/SD separately for each timepoint (axis not None) or across all array (axis=None)
+    if time_range is None:
+        # Compute mean and standard deviation of data along <axis> (or entire array)
+        mu = data.mean(axis=axis, keepdims=True)        
+        sd = data.std(axis=axis, ddof=ddof, keepdims=True)
+        
+    # Compute mean/SD within given time range, then apply to all timepoints        
+    else:
+        assert (len(time_range) == 2) and (time_range[1] > time_range[0]), \
+            "time_range must be given as [start,end] time of desired time window"
+        assert timepts is not None, "If time_range is set, must also input value for timepts"
+        assert time_axis is not None, "If time_range is set, must also input value for time_axis"
+        
+        # Compute mean data value across all timepoints within window = "baseline" for z-score
+        win_bool = (timepts >= time_range[0]) & (timepts <= time_range[1])
+        win_data = index_axis(data, time_axis, win_bool).mean(axis=time_axis, keepdims=True)
+        
+        # Compute mean and standard deviation of data along <axis>       
+        mu = win_data.mean(axis=axis, keepdims=True)        
+        sd = win_data.std(axis=axis, ddof=ddof, keepdims=True)
+
+    # For any values w/ sd ~= 0, reset sd = 1 so doesn't have any effect
+    sd = np.where(~np.isclose(sd,0,rtol=1e-6), sd, 1)
+
+    # Compute z-score -- Subtract mean and normalize by SD
+    data = (data - mu) / sd
+
+    if return_stats:    return data, mu, sd
+    else:               return data
+    
+    
+# =============================================================================
 # Data indexing and reshaping functions
 # =============================================================================
 def index_axis(data, axis, idxs):

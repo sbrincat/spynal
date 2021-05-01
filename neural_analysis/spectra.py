@@ -193,6 +193,7 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
                 'wavelet' :     Continuous Morlet wavelet analysis [default]
                 'multitaper' :  Multitaper spectral analysis
                 'bandfilter' :  Band-pass filtering and Hilbert transform
+                'burst' :       Oscillatory burst analysis
 
     data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
 
@@ -217,13 +218,13 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).                
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec> 
                 (in s, referenced to start of data).
     """
     method = method.lower()
 
     # Special case: Lundqvist oscillatory burst analysis    
-    if spec_type == 'burst':
+    if (spec_type == 'burst') or (method == 'burst'):
         assert data_type == 'lfp', ValueError("<data_type> must be 'lfp' for burst analysis")
         
         spec,freqs,timepts = burst_analysis(data, smp_rate, axis=axis, removeDC=removeDC, **kwargs)
@@ -312,7 +313,7 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec> 
                 (in s, referenced to start of data).
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
@@ -353,7 +354,7 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
                 frequencies (Hz) used to generate <spec>.
                 For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
 
-    timepts     (n_timepts,...) ndarray. List of time points / time window centers in <spec> 
+    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec> 
                 (in s, referenced to start of data).
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', **kwargs)
@@ -788,7 +789,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
 
-    timepts     (n_timepts_out,...) ndarray. List of timepoints in <spec> (in s, referenced 
+    timepts     (n_timepts_out,) ndarray. List of timepoints in <spec> (in s, referenced 
                 to start of data).
 
     REFERENCE   Torrence & Compo (1998) "A Practical Guide to Wavelet Analysis"
@@ -1166,7 +1167,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     freqs       (n_freqbands,2) ndarray. List of (low,high) cut frequencies (Hz)
                 for each band used.
 
-    timepts     (n_timepts_out,...) ndarray. List of timepoints in <spec> (in s, referenced 
+    timepts     (n_timepts_out,) ndarray. List of timepoints in <spec> (in s, referenced 
                 to start of data).
     """
     if axis < 0: axis = data.ndim + axis
@@ -1354,8 +1355,10 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     
     Default argument values approximate analysis as implemented in Lundqvist 2016.    
 
-    bursts,freqs,timepts = burst_analysis(data,smp_rate,axis=0,method='bandfilter',
-                                          freq_bands=None,**kwargs):
+    bursts,freqs,timepts = burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet', 
+                                          freq_exp=None, bands=((20,35),(40,65),(55,90),(70,100)), 
+                                          window=None, timepts=None, threshold=2, min_cycles=3,
+                                          **kwargs)
 
     ARGS
     data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
@@ -1406,15 +1409,15 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     **kwargs    Any other kwargs passed directly to power_spectrogram() function
 
     RETURNS
-    bursts      (...,n_freqbands,n_timepts_out,...) ndarray of bool. Binary array labelling
+    bursts      (...,n_freq[band]s,n_timepts_out,...) ndarray of bool. Binary array labelling
                 timepoints within detected bursts in each trial and frequency band.
                 Same shape as input data, but with frequency axis prepended immediately
                 before time <axis>.
                 
-    freqs       (n_freqbands,) ndarray. List of center frequencies of bands in <bursts>
+    freqs       (n_freq[band]s,) ndarray. List of center frequencies of bands in <bursts>
 
-    timepts     (n_timepts_out,...) ndarray. List of timepoints (indexes into original
-                data time series) in <spec>.
+    timepts     (n_timepts_out,) ndarray. List of time points / time window centers in <spec> 
+                (in s, referenced to start of data).
                 
     REFERENCE
     Lundqvist, ..., & Miller (2016) Neuron "Gamma and Beta Bursts Underlie Working Memory"
@@ -1423,71 +1426,81 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     """
     # TODO  Add optional sliding trial window for mean,SD; Gaussian fits for definining burst f,t extent?
     # TODO  Option input of spectral data?
-    method = method.lower()
-    bands = np.asarray(bands)
-    if axis < 0:        axis = data.ndim + axis
-    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
-    
+    assert axis != trial_axis, \
+        ValueError("Data must have distinct time and trial axes for computing across-trial z-score")
     if window is not None:
         assert len(window) == 2, \
             ValueError("Window for computing mean,SD should be given as (start,end) (len=2)")
         assert timepts is not None, \
             ValueError("To set a window for computing mean,SD need to input time sampling vector <timepts>")
     
+    method = method.lower()
+    if bands is not None: bands = np.asarray(bands)
+    if axis < 0:        axis = data.ndim + axis
+    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
+    
+    # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
+    if (axis == data.ndim-1) and (trial_axis == 0):
+        data = np.swapaxes(data,axis,trial_axis)
+    else:
+        if axis != 0:                   data = np.moveaxis(data,axis,0)
+        if trial_axis != data.ndim-1:   data = np.moveaxis(data,trial_axis,-1)
+    data_shape = data.shape
+    data_ndim = data.ndim
+    # Standardize data array to shape (n_timepts,n_data_series,n_trials)
+    if data_ndim > 3:       data = data.reshape((data.shape[0],-1,data.shape[-1]))
+    elif data_ndim == 2:    data = data[:,np.newaxis,:]    
+    n_timepts,n_series,n_trials = data.shape
+
     # Set default values to appoximate Lundqvist 2016 analysis, unless overridden by inputs
     if method == 'wavelet':
         # Sample frequency at 1 Hz intervals from min to max frequency in requested bands
-        if 'freqs' not in kwargs: kwargs['freqs'] = np.arange(bands.min(),bands.max()+1,1)                
+        if ('freqs' not in kwargs) and (bands is not None):
+            kwargs['freqs'] = np.arange(bands.min(),bands.max()+1,1)                
         
     # For bandfilter method, if frequency bands not set explicitly, set it with value for <bands>
     elif method == 'bandfilter':
-        if 'freqs' not in kwargs: kwargs['freqs'] = bands
+        if ('freqs' not in kwargs) and (bands is not None): kwargs['freqs'] = bands
         
-    # Compute time-frequency power from raw data
-    data,freqs,tidxs = power_spectrogram(data, smp_rate, axis=axis, method=method, **kwargs)
-    timepts = timepts[tidxs] if timepts is not None else tidxs 
-    dt = np.mean(np.diff(tidxs)) * (1/smp_rate)
-    
-    # Update axes to reflect new frequency dim inserted before them
-    if trial_axis > axis: trial_axis += 1
-    axis += 1
-    freq_axis = axis - 1
+    # Compute time-frequency power from raw data -> (n_freqs,n_timepts,n_data_series,n_trials)
+    data,freqs,times = power_spectrogram(data, smp_rate, axis=0, method=method, **kwargs)
+    timepts = times + timepts[0] if timepts is not None else times 
+    n_timepts = len(times)
+    dt = np.mean(np.diff(times))
     
     # Normalize computed power by 1/f**exp to normalize out 1/f distribution of power
     if freq_exp is not None:
-        data = one_over_f_norm(data, axis=freq_axis, freqs=freqs, exponent=freq_exp)
+        data = one_over_f_norm(data, axis=0, freqs=freqs, exponent=freq_exp)
         
     # If requested, pool data within given frequency bands 
     # (skip for bandfilter spectral analysis, which already returns frequency bands)
     if (method != 'bandfilter') and (bands is not None):
-        data = pool_freq_bands(data, bands, axis=freq_axis, freqs=freqs, func='mean')
-        # Set sampled frequency vector = center frequency of each band
-        freqs = bands.mean(axis=1)
+        data = pool_freq_bands(data, bands, axis=0, freqs=freqs, func='mean')
+        freqs = bands
+    n_freqs = data.shape[0]        
             
-    # Compute mean,SD of each frequency band across all trials and timepoints
+    # Compute mean,SD of each frequency band across all trials (axis -1) and timepoints (axis 1)
     if window is None:
-        mean = data.mean(axis=(axis,trial_axis), keepdims=True)
-        sd   = data.std(axis=(axis,trial_axis), ddof=0, keepdims=True)
+        mean = data.mean(axis=(1,-1), keepdims=True)
+        sd   = data.std(axis=(1,-1), ddof=0, keepdims=True)
         
     # Compute mean,SD of each frequency band across all trials and timepoints within given time window
     else:        
         tbool = (timepts >= window[0]) & (timepts <= window[1])        
-        mean = data.compress(tbool,axis=axis).mean(axis=(axis,trial_axis), keepdims=True)
-        sd   = data.compress(tbool,axis=axis).std(axis=(axis,trial_axis), ddof=0, keepdims=True)
+        mean = data.compress(tbool,axis=1).mean(axis=(1,-1), keepdims=True)
+        sd   = data.compress(tbool,axis=1).std(axis=(1,-1), ddof=0, keepdims=True)
                                
     # Compute z-score of data and threshold -> boolean array of candidate burst times
     bursts = ((data - mean) / sd) > threshold
     
-    n_trials = data.shape[trial_axis]
-    tidxs = range(bursts.shape[axis])
+    tsmps = np.arange(n_timepts)    
     
-    
-    def _screen_bursts(data, t, min_samples, start):
+    def _screen_bursts(data, min_samples, start):
         """ Subfunction to evaluate/detect bursts in boolean time series of candidate-burst times """
         # Find first candidate burst in trial (timepoints of all candidate burst times)
         if start is None:   on_times = np.nonzero(data)[0]
         # Find next candidate burst in trial
-        else:               on_times = np.nonzero(data & (t > start))[0]
+        else:               on_times = np.nonzero(data & (tsmps > start))[0]
         
         # If no (more) bursts in time series, return data as is, we are done
         if len(on_times) == 0:  return data
@@ -1495,7 +1508,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         else:                   onset = on_times[0]
         
         # Find non-burst timepoints in remainder of time series
-        off_times = np.nonzero(~data & (t > onset))[0]
+        off_times = np.nonzero(~data & (tsmps > onset))[0]
         
         # Offset index of current burst = next off time - 1
         if len(off_times) != 0: offset = off_times[0] - 1
@@ -1512,21 +1525,38 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         # If offset is less than minimum burst length from end of data, we are done, return data
         if (len(data) - offset) < min_samples:  return data
         # Otherwise, call function recursively, now starting search just after current burst offset
-        else:                                   return _screen_bursts(data,t,min_samples,offset+1)
-        
-            
-    # TODO  Generalize to arbitrary dimensionality? -- transpose here?  OR just demand standard input???    
+        else:                                   return _screen_bursts(data,min_samples,offset+1)
+                
+    # Screen all candidate burst to ensure they meet minimum duration
     for i_freq,freq in enumerate(freqs):
+        # Compute center frequency of frequency band
+        if not np.isscalar(freq): freq = np.mean(freq)
         # Convert minimum length in oscillatory cycles -> samples
         min_samples = ceil(min_cycles * (1/freq) / dt)
         
-        for i_trial in range(n_trials):        
-            # Extract time series for current freq,trial
-            series = bursts[i_freq,:,i_trial]            
-            if not series.any(): continue
-            
-            bursts[i_freq,:,i_trial] = _screen_bursts(series,tidxs,min_samples,None)
-       
+        for i_trial in range(n_trials):
+            for i_series in range(n_series):
+                # Extract burst time series for current (frequency, data series, trial)
+                series = bursts[i_freq,:,i_series,i_trial]            
+                if not series.any(): continue
+                
+                bursts[i_freq,:,i_series,i_trial] = _screen_bursts(series,min_samples,None)
+              
+    # Reshape data array to ~ original dimensionality -> (n_freqs,n_timepts,...,n_trials)
+    if data_ndim > 3:       bursts = bursts.reshape((n_freqs,n_timepts,data_shape[1:-1],n_trials))
+    elif data_ndim == 2:    bursts = bursts.squeeze(axis=2)
+           
+    # Move array axes back to original locations (n_timepts,...,n_trials)
+    if (axis == data_ndim-1) and (trial_axis == 0):
+        bursts = np.moveaxis(bursts,-1,0)   # Move trial axis back to 0
+        bursts = np.moveaxis(bursts,1,-1)   # Move freq axis to end
+        bursts = np.moveaxis(bursts,1,-1)   # Move time axis to end (after freq)        
+    else:
+        if axis != 0:                   bursts = np.moveaxis(bursts,(0,1),(axis,axis+1))
+        if trial_axis != data_ndim-1:   
+            if trial_axis > axis:       bursts = np.moveaxis(bursts,-1,trial_axis+1)
+            else:                       bursts = np.moveaxis(bursts,-1,trial_axis)
+
     return bursts, freqs, timepts
 
     

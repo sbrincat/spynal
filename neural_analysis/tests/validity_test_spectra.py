@@ -40,7 +40,7 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
                               
     ARGS
     method  String. Name of time-frequency spectral estimation function to test:
-            'wavelet' | 'multitaper' | 'bandfilter'
+            'wavelet' | 'multitaper' | 'bandfilter' | 'burst'
             
     test    String. Type of test to run. Default: 'frequency'. Options:
             'frequency' Tests multiple simulated oscillatory frequencies
@@ -112,7 +112,7 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
     elif test in ['burst_rate','burst']:
         test_values = [0.1,0.2,0.4,0.8] if test_values is None else test_values
         gen_data = lambda rate: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)        
+                                                     time_range=time_range,burst_rate=rate,seed=seed)        
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
     
@@ -125,7 +125,6 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
     # Special case: oscillatory burst analysis
     if do_burst:
         # KLUDGE  Reset spectral analysis <method> to 'wavelet' (unless something set explicitly in kwargs)
-        method = kwargs.pop('spec_method','wavelet')
         if 'bands' not in kwargs:       kwargs['bands'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
             
     elif method == 'multitaper':
@@ -135,24 +134,22 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
             
     if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
-    
-    spec_fun = burst_analysis if do_burst else power_spectrogram
-                
+                    
     for i,value in enumerate(test_values):
         # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
         
         # Simulate data with oscillation of given params -> (n_timepts,n_trials)
         data = gen_data(value)
         
-        # TEMP HACK Convert continuous oscillatory data into spike train
+        # HACK Convert continuous oscillatory data into spike train (todo find better method)
         if spikes:
             data = (data - data.min()) / data.ptp() # Convert to 0-1 range ~ spike probability
             data = data**2                          # Sparsify probabilies (decrease rates)
             # Use probabilities to generate Bernoulli random variable at each time point
             data = bernoulli.ppf(0.5, data).astype(bool)        
                         
-        spec,freqs,timepts = spec_fun(data,smp_rate,axis=0,method=method,**kwargs)
-        if method == 'bandfilter': freqs = freqs.mean(axis=1)
+        spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,**kwargs)
+        if freqs.ndim == 2: freqs = freqs.mean(axis=1)  # Compute center of freq bands
         n_freqs,n_timepts,n_trials = spec.shape
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
@@ -281,7 +278,6 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
     ## Determine if test actually produced the expected values
     # frequency test: check if frequency of peak power matches simulated target frequency
     if test in ['frequency','freq']:
-        # TEMP >= should be >
         assert (np.diff(peak_freqs) >= 0).all(), \
             AssertionError("Estimated peak frequency does not increase monotonically with expected frequency")
             
@@ -329,8 +325,12 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
     for test in tests:
         for method in methods:
             print("Running %s test on %s spectral analysis" % (test,method))
+            extra_args = kwargs
+            if (method in ['burst','burst_analysis']) and ('burst_rate' not in kwargs):
+                extra_args['burst_rate'] = 0.4
+                
             t1 = time.time()
             
-            test_power(method, test=test, **kwargs)
+            test_power(method, test=test, **extra_args)
             print('PASSED (test ran in %.1f s)' % (time.time()-t1))
             
