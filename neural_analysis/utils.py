@@ -17,7 +17,7 @@ undo_standardize_array Undoes effect of standardize_array after analysis
 iarange             np.arange(), but with an inclusive endpoint
 unsorted_unique     np.unique(), but without sorting values
 setup_sliding_windows   Generates set of sliding windows using given parameters
-
+isarraylike         Tests if variable is "array-like" (ndarray, list, or tuple)
 
 Created on Fri Apr  9 13:28:15 2021
 
@@ -72,18 +72,17 @@ def interp1(x, y, xinterp, **kwargs):
 # Pre/post-processing utility functions
 # =============================================================================
 def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-           ddof=0, return_stats=False):
+           ddof=0, zerotol=1e-6, return_stats=False):
     """
-    Z-scores data along given axis (or whole array) but avoids divide-by-zero
-    errors by not normalizing rows/cols/etc with SD=0
+    Z-scores data along given axis (or whole array)
     
     Optionally also returns mean,SD (eg, to compute on training set, apply to test set)    
     
     data = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-                  ddof=0, return_stats=False)
+                  ddof=0, zerotol=1e-6, return_stats=False)
                   
     data, mu, sd = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-                          ddof=0, return_stats=True)
+                          ddof=0, zerotol=1e-6, return_stats=True)
     
     ARGS
     data        Array-like (arbitrary dimensionality). Data to z-score.
@@ -103,6 +102,12 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     timepts     (n_timepts,) array-like. Time sampling vector for data. Only necessary if
                 time_range is set, unused otherwise.
                 
+    ddof        Int. Sets divisor for computing SD = N - ddof. Set=0 for max likelihood estimate,
+                set=1 for unbiased (N-1 denominator) estimate. Default: 0
+
+    zerotol     Float. Any SD values < zerotol are treated as 0, and corresponding z-scores 
+                set = nan. Default: 1e-6
+                
     return_stats Bool. If True, also returns computed mean, SD. If False [default], only returns
                 z-scored data.                
         
@@ -112,7 +117,7 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     - optional outputs only returned if return_stats=True    
     mean        Computed means for z-score
     sd          Computed standard deviations for z-score
-    TODO dimensionality of mean,sd
+                Mean and sd both have same shape as data, but with <axis> reduced to length 1.
     """
     # Compute mean/SD separately for each timepoint (axis not None) or across all array (axis=None)
     if time_range is None:
@@ -134,13 +139,17 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
         # Compute mean and standard deviation of data along <axis>       
         mu = win_data.mean(axis=axis, keepdims=True)        
         sd = win_data.std(axis=axis, ddof=ddof, keepdims=True)
-
-    # For any values w/ sd ~= 0, reset sd = 1 so doesn't have any effect
-    sd = np.where(~np.isclose(sd,0,rtol=1e-6), sd, 1)
-
+    
     # Compute z-score -- Subtract mean and normalize by SD
     data = (data - mu) / sd
 
+    # Find any data values w/ sd ~ 0 and set data = NaN for those points
+    zero_points = np.isclose(sd,0,rtol=zerotol)
+    tiling = [1]*data.ndim
+    tiling[axis] = data.shape[axis]
+    if time_range is not None: tiling[time_axis] = data.shape[time_axis]
+    data[np.tile(zero_points,tiling)] = np.nan
+        
     if return_stats:    return data, mu, sd
     else:               return data
     
@@ -505,6 +514,14 @@ def unsorted_unique(x, **kwargs):
         idxs = np.unique(x, return_index=True, **kwargs)[1]        
         return x[np.sort(idxs)]
         
+
+def isarraylike(x):
+    """
+    Tests if variable <x> is "array-like": np.ndarray, list, or tuple
+    Returns True if x is array-like, False otherwise
+    """
+    return isinstance(x, (list, tuple, np.ndarray))
+
 
 def setup_sliding_windows(width, lims, step=None, reference=None,
                           force_int=False, exclude_end=None):

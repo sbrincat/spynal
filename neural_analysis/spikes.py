@@ -78,7 +78,7 @@ def rate(data, method='bin', **kwargs):
     rates       (...,n_timepts) ndarray | (...,n_timepts,...) ndarray.
                 Estimated spike rates (in spk/s) using given method.
                     
-    t           For bin: (n_timepts,) ndarray. Time sampling vector (in s).
+    timepts     For bin: (n_timepts,) ndarray. Time sampling vector (in s).
                 For density: (n_bins,2) ndarray. [start,end] of each time bin (in s).                               
     """
     if method in ['bin','bins','bin_rate','psth']:      rate_func = bin_rate
@@ -87,7 +87,8 @@ def rate(data, method='bin', **kwargs):
     return rate_func(data, **kwargs)
     
     
-def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, axis=-1, t=None):
+def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
+             axis=-1, timepts=None):
     """
     Computes spike rate/count within given sequence of hard-edged time bins
     
@@ -96,7 +97,8 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
     Use <lims,width,step> to set standard-width sliding window bins or
     use <bins> to set any arbitrary custom time bins
 
-    rates,bins = bin_rate(data,lims=None,width=50e-3,step=<width>,bins=None,count=False,axis=-1,t=None)
+    rates,bins = bin_rate(data,lims=None,width=50e-3,step=<width>,bins=None,count=False,
+                          axis=-1,timepts=None)
 
     ARGS
     data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
@@ -127,7 +129,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
     axis        Int. Axis of binary data corresponding to time dimension.
                 Not used for spike timestamp data. Default: -1 (last axis of array)           
 
-    t           (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
                 Not used for spike timestamp data, but MUST be input for binary data.
                                 
     RETURNS
@@ -147,9 +149,10 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False, ax
     # Convert boolean spike train data to timestamps for easier computation    
     data_type = _spike_data_type(data)
     if data_type == 'bool':
-        assert t is not None, "For binary spike train data, a time sampling vector <t> MUST be given"
+        assert timepts is not None, \
+            "For binary spike train data, a time sampling vector <timepts> MUST be given"
         if axis < 0: axis = data.ndim + axis
-        data = bool_to_times(data,t,axis=axis)
+        data = bool_to_times(data,timepts,axis=axis)
         
     # If data is not an object array, its assumed to be a single spike train
     single_train = isinstance(data,list) or (data.dtype != object)
@@ -220,15 +223,15 @@ psth = bin_rate
 
 
 def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000, 
-            buffer=None, downsmp=1, axis=-1, t=None, **kwargs):
+            buffer=None, downsmp=1, axis=-1, timepts=None, **kwargs):
     """
     Computes spike density function via convolution with given kernel/width
 
     Spiking data can be timestamps or binary (0/1) spike trains
 
-    rates,t = density(data,kernel='gaussian',width=50e-3,lims=None,smp_rate=1000,
-                      buffer=None,downsmp=1,axis=0,t=np.arange(lims[0],lims[1]+1/smp_rate,1/smp_rate),
-                      **kwargs)
+    rates,timepts = density(data,kernel='gaussian',width=50e-3,lims=None,smp_rate=1000,
+                      buffer=None,downsmp=1,axis=0,
+                      timepts=np.arange(lims[0],lims[1]+1/smp_rate,1/smp_rate),**kwargs)
 
     ARGS
     data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
@@ -266,7 +269,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     axis        Int. Axis of binary data corresponding to time dimension.
                 Not used for spike timestamp data. Default: -1 (last axis of array)           
 
-    t           (n_timepts,) ndarray. Time sampling vector (in s) for binary input data 
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary input data 
                 and/or computed rates. MUST be input for binary data. For timestamp data,
                 defaults to np.arange(lims[0], lims[1]+1/smp_rate, 1/smp_rate) (ranging btwn
                 lims, in increments of 1/smp_rate)
@@ -283,13 +286,13 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                 If only a single spike train is input, output is (n_timepts,) vector.
                 For boolean inputs, rates has same shape as data.
                     
-    t           (n_timepts,) ndarray. Time sampling vector (in s) for rates
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for rates
     """
     data_type = _spike_data_type(data)
     if axis < 0: axis = data.ndim + axis
     
     if data_type == 'bool':
-        assert t is not None, "For binary spike train data, a time sampling vector <t> MUST be given"
+        assert timepts is not None, "For binary spike train data, a time sampling vector <timepts> MUST be given"
                 
     # Set default buffer based on overlap of kernel used
     if buffer is None:
@@ -298,10 +301,10 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         else:                                   buffer = 0
     
     # Set time sampling from smp_rate,lims
-    if t is None: t = np.arange(lims[0], lims[1]+1e-12, 1/smp_rate)
+    if timepts is None: timepts = np.arange(lims[0], lims[1]+1e-12, 1/smp_rate)
         
     # Compute sampling rate from input time sampling vector
-    dt = np.diff(t).mean()
+    dt = np.diff(timepts).mean()
     smp_rate = round(1/dt)
 
     if smp_rate < 500: 
@@ -311,8 +314,9 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     if buffer != 0:
         n_buffer = int(round(buffer*smp_rate))    # Convert buffer from time units -> samples
         # Extend time sampling by n_buffer samples on either end (for both data types)
-        t = np.concatenate((np.flip(np.arange(t[0]-dt, t[0]-n_buffer*dt-1e-12, -dt)), t, 
-                            np.arange(t[-1]+dt, t[-1]+n_buffer*dt+1e-12, dt)))
+        timepts = np.concatenate((np.flip(np.arange(timepts[0]-dt, timepts[0]-n_buffer*dt-1e-12, -dt)),
+                                  timepts,
+                                  np.arange(timepts[-1]+dt, timepts[-1]+n_buffer*dt+1e-12, dt)))
         # For bool data, reflectively resample edges of data to create buffer
         if data_type == 'bool':
             n_samples = data.shape[axis]
@@ -345,8 +349,8 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         
     # Convert spike times to binary spike trains -> (...,n_timepts)
     if data_type == 'timestamp':
-        bins = np.stack((t-dt/2, t+dt/2), axis=1)
-        data,t = times_to_bool(data,bins=bins)
+        bins = np.stack((timepts-dt/2, timepts+dt/2), axis=1)
+        data,timepts = times_to_bool(data,bins=bins)
         axis = data.ndim
     else:
         # Reshape data so that time axis is -1 (end of array)
@@ -364,12 +368,12 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     if buffer != 0:
         data        = _remove_buffer(data,n_buffer,axis=-1)
         rates       = _remove_buffer(rates,n_buffer,axis=-1)
-        t           = _remove_buffer(t,n_buffer,axis=-1)
+        timepts     = _remove_buffer(timepts,n_buffer,axis=-1)
         
     # Implement any temporal downsampling of rates    
     if downsmp != 1:
         rates       = rates[...,0::downsmp]
-        t           = t[0::downsmp]
+        timepts     = timepts[0::downsmp]
 
     # KLUDGE Sometime trials/neurons/etc. w/ 0 spikes end up with tiny non-0 values
     # due to floating point error in fft routines. Fix by setting = 0.
@@ -381,7 +385,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     if (data_type == 'bool') and (axis != data.ndim):
         rates = np.moveaxis(rates,-1,axis)
         
-    return rates, t
+    return rates, timepts
 
 
 #==============================================================================
@@ -445,19 +449,19 @@ def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
              y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
 
 
-def plot_mean_waveforms(spike_waves, t=None, sd=True,
+def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
                         ax=None, plot_colors=None):
     """
     Plots mean spike waveform for each of one or more units
 
-    ax = plot_mean_waveforms(spike_waves,t=None,sd=True,
+    ax = plot_mean_waveforms(spike_waves,timepts=None,sd=True,
                              ax=None,plot_colors=None)
 
     ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
                 Spike waveforms for one or more units
 
-    t           (n_timepts,) array-like. Common time sampling vector for each
+    timepts     (n_timepts,) array-like. Common time sampling vector for each
                 spike waveform. Default: 0:n_timepts
 
     sd          Bool. If True, also plots standard deviation of waves as fill.
@@ -473,7 +477,7 @@ def plot_mean_waveforms(spike_waves, t=None, sd=True,
     n_timepts    = spike_waves[0].shape[0]
 
     # If no time sampling vector given, default to 0:n_timepts
-    if t is None: t = np.arange(n_timepts)
+    if timepts is None: timepts = np.arange(n_timepts)
     if plot_colors is None:
         # Default plot colors from Blackrock Central software Spike plots
         plot_colors = np.asarray([[1,1,1], [1,0,1], [0,1,1], [1,1,0]])
@@ -487,13 +491,13 @@ def plot_mean_waveforms(spike_waves, t=None, sd=True,
 
         if sd:
             sd = np.std(spike_waves[unit], axis=1)
-            ax.fill(np.hstack((t,np.flip(t))),
+            ax.fill(np.hstack((timepts,np.flip(timepts))),
                     np.hstack((mean+sd,np.flip(mean-sd))),
                     facecolor=plot_colors[unit,:], edgecolor=None, alpha=0.25)
 
-        ax.plot(t, mean, '-', color=plot_colors[unit,:], linewidth=1)
+        ax.plot(timepts, mean, '-', color=plot_colors[unit,:], linewidth=1)
 
-    ax.set_xlim(t[0],t[-1])
+    ax.set_xlim(timepts[0],timepts[-1])
     ax.set_facecolor('k')
     ax.set_xticklabels([])
     ax.set_yticklabels([])
@@ -501,19 +505,19 @@ def plot_mean_waveforms(spike_waves, t=None, sd=True,
     return ax
 
 
-def plot_waveform_heatmap(spike_waves, t=None, wf_range=None,
+def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
                           ax=None, cmap=None):
     """
     Plots heatmap (2D hist) of all spike waveforms across one or more units
 
-    ax = plot_waveform_heatmap(spike_waves,t=None,wf_range=None,
+    ax = plot_waveform_heatmap(spike_waves,timepts=None,wf_range=None,
                                ax=None,cmap=None)
 
     ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
                 Spike waveforms for one or more units
 
-    t           (n_timepts,) array-like. Common time sampling vector for each spike
+    timepts     (n_timepts,) array-like. Common time sampling vector for each spike
                 waveform. Default: 0:n_timepts
 
     wf_range    (2,) array-like. [min,max] waveform amplitude for generating
@@ -536,24 +540,24 @@ def plot_waveform_heatmap(spike_waves, t=None, wf_range=None,
     n_timepts,n_spikes = spike_waves.shape
 
     # If no time sampling vector given, default to 0:n_timepts
-    if t is None: t = np.arange(n_timepts)
+    if timepts is None: timepts = np.arange(n_timepts)
     # If no waveform amplitude range given, default to [min,max] of set of waveforms
     if wf_range is None: wf_range = [np.min(spike_waves),np.max(spike_waves)]
 
 
     # Set histogram bins to sample full range of times,
-    xedges = np.linspace(t[0],t[-1],n_timepts)
+    xedges = np.linspace(timepts[0],timepts[-1],n_timepts)
     yedges = np.linspace(wf_range[0],wf_range[1],20)
 
     # Compute 2D histogram of all waveforms
-    wf_hist = np.histogram2d(np.tile(t,(n_spikes,)),
+    wf_hist = np.histogram2d(np.tile(timepts,(n_spikes,)),
                              spike_waves.T.reshape(-1),
                              bins=(xedges,yedges))[0]
     # Plot heat map image
     plt.imshow(wf_hist.T, cmap=cmap, origin='lower',
                extent=[xedges[0],xedges[-1],yedges[0],yedges[-1]])
 
-    ax.set_xlim(t[0],t[-1])
+    ax.set_xlim(timepts[0],timepts[-1])
     ax.set_ylim(wf_range[0],wf_range[-1])
     ax.set_xticklabels([])
     ax.set_yticklabels([])
@@ -565,30 +569,30 @@ def plot_waveform_heatmap(spike_waves, t=None, wf_range=None,
 # =============================================================================
 # Preprocessing/Utility functions
 # =============================================================================
-def bool_to_times(spike_bool, t, axis=-1):
+def bool_to_times(spike_bool, timepts, axis=-1):
     """
     Converts boolean (binary) spike train representaton to spike timestamps
     Inverse function of times_to_bool()
 
-    spike_times = bool_to_times(spike_bool,t)
+    spike_times = bool_to_times(spike_bool,timepts)
 
     ARGS
     spike_bool  (...,n_timepts,...) ndarray of bools. Binary spike trains,
                 where 1 indicates >= 1 spike in time bin, 0 indicates no spikes.
 
-    t           (n_timepts,) ndarray. Time sampling vector for data 
+    timepts     (n_timepts,) ndarray. Time sampling vector for data 
                 (center of each time bin used to compute binary representation).
                 
     axis        Int. Axis of data corresponding to time dimension. Default: -1 (last axis)              
 
     RETURNS
     spike_times Object ndarray of (n_spikes[cell],) ndarrays | (n_spikes,) ndarray
-                Spike timestamps (in same time units as t), for each spike train in input.
+                Spike timestamps (in same time units as timepts), for each spike train in input.
                 Returns as vector-valued array of timestamps if input is single spike train,
                 otherwise as object array of variable-length timestamp vectors
     """
     spike_bool = np.asarray(spike_bool)
-    t = np.asarray(t)
+    timepts = np.asarray(timepts)
     if axis < 0: axis = spike_bool.ndim + axis
     
     # For single-spike-train data, temporarily prepend singleton axis 
@@ -606,7 +610,7 @@ def bool_to_times(spike_bool, t, axis=-1):
 
     # For each spike train, find spikes and convert to timestamps
     for i in range(n_spike_trains):
-        spike_times[i] = t[spike_bool[i,:]]
+        spike_times[i] = timepts[spike_bool[i,:]]
 
     # Reshape output to match shape of input, without time axis
     out_shape = [d for i,d in enumerate(spike_bool_shape) if i != axis]

@@ -1654,7 +1654,7 @@ def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
     img = plt.imshow(data, extent=[*tlim,*flim], vmin=clim[0], vmax=clim[1],
                      aspect='auto', origin='lower', cmap=cmap, **kwargs)
 
-    plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+    plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
     plt.yticks(fticks,fticklabels)
     
     return img

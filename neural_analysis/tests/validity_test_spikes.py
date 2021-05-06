@@ -72,8 +72,8 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
     elif method == 'density':
         n_timepts = 1001
         # HACK For spike density method, remove edges, which are influenced by boundary artifacts
-        t         = np.arange(0,1.001,0.001)
-        tbool     = (t > 0.1) & (t < 0.9)
+        timepts   = np.arange(0,1.001,0.001)
+        tbool     = (timepts > 0.1) & (timepts < 0.9)
            
     else:
         raise ValueError("Unsupported option '%s' given for <method>. \
@@ -92,12 +92,12 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
         
         # Convert spike timestamps -> binary 0/1 spike trains (if requested)
         if data_type == 'bool':
-            trains,t = times_to_bool(trains,lims=[0,1])
-            kwargs.update(t=t)      # Need <t> input for bool data
+            trains,timepts = times_to_bool(trains,lims=[0,1])
+            kwargs.update(timepts=timepts)      # Need <timepts> input for bool data
             
         # Compute spike rate from simulated spike trains -> (n_trials,n_timepts)
-        spike_rates,t = rate(trains, method=method, lims=[0,1], **kwargs)
-        if method == 'bin': t = t.mean(axis=1)  # bins -> centers
+        spike_rates,timepts = rate(trains, method=method, lims=[0,1], **kwargs)
+        if method == 'bin': timepts = timepts.mean(axis=1)  # bins -> centers
         
         if plot: time_series[:,i] = spike_rates.mean(axis=0)
         # Take average across timepoints -> (n_trials,)
@@ -116,7 +116,7 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
         ax = plt.subplot(1,2,1)
         ylim = (0,1.05*time_series.max())
         for i,rate in enumerate(rates):
-            plt.plot(t, time_series[:,i], '-', color=colors[i], linewidth=1.5)
+            plt.plot(timepts, time_series[:,i], '-', color=colors[i], linewidth=1.5)
             plt.text(0.99, (0.95-0.05*i)*ylim[1], np.round(rate,decimals=2), 
                      color=colors[i], fontweight='bold', horizontalalignment='right')            
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
