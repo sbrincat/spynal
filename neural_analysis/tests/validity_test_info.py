@@ -151,7 +151,8 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
                               
     ARGS
     method  String. Name of information function to test:
-            'pev' | 'anova1' | 'anova2' | 'regress'
+            'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
+            Can also set to specific 'pev' model type: 'anova1' | 'anova2' | 'regress'
             
     test    String. Type of test to run. Default: 'gain'. Options:
             'gain'  Tests multiple values for between-condition response difference (gain)
@@ -257,8 +258,11 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     else:
         groups = [0,1]
                                
-    # Expected baseline value for no btwn-condition = 0.5 for AUROC, 0 for other methods
-    baseline = 0.5 if method in ['auroc','roc','aucroc','auc'] else 0
+    # Expected baseline value for no btwn-condition difference = 0.5 for AUROC, 
+    # 1/n_classes for decode, 0 for other methods
+    if method in ['auroc','roc','aucroc','auc']:    baseline = 0.5 
+    elif method == 'decode':                        baseline = 1/sim_args['n_conds']
+    else:                                           baseline = 0
                  
     info = np.empty((len(test_values),n_reps))
         
@@ -307,23 +311,24 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
         
     # 'bias': Test if information is not > baseline if gain = 0, for varying n
     elif test == 'bias':
+        print(baseline)
         assert ((info - baseline) < sd).all(), \
             AssertionError("Information is above baseline for no mean difference between conditions")
          
     return info, sd
 
 
-def info_test_battery(methods=['pev','dprime','auroc','mutual_information'], 
+def info_test_battery(methods=['pev','dprime','auroc','mutual_information','decode'], 
                       tests=['gain','spread','n','bias'], **kwargs):
     """ 
     Runs a battery of given tests on given neural information computation methods
     
-    info_test_battery(methods=['pev','dprime','auroc','mutual_information'],
+    info_test_battery(methods=['pev','dprime','auroc','mutual_information','decode'],
                       tests=['gain','spread','n','bias'], **kwargs)
     
     ARGS
     methods     Array-like. List of neural information methods to test.
-                Default: ['pev','dprime','auroc','mutual_information'] (all supported methods)
+                Default: ['pev','dprime','auroc','mutual_information','decode'] (all supported methods)
                 
     tests       Array-like. List of tests to run.
                 Note: certain combinations of methods,tests are skipped, as they are not expected to pass

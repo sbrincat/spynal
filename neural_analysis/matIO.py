@@ -28,6 +28,7 @@ Created on Mon Mar 12 17:20:26 2018
 import time
 import sys
 from types import SimpleNamespace
+from copy import deepcopy
 import numpy as np
 import pandas as pd
 
@@ -234,7 +235,8 @@ def savemat(filename, variables, version=None, **kwargs):
     Saves given variables to a MAT file of given (or internally set) version
     """
     # Do any necessary conversions to get all variables into matfile-compatible format
-    variables = variables_to_mat(variables)
+    # Note: Use deepcopy to create copy of all variables to avoid changing in caller
+    variables = variables_to_mat(deepcopy(variables))
 
     # If version is not set or set=7, check to make sure no variables are > 2 GB
     if version != 7.3:

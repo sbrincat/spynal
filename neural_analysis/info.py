@@ -7,6 +7,10 @@ FUNCTIONS
 neural_info     Wrapper function computes neural information using any given method
 neural_info_2groups Wrapper function computes neural info on two data distributions
 
+### Multivariate population decoding (classification accuracy) ###
+decode          Computes neural info as accuracy of decoding task conds from neural activity
+decode_2groups  Computes decoding accuracy with two data distributions as args
+
 ### Shannon mutual information-related functions ###
 mutual_information  Computes neural info as Shannon mutual info btwn response and task conds
 mutual_information_2groups  Computes mutual info with two data distributions as args
@@ -44,6 +48,9 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import StratifiedKFold
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.linear_model import LogisticRegression
 from patsy import DesignMatrix
 
 try:
@@ -75,8 +82,9 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
                 
-    method  String. Method to use to compute information.
-            Currently only have implemented 'pev' [default]
+    method  String. Method to use to compute information. Options:
+            'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
+            Default: 'pev'
 
     **kwargs All other kwargs passed directly to information method function
 
@@ -97,6 +105,9 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     
     elif method in ['mutual_information','mutual_info']:
         return mutual_information(labels,data,axis=axis,**kwargs)
+
+    elif method in ['decode','decoder','decoding']:
+        return decode(labels,data,axis=axis,**kwargs)
     
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
@@ -116,8 +127,9 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
                 
-    method  String. Method to use to compute information.
-            Currently only have implemented 'pev' [default]
+    method  String. Method to use to compute information. Options:
+            'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
+            Default: 'pev'
 
     **kwargs All other kwargs passed directly to information method function
 
@@ -139,10 +151,310 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     elif method in ['mutual_information','mutual_info']:
         return mutual_information_2groups(data1,data2,axis=axis,**kwargs)
     
+    elif method in ['decode','decoder','decoding']:
+        return decode_2groups(data1,data2,axis=axis,**kwargs)
+     
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
 
+# =============================================================================
+# Population decoding (classification) analysis
+# =============================================================================
+def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=None,
+           groups=None, as_pct=False, return_stats=False, stats=None, **kwargs):
+    """
+    Mass-multivariate population decoding analysis using given classifier method
+
+    INPUTS
+    labels  (n_obs,) ndarray. Labels/target values for each trial to predict
+
+    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from. 
+            Arbitrary shape, but <axis> should correspond to observations (trials) and 
+            <feature_axis> should correspond to decoder features (eg neural channels),
+            while rest of axis(s) can be any independent data series (time points, 
+            frequencies, etc.) that are analyzed separately (ie separate decoder fit 
+            and evaluated at each time point, frequency, etc.).
+            
+    axis    Int. Axis of data corresponding to distinct observations/trials. Default: 0 (1st axis)
+    
+    feature_axis Int. Axis of data corresponding to decoder features (usually distinct neural
+            channels/electrodes/units). Default: 1 (2nd axis)
+
+    decoder String | sklearn classifier object. Decoding classifier method to use.
+            Can input either as a string specifier or as a scikit-learn classifier object instance.
+            'lda'       : Linear discriminant analysis
+            'logistic'  : Logistic regression
+
+    cv      String | sklearn.model_selection "Splitter" object. Determines how cross
+            validation is done. Set = 'auto' for default. Set = None for no cross-validation.
+            Default: StratifiedKFold(n_splits=5,shuffle=True)
+
+    seed    Int. Random generator seed for repeatable results.
+            Set=None [default] for unseeded random numbers.
+               
+    groups  Array-like. Which group labels from <labels> to use. Useful for computing information 
+            on subset of groups/classes in labels.
+            Default: unique(labels) (all distinct values in <labels>)
+                                
+    as_pct  Bool. Set=True to return decoding accuracy as a percent (range ~ 0-100).
+            Set=False [default] to return accuracy as a proportion (range ~ 0-1)
+            
+    return_stats Bool. Set=True to return additional classifier stats. Default: False
+    
+    stats   String | List of strings. List of additional classifier stats to return:
+            'predict' : Predicted class for each trial/observation
+            'prob' :    Posterior probability for each class, for each trial/observation
+            Default: If return_stats=True, stats defaults to ['predict','prob']
+                
+    **kwargs All other kwargs passed directly to decoding object constructor
+
+    OUTPUTS
+    accuracy ndarray. Decoding accuracy. Shape is same as input data, but with <axis> and
+            <feature_axis> reduced to length 1. Accuracy given as proportion or percent 
+            correct, depending on value of <as_pct>. Chance = [100 *] 1/n_classes.
+
+    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in 
+            input argument <stats>. May include the following:
+            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation (trial).
+                        Same shape as accuracy, but <axis> has length n_obs.
+            'prob' :    (...,_n_obs,...,n_classes,...) ndarray. Posterior probabilty for each class
+                        and each observation (trial). Same shape as accuracy, but <axis> has length 
+                        n_obs and <feature_axis> has length n_classes.
+    
+    REFERENCE
+    https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
+    https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html    
+    """
+    labels = np.asarray(labels)    
+    data = np.asarray(data)
+
+    if axis < 0:            axis = data.ndim + axis
+    if feature_axis < 0:    feature_axis = data.ndim + feature_axis
+    
+    # Move/swap array axes so trials/observations axis is 1st and features 2nd (n_obs,n_features,...)
+    if (axis == 1) and (feature_axis == 0):
+        data = np.swapaxes(data,feature_axis,axis)
+    else:
+        if axis != 0:           data = np.moveaxis(data,axis,0)    
+        if feature_axis != 1:   data = np.moveaxis(data,feature_axis,1)
+    data_ndim = data.ndim
+    data_shape = data.shape
+        
+    # Standardize data array to shape (n_obs,n_features,n_data_series)
+    if data_ndim > 3:       data = data.reshape((data.shape[0],data.shape[1],-1))
+    elif data_ndim == 2:    data = data[:,:,np.newaxis]   
+    elif data_ndim == 1:    data = data[:,np.newaxis,np.newaxis] # Weird usage, but ok
+    
+    # Find set of unique group/class labels in <labels> if not explicitly set
+    if groups is None:
+        groups = np.unique(labels)
+
+    # If groups set in args, remove any observations not represented in <groups>
+    else:
+        idxs = np.in1d(labels,groups)
+        if idxs.sum() != data.shape[0]:
+            labels  = labels[idxs]
+            data    = data[idxs,...]  
+            
+    n_obs,n_features,n_series = data.shape              
+    n_classes = len(groups)
+        
+    if stats is not None: return_stats = True   # If requested stats list input, return stats
+    if return_stats:
+        if stats is None:  stats = ['predict','prob']
+        elif isinstance(stats,str): stats = [stats]
+    else:
+        stats = range(0)    # Kludge -- set this to shunt off and skip "for stats" loops below
+        
+    # Convert string specifier to sklearn classifier object
+    if isinstance(decoder,str):
+        decoder = decoder.lower()
+    
+        if decoder in ['lda','lineardiscriminant']:
+            # TODO  Default to uniform prior (vs scikit's empirical prior)
+            decoder = LinearDiscriminantAnalysis(**kwargs)
+
+        elif decoder in ['logistic','logisticregression']:
+            # TODO  Default to no regularization? (vs scikit's L2)
+            decoder = LogisticRegression(**kwargs)
+        
+        else:
+            raise ValueError("Unsupported option '%s' given for decoding method" % decoder)    
+    
+    else:
+        # TODO  Need better test that we actually have an sklearn(-like) object        
+        assert callable(decoder), \
+            TypeError("Unsupported type (%s) given for method. Should be string | scikit classifier object"
+                      % type(decoder))
+    
+    # Convert string specifier to scikit cross-validation object, including default
+    if isinstance(cv,str):
+        cv = cv.lower()
+        # Default <cv>: shuffled 5-fold StratifiedKFold
+        if cv in ['default','auto','stratifiedkfold']:
+            cv = StratifiedKFold(n_splits=5,shuffle=True,random_state=seed)
+        elif cv == 'none':
+            cv = None 
+        else:
+            raise ValueError("Unsupported value '%s' given for cv" % cv)        
+                              
+    else:
+        # TODO  Need better test that we actually have an sklearn(-like) object         
+        assert callable(cv) or (cv is None), \
+            TypeError("Unsupported type (%s) given for cv. Should be string | scikit model_selection object"
+                        % type(cv))    
+        
+    if return_stats: 
+        stats = {stat:None for stat in stats}
+        for stat in stats:
+            if stat == 'predict':   stats[stat] = np.empty((n_obs,1,n_series),dtype=labels.dtype)
+            elif stat == 'prob':    stats[stat] = np.empty((n_obs,n_classes,n_series))
+            else:
+                raise ValueError("Unsupported stat '%s' requested" % stat)
+                    
+    # Iterate analysis over all cross-validation train/test data splits
+    if cv is not None:
+        acc_folds = np.empty((n_series,cv.n_splits))
+
+        # todo  More sklearn way of doing this?
+        for i_fold,(train_idxs,test_idxs) in enumerate(cv.split(data,labels)):
+            for i_series in range(n_series):
+                # Fit model to training split
+                decoder = decoder.fit(data[train_idxs,:,i_series], labels[train_idxs])
+                # Evaluate model on testing split
+                acc_folds[i_series,i_fold] = \
+                    decoder.score(data[test_idxs,:,i_series], labels[test_idxs])
+
+                for stat in stats:
+                    if stat == 'predict':
+                        stats[stat][test_idxs,0,i_series] = decoder.predict(data[test_idxs,:,i_series])
+                    elif stat == 'prob':
+                        tmp = decoder.predict_proba(data[test_idxs,:,i_series])
+                        stats[stat][test_idxs,:,i_series] = tmp
+                                    
+        # Take the mean across all cross-validation folds
+        accuracy = np.mean(acc_folds, axis=1)
+
+    # Run analysis without any cross-validation
+    else:
+        accuracy = np.empty((n_series,))
+
+        for i_series in range(n_series):
+            # Train/test on full data
+            decoder = decoder.fit(data[:,:,i_series], labels)
+            accuracy[i_series] = decoder.score(data[:,:,i_series], labels)
+
+    if as_pct: accuracy = 100.0*accuracy
+    
+    # Insert 2 singleton axis as 1st axes of array to replace trial,channel axes
+    accuracy = accuracy[np.newaxis,np.newaxis,...]
+
+    # Reshape "data series" axis back to original dimensionality
+    if data_ndim > 3:
+        accuracy = accuracy.reshape((1,1,*data_shape[2:]))
+        for stat in stats:
+            if stat == 'predict':   stats[stat] = stats[stat].reshape((n_obs,*data_shape[2:]))
+            elif stat == 'prob':    stats[stat] = stats[stat].reshape((n_obs,n_classes,*data_shape[2:]))
+        
+    # Move/swap array axes to original locations
+    if (axis == 1) and (feature_axis == 0):
+        data = np.swapaxes(data,axis,feature_axis)
+        for stat in stats:
+            if stat == 'predict':   stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
+            elif stat == 'prob':    stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)        
+    else:
+        if axis != 0:
+            data = np.moveaxis(data,0,axis)
+            for stat in stats:
+                if stat == 'predict':   stats[stat] = np.moveaxis(stats[stat],0,axis)
+                elif stat == 'prob':    stats[stat] = np.moveaxis(stats[stat],0,axis)
+        if feature_axis != 1:
+            data = np.moveaxis(data,1,feature_axis)
+            for stat in stats:
+                if stat == 'predict':   stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
+                elif stat == 'prob':    stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
+    
+    if data_ndim <= 2:
+        accuracy = accuracy.item()
+        for stat in stats:  stats[stat] = stats[stat].squeeze()
+    
+    if return_stats:    return accuracy, stats    
+    else:               return accuracy    
+    
+    
+def decode_2groups(data1, data2, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=None,
+                   as_pct=False, return_stats=False, stats=None, **kwargs):
+    """
+    Mass-multivariate population decoding analysis classifying between two data distributions
+    using given classifier method
+    
+    Wrapper around decode() for (data1,data2) argument format
+
+    INPUTS
+    labels  (n_obs,) ndarray. Labels/target values for each trial to predict
+
+    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from. 
+            Arbitrary shape, but <axis> should correspond to observations (trials) and 
+            <feature_axis> should correspond to decoder features (eg neural channels),
+            while rest of axis(s) can be any independent data series (time points, 
+            frequencies, etc.) that are analyzed separately (ie separate decoder fit 
+            and evaluated at each time point, frequency, etc.).
+            
+    axis    Int. Axis of data corresponding to distinct observations/trials. Default: 0 (1st axis)
+    
+    feature_axis Int. Axis of data corresponding to decoder features (usually distinct neural
+            channels/electrodes/units). Default: 1 (2nd axis)
+
+    decoder String | sklearn classifier object. Decoding classifier method to use.
+            Can input either as a string specifier or as a scikit-learn classifier object instance.
+            'lda'       : Linear discriminant analysis
+            'logistic'  : Logistic regression
+
+    cv      String | sklearn.model_selection "Splitter" object. Determines how cross
+            validation is done. Set = 'auto' for default. Set = None for no cross-validation.
+            Default: StratifiedKFold(n_splits=5,shuffle=True)
+
+    seed    Int. Random generator seed for repeatable results.
+            Set=None [default] for unseeded random numbers.
+               
+    as_pct  Bool. Set=True to return decoding accuracy as a percent (range ~ 0-100).
+            Set=False [default] to return accuracy as a proportion (range ~ 0-1)
+            
+    return_stats Bool. Set=True to return additional classifier stats. Default: False
+    
+    stats   String | List of strings. List of additional classifier stats to return:
+            'predict' : Predicted class for each trial/observation
+            'prob' :    Posterior probability for each class, for each trial/observation
+            Default: If return_stats=True, stats defaults to ['predict','prob']
+                
+    **kwargs All other kwargs passed directly to decoding object constructor
+
+    OUTPUTS
+    accuracy ndarray. Decoding accuracy. Shape is same as input data, but with <axis> and
+            <feature_axis> reduced to length 1. Accuracy given as proportion or percent 
+            correct, depending on value of <as_pct>. Chance = [100 *] 1/n_classes.
+
+    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in 
+            input argument <stats>. May include the following:
+            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation (trial).
+                        Same shape as accuracy, but <axis> has length n_obs.
+            'prob' :    (...,_n_obs,...,n_classes,...) ndarray. Posterior probabilty for each class
+                        and each observation (trial). Same shape as accuracy, but <axis> has length 
+                        n_obs and <feature_axis> has length n_classes.
+    """
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
+    assert (n1 != 0) and (n2 != 0), \
+        "mutual_information: Data contains no observations (trials) for one or more groups"
+
+    labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
+
+    return decode(labels, np.concatenate((data1,data2), axis=axis), axis=axis,
+                  feature_axis=feature_axis, decoder=decoder, cv=cv, seed=seed, 
+                  as_pct=as_pct, return_stats=return_stats, stats=stats, **kwargs)
+        
+        
 # =============================================================================
 # Mutual information analysis
 # =============================================================================

@@ -5,7 +5,7 @@ import pandas as pd
 
 from patsy import dmatrix
 
-from .data_fixtures import one_sample_data, two_sample_data, one_way_data, two_way_data
+from .data_fixtures import two_sample_data, one_way_data, two_way_data
 from ..info import neural_info, neural_info_2groups
 
 
@@ -16,7 +16,8 @@ from ..info import neural_info, neural_info_2groups
                          [('pev', (34.43,35.91,71.03,60.72)),
                           ('dprime', (-1.52,-1.56,-3.16,-2.53)),
                           ('auroc', (0.14,0.13,0.01,0.04)),
-                          ('mutual_information', (0.5,0.42,0.9,0.82))])                        
+                          ('mutual_information', (0.5,0.42,0.9,0.82)),
+                          ('decode', 1.00)])                        
 def test_two_sample_info(two_sample_data, method, result):    
     """ 
     Unit tests for neural_info function for computing neural information 
@@ -26,27 +27,53 @@ def test_two_sample_info(two_sample_data, method, result):
     
     n = int(10)
     n_chnls = int(4)
+    info_shape = (1,n_chnls)
+    extra_args = {'seed':1} if method == 'decode' else {}
     
     # Basic test of shape, value of output
-    info = neural_info(labels, data, axis=0, method=method)
-    # print(np.round(info.squeeze(),2))
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data, axis=0, method=method, **extra_args)
+    if method == 'decode':
+        print(round(info,2))
+        assert isinstance(info,float)
+    else:
+        print(np.round(info.squeeze(),2))
+        assert info.shape == info_shape
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with 2-group form of neural computation function
-    info2 = neural_info_2groups(data[labels==0,:], data[labels==1,:], axis=0, method=method)
-    assert info2.shape == (1,n_chnls)
+    info2 = neural_info_2groups(data[labels==0,:], data[labels==1,:], axis=0, method=method, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info2.shape == info_shape
     assert np.allclose(info, info2)
     
     # Test for consistent output with different data array shape (3rd axis)
-    info = neural_info(labels, data.reshape((n*2,int(n_chnls/2),int(n_chnls/2))), axis=0, method=method)
-    assert info.shape == (1,n_chnls/2,n_chnls/2)
-    assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data.reshape((n*2,int(n_chnls/2),int(n_chnls/2))), axis=0,
+                       method=method, **extra_args)
+    if method == 'decode':  assert info.shape == (1,1,n_chnls/2)
+    else:                   assert info.shape == (1,n_chnls/2,n_chnls/2)
+    # Skip decoding bc different results here due to different # of channels (decoding features)
+    if method != 'decode':
+        assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
             
     # Test for consistent output with transposed data dimensionality
-    info = neural_info(labels, data.T, axis=-1, method=method)
-    assert info.shape == (n_chnls,1)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data.T, axis=-1, method=method, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape[::-1]
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+                 
+    # Test for consistent output with string-valued labels                                        
+    groups = np.asarray(['cond1','cond2'])
+    info = neural_info(groups[labels], data, axis=0, method=method, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent output using groups argument to subset data                                      
+    info = neural_info(np.hstack((labels,labels+2)), np.concatenate((data,data),axis=0), 
+                       axis=0, method=method, groups=[2,3], **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with vector-valued data
     # For mutual info, computing bins over all data != over 1 channel, 
@@ -54,25 +81,12 @@ def test_two_sample_info(two_sample_data, method, result):
     if method == 'mutual_information':
         bins = np.histogram_bin_edges(data, bins='fd')
         bins = np.stack((bins[:-1],bins[1:]),axis=1)
-        extra_args = dict(bins=bins)
-    else:
-        extra_args = {}
+        extra_args['bins'] = bins
     info = neural_info(labels, data[:,0], axis=0, method=method, **extra_args)
     assert isinstance(info,float)
-    assert np.isclose(info, result[0], rtol=1e-2, atol=1e-2)
-                 
-    # Test for consistent output with string-valued labels                                        
-    groups = np.asarray(['cond1','cond2'])
-    info = neural_info(groups[labels], data, axis=0, method=method)
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
-    
-    # Test for consistent output using groups argument to subset data                                      
-    info = neural_info(np.hstack((labels,labels+2)), np.concatenate((data,data),axis=0), 
-                       axis=0, method=method, groups=[2,3])
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
-    
+    # Skip decoding bc results are different when using only single channel/feature
+    if method != 'decode': assert np.isclose(info, result[0], rtol=1e-2, atol=1e-2)
+        
     if method == 'pev':
         # Test for consistent output using regression model (instead of ANOVA1)
         # Convert list of labels into a regression design matrix
@@ -80,7 +94,7 @@ def test_two_sample_info(two_sample_data, method, result):
         model_formula= '1 + C(cond1, Sum)'
         design = dmatrix(model_formula,df)        
         info = neural_info(design, data, axis=0, method=method, model='regress')
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         
         # Test for consistent output with constant column auto-appended in code
@@ -88,12 +102,12 @@ def test_two_sample_info(two_sample_data, method, result):
         model_formula= 'C(cond1, Sum)'
         design = dmatrix(model_formula,df)        
         info = neural_info(design, data, axis=0, method=method, model='regress')
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)        
 
         # Test for consistent output with returning linear model stats (and check those)
         info, stats = neural_info(labels, data, axis=0, method=method, model='anova1', return_stats=True)
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['F'].squeeze(), [11.5,12.21,50.04,31.91], rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['p'].squeeze(), [3.25e-3,2.59e-3,1.35e-6,2.33e-5], rtol=1e-5, atol=1e-5)
@@ -102,7 +116,8 @@ def test_two_sample_info(two_sample_data, method, result):
         
                 
 @pytest.mark.parametrize('method, result',
-                         [('pev', (74.30,81.87,73.69,79.15))])
+                         [('pev', (74.30,81.87,73.69,79.15)),
+                          ('decode', 1.00)])
 def test_one_way_info(one_way_data, method, result):    
     """ 
     Unit tests for neural_info function for computing neural information 
@@ -112,47 +127,59 @@ def test_one_way_info(one_way_data, method, result):
     
     n = int(10)
     n_chnls = int(4)
+    info_shape = (1,n_chnls)
+    extra_args = {'seed':1} if method == 'decode' else {}    
     
     # Basic test of shape, value of output
-    info = neural_info(labels, data, axis=0, method=method)
-    # print(np.round(info.squeeze(),2))    
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data, axis=0, method=method, **extra_args)
+    if method == 'decode':
+        print(round(info,2))
+        assert isinstance(info,float)
+    else:
+        print(np.round(info.squeeze(),2))
+        assert info.shape == info_shape            
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with different data array shape (3rd axis)
-    info = neural_info(labels, data.reshape((n*3,int(n_chnls/2),int(n_chnls/2))), axis=0, method=method)
-    assert info.shape == (1,n_chnls/2,n_chnls/2)
-    assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data.reshape((n*3,int(n_chnls/2),int(n_chnls/2))), axis=0,
+                       method=method, **extra_args)
+    new_shape = (1,1,n_chnls/2) if method == 'decode' else (1,n_chnls/2,n_chnls/2)
+    assert info.shape == new_shape
+    # Skip decoding bc different results here due to different # of channels (decoding features)
+    if method != 'decode':
+        assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
             
     # Test for consistent output with transposed data dimensionality
-    info = neural_info(labels, data.T, axis=-1, method=method)
-    assert info.shape == (n_chnls,1)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
+    info = neural_info(labels, data.T, axis=-1, method=method, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape[::-1]
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+                     
+    # Test for consistent output with string-valued labels                                        
+    groups = np.asarray(['cond1','cond2','cond3'])
+    info = neural_info(groups[labels], data, axis=0, method=method, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
     
+    # Test for consistent output using groups argument to subset data                                      
+    info = neural_info(np.hstack((labels,labels+3)), np.concatenate((data,data),axis=0), 
+                       axis=0, method=method, groups=[3,4,5], **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == info_shape
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+                
     # Test for consistent output with vector-valued data
     # For mutual info, computing bins over all data != over 1 channel, 
     # so this ensures we have the same binning for both
     if method == 'mutual_information':
         bins = np.histogram_bin_edges(data, bins='fd')
         bins = np.stack((bins[:-1],bins[1:]),axis=1)
-        extra_args = dict(bins=bins)
-    else:
-        extra_args = {}
+        extra_args ['bins'] = bins
     info = neural_info(labels, data[:,0], axis=0, method=method, **extra_args)
     assert isinstance(info,float)
-    assert np.isclose(info, result[0], rtol=1e-2, atol=1e-2)
-                 
-    # Test for consistent output with string-valued labels                                        
-    groups = np.asarray(['cond1','cond2','cond3'])
-    info = neural_info(groups[labels], data, axis=0, method=method)
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
-    
-    # Test for consistent output using groups argument to subset data                                      
-    info = neural_info(np.hstack((labels,labels+3)), np.concatenate((data,data),axis=0), 
-                       axis=0, method=method, groups=[3,4,5])
-    assert info.shape == (1,n_chnls)
-    assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
+    # Skip decoding bc results are different when using only single channel/feature
+    if method != 'decode': assert np.isclose(info, result[0], rtol=1e-2, atol=1e-2)
                 
     # For PEV method, test for consistent output using regression model (instead of ANOVA1)
     if method == 'pev':
@@ -161,7 +188,7 @@ def test_one_way_info(one_way_data, method, result):
         model_formula= '1 + C(cond1, Sum)'
         design = dmatrix(model_formula,df)        
         info = neural_info(design, data, axis=0, method=method, model='regress')
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         
         # Test for consistent output with constant column auto-appended in code
@@ -169,12 +196,12 @@ def test_one_way_info(one_way_data, method, result):
         model_formula= 'C(cond1, Sum)'
         design = dmatrix(model_formula,df)        
         info = neural_info(design, data, axis=0, method=method, model='regress')
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         
         # Test for consistent output with returning linear model stats (and check those)
         info, stats = neural_info(labels, data, axis=0, method=method, model='anova1', return_stats=True)
-        assert info.shape == (1,n_chnls)
+        assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['F'].squeeze(), [44.36,68.72,43.00,57.93], rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['p'].squeeze(), [2.93e-9,2.55e-11,4.04e-9,1.71e-10], rtol=1e-11, atol=1e-11)
