@@ -324,4 +324,4 @@ def test_realign_data(spike_data, data_type):
                                   timepts=timepts, time_axis=0, trial_axis=-1)
         realigned = np.concatenate((realigned1,realigned2), axis=0)
         assert realigned.shape == data.T.shape
-        assert (realigned == data.T).all()        
+        assert (realigned == data.T).all()

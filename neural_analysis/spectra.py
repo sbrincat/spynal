@@ -1792,8 +1792,11 @@ def realign_data(data, align_times, time_range=None, timepts=None, time_axis=0, 
     if trial_axis < 0:  trial_axis = data.ndim + trial_axis
     
     # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
-    if time_axis != 0:              data = np.moveaxis(data,0,time_axis)
-    if trial_axis != data.ndim-1:   data = np.moveaxis(data,-1,trial_axis)
+    if (time_axis == data.ndim-1) and (trial_axis == 0):
+        data = np.swapaxes(data,time_axis,trial_axis)
+    else:    
+        if time_axis != 0:              data = np.moveaxis(data,time_axis,0)
+        if trial_axis != data.ndim-1:   data = np.moveaxis(data,trial_axis,-1)
     
     # Convert align times and time epochs to nearest integer sample indexes
     dt = np.mean(np.diff(timepts))
@@ -1817,8 +1820,11 @@ def realign_data(data, align_times, time_range=None, timepts=None, time_axis=0, 
         realigned[...,iTrial] = data[t[0]:t[1]+1,...,iTrial]    
     
     # Move array axes back to original locations
-    if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
-    if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
+    if (time_axis == data.ndim-1) and (trial_axis == 0):
+        realigned = np.swapaxes(realigned,trial_axis,time_axis)
+    else:    
+        if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
+        if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
         
     return realigned
 

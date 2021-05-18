@@ -5,9 +5,8 @@ import numpy as np
 from scipy.stats import bernoulli
 
 from ..spectra import simulate_oscillation, spectrum, power_spectrum, \
-                      spectrogram, power_spectrogram, phase_spectrogram, cut_trials
-
-# TODO  Tests for realign_data
+                      spectrogram, power_spectrogram, phase_spectrogram, \
+                      cut_trials, realign_data
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -253,4 +252,29 @@ def test_cut_trials(oscillation):
     cut_data    = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=0)
     assert cut_data.shape == data.shape
     assert (cut_data == data).all()
-         
+
+            
+def test_realign_data(oscillation):    
+    """ Unit tests for realign_data function """
+    data = oscillation
+    n_timepts, n_trials = data.shape
+    timepts = np.arange(0,1,1e-3)
+
+    # Realign to 2 distinct times, then concatenate together and test if same  
+    realigned1 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                timepts=timepts, time_axis=0, trial_axis=-1)
+    realigned2 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(0,0.499),
+                                timepts=timepts, time_axis=0, trial_axis=-1)
+    realigned = np.concatenate((realigned1,realigned2), axis=0)
+    assert realigned.shape == data.shape
+    assert (realigned == data).all()
+    
+    # Test for consistent output with transposed data dimensionality
+    realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                timepts=timepts, time_axis=-1, trial_axis=0)
+    realigned2 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(0,0.499),
+                                timepts=timepts, time_axis=-1, trial_axis=0)
+    realigned = np.concatenate((realigned1,realigned2), axis=-1)
+    assert realigned.shape == data.T.shape
+    assert (realigned == data.T).all()        
+        

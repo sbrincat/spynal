@@ -39,7 +39,7 @@ two_way_fstat                   Mass univariate 2-way (with interaction) F-stati
 permutations        Generates random permutations (resampling w/o replacement)
 bootstraps          Generates random bootstrap samples (resampling w/ replacement)
 signs               Generates random binary variables (eg for sign tests)
-
+jackknifes          Generates jackknife/leave-one-out samples (exclude each observation in turn)
 
 Created on Tue Jul 30 16:28:12 2019
 
@@ -1322,29 +1322,16 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     resamples = permutations(N, n_resamples-1, seed)
 
     if return_stats:
-        # DEL? stat_obs = np.moveaxis(stat_obs, 0,-1)[np.newaxis,...]
-
         # Compute statistic under <n_resamples> random resamplings
         # DEL stat_resmp = np.empty((n_resamples-1,*data.shape[1:],n_terms))
         stat_resmp = np.empty((n_terms, *data.shape[1:],n_resamples-1))
         for i_resmp,resample in enumerate(resamples):
             # Compute statistic on data and resampled label rows
-            stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)
-            
-            # DEL
-            # # HACK Move terms to axis=-1 so gets treated as another independent
-            # #  data series in resamples_to_pvalue() below
-            # tmp = stat_func(data,labels[resample,:], **kwargs)
-            # stat_resmp[i_resmp,...] = np.moveaxis(tmp, 0,-1)[np.newaxis,...]
+            stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)            
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs[...,np.newaxis], stat_resmp, -1, compare_func).squeeze(axis=-1)
-
-        # DEL
-        # p = np.squeeze(np.swapaxes(p, 0,-1), -1)
-        # stat_obs    = np.squeeze(np.swapaxes(stat_obs, 0,-1), -1)
-        # stat_resmp  = np.swapaxes(stat_resmp, 0,-1)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
@@ -1820,7 +1807,7 @@ def signs(n, n_resamples=9999, seed=None):
     """
     Yields generator with a set of <n_resamples> random Bernoulli(p=0.5)
     variables (ie binary 0/1 w/ probability of 0.5), each of length <n>,
-    as would ne needed to set the signs of stats in a sign test.
+    as would be needed to set the signs of stats in a sign test.
 
     resamples = signs(n,n_resamples=9999,seed=None)
     
@@ -1843,6 +1830,36 @@ def signs(n, n_resamples=9999, seed=None):
     for _ in range(n_resamples):
         yield np.random.binomial(1,0.5, size=(n,)).astype(bool)
 
+
+def jackknifes(n, n_resamples=None, seed=None):
+    """
+    Yields generator with a set of n_resamples = n boolean variables, 
+    each of length n, and each of which excludes one observation/trial in turn, 
+    as would be needed for a jackknife or leave-one-out test.
+
+    resamples = jackknifes(n,n_resamples=n,seed=None)
+    
+    ARGS
+    n           Int. Number of items to randomly resample from.
+                Should equal number of observations/trials
+
+    n_resamples Automatically set=n here. Only included for consistent interface.
+    seed        Not used. Only included for consistent interface with other functions.
+                
+    YIELDS
+    resamples   (n,) generator of (n,) vector of bool. Each iteration is all 1's
+                except for a single 0, the observation (trial) excluded in that
+                iteration. For the ith resample, the ith trial is excluded.
+    """
+    assert (n_resamples is None) or (n_resamples == n), \
+        ValueError("For jackknife/leave-one-out, n_resamples MUST = n")
+        
+    if seed is not None: set_random_seed(seed)
+    
+    trials = np.arange(n)    
+    for trial in range(n):
+        yield trials != trial
+         
  
 #==============================================================================
 # Utility functions

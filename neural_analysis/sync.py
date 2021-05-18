@@ -24,7 +24,7 @@ Created on Thu Oct  4 15:28:15 2018
 
 @author: sbrincat
 """
-# TODO  Reformat jackknife functions to match randstats functions and move there
+# TODO  Reformat jackknife functions to match randstats functions and move there? 
 
 import os
 import time
@@ -43,10 +43,12 @@ from scipy.stats import norm,mode
 try: 
     from .utils import set_random_seed
     from .spectra import spectrogram, simulate_oscillation
+    from .randstats import jackknifes
 # TEMP    
 except ImportError:
     from utils import set_random_seed
     from spectra import spectrogram, simulate_oscillation
+    from randstats import jackknifes
     
 # =============================================================================
 # Field-Field Synchrony functions
@@ -690,11 +692,12 @@ def two_sample_jackknife(func, data1, data2, *args, axis=0, **kwargs):
 
     stat = np.zeros_like(data1)
 
+    # Create generator with n length-n vectors, each of which excludes 1 trial
+    resamples = jackknifes(n)
+    
     # Do jackknife resampling -- estimate statistic w/ each observation left out
-    trials = np.arange(n)
-    for trial in trials:
-        idxs = trials != trial
-        stat[trial,...] = func(data1[idxs,...],data2[idxs,...],*args,**kwargs)
+    for trial,sel in enumerate(resamples):
+        stat[trial,...] = func(data1[sel,...], data2[sel,...], *args, **kwargs)
 
     # If observation axis wasn't 0, permute axis back to original position
     if axis != 0: stat = np.moveaxis(stat,0,axis)
