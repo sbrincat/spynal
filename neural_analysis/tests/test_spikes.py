@@ -113,7 +113,7 @@ def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
 
              
 # =============================================================================
-# Unit tests
+# Unit tests for rate computation functions
 # =============================================================================
 @pytest.mark.parametrize('data_type, count, result',
                          [('spike_timestamp', True, 105),
@@ -220,6 +220,9 @@ def test_density(spike_data, data_type, kernel, result):
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
                   
         
+# =============================================================================
+# Unit tests for rate preprocessing/utility functions
+# =============================================================================        
 def test_bool_to_times(spike_timestamp, spike_bool):
     """ Unit tests for bool_to_times function to convert spike timestamps to binary trains """
     data_timestamp, _   = spike_timestamp

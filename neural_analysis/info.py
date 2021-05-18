@@ -183,8 +183,13 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 
     decoder String | sklearn classifier object. Decoding classifier method to use.
             Can input either as a string specifier or as a scikit-learn classifier object instance.
-            'lda'       : Linear discriminant analysis
-            'logistic'  : Logistic regression
+            'lda' :     Linear discriminant analysis w/ sklearn.discriminant_analysis.LinearDiscriminantAnalysis
+                        Unlike scikit's empirical prior, sets a uniform prior unless specified otherwise 
+                        (bc any imbalance in emprical probabilities of task conditions is usually
+                        happenstance/random, not predictive and not something we typically want to use)
+            'logistic': Logistic regression using sklearn.linear_model.LogisticRegression
+                        Sets penalty='none' unless specified otherwise in kwargs, unlike scikit's
+                        default 'l2' (L2 regularization) bc seems safer to make users opt-in.
 
     cv      String | sklearn.model_selection "Splitter" object. Determines how cross
             validation is done. Set = 'auto' for default. Set = None for no cross-validation.
@@ -272,11 +277,13 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
         decoder = decoder.lower()
     
         if decoder in ['lda','lineardiscriminant']:
-            # TODO  Default to uniform prior (vs scikit's empirical prior)
+            # If not specified otherwise, set uniform prior
+            if 'priors' not in kwargs: kwargs['priors'] = (1/n_classes)*np.ones((n_classes,))
             decoder = LinearDiscriminantAnalysis(**kwargs)
 
         elif decoder in ['logistic','logisticregression']:
-            # TODO  Default to no regularization? (vs scikit's L2)
+            # If not specified otherwise, set uniform prior
+            if 'penalty' not in kwargs: kwargs['penalty'] = 'none'            
             decoder = LogisticRegression(**kwargs)
         
         else:

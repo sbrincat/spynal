@@ -5,9 +5,9 @@ import numpy as np
 from scipy.stats import bernoulli
 
 from ..spectra import simulate_oscillation, spectrum, power_spectrum, \
-                      spectrogram, power_spectrogram, phase_spectrogram
+                      spectrogram, power_spectrogram, phase_spectrogram, cut_trials
 
-# TODO  Tests for cut_trials, realign_data
+# TODO  Tests for realign_data
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -18,8 +18,8 @@ def oscillation():
     Fixture simulates set of instances of oscillatory data for all unit tests 
     
     RETURNS
-    data    (1001,4) ndarray. Simulated oscillatory data.
-            (eg simulating 1001 timepoints x 4 trials or channels)    
+    data    (1000,4) ndarray. Simulated oscillatory data.
+            (eg simulating 1000 timepoints x 4 trials or channels)    
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
     frequency = 32 
@@ -33,8 +33,8 @@ def bursty_oscillation():
     Fixture simulates set of instances of bursty oscillatory data for all unit tests 
     
     RETURNS
-    data    (1001,4) ndarray. Simulated bursty oscillatory data.
-            (eg simulating 1001 timepoints x 4 trials or channels)    
+    data    (1000,4) ndarray. Simulated bursty oscillatory data.
+            (eg simulating 1000 timepoints x 4 trials or channels)    
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
     frequency = 32 
@@ -48,9 +48,9 @@ def spiking_oscillation(oscillation):
     Fixture simulates set of instances of oscillatory spiking data for all unit tests 
     
     RETURNS
-    data    (1001,4) ndarray of bool. Simulated oscillatory spiking data, 
+    data    (1000,4) ndarray of bool. Simulated oscillatory spiking data, 
             expressed as binary (0/1) spike trains.
-            (eg simulating 1001 timepoints x 4 trials or channels)    
+            (eg simulating 1000 timepoints x 4 trials or channels)    
     """
     # todo code up something actually proper (rate-modulated Poisson process?)
     data = oscillation
@@ -79,7 +79,7 @@ def oscillatory_data(oscillation, bursty_oscillation, spiking_oscillation):
 
 
 # =============================================================================
-# Unit tests
+# Unit tests for spectral analysis functions
 # =============================================================================
 @pytest.mark.parametrize('data_type, spec_type, method, result',
                          [('lfp',   'power', 'multitaper',  0.0137),
@@ -235,3 +235,22 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
         # print(spec.shape, np.round(spec[:,:,0].mean(),4))    
         assert spec.shape == (n_freqs, n_timepts, n_trials)
         assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+        
+  
+# =============================================================================
+# Unit tests for preprocessing/utility functions
+# =============================================================================        
+def test_cut_trials(oscillation):    
+    """ Unit tests for cut_trials function """
+    n_timepts, n_trials = oscillation.shape
+    
+    # Unwrap trial-cut data into one long vector to simulate uncut data
+    uncut_data  = oscillation.flatten(order='F') 
+    data        = oscillation
+    
+    # Check if unwrapped->recut data is same as original uncut data
+    trial_lims  = np.asarray([0,0.999])[np.newaxis,:] + np.arange(n_trials)[:,np.newaxis]     
+    cut_data    = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=0)
+    assert cut_data.shape == data.shape
+    assert (cut_data == data).all()
+         

@@ -24,6 +24,7 @@ Created on Thu Oct  4 15:28:15 2018
 
 @author: sbrincat
 """
+# TODO  Reformat jackknife functions to match randstats functions and move there
 
 import os
 import time
@@ -50,24 +51,23 @@ except ImportError:
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================
-def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', return_phase=False,
-              **kwargs):
+def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
     """
-    Computes pairwise synchrony between pair of channels of continuous raw or
-    spectral (time-frequency) data, using given estimation method
+    Computes measure of pairwise synchrony between pair of channels of continuous (eg LFP) 
+    raw or spectral (time-frequency) data, using given estimation method
 
     sync,freqs,timepts[,dphi] = synchrony(data1,data2,axis=0,method='PPC',
-                                          spec_method='wavelet',return_phase=False,**kwargs)
+                                          return_phase=False,**kwargs)
                                   
     Convenience wrapper function around specific synchrony estimation functions
     coherence, phase_locking_value, pairwise_phase_consistency
 
     ARGS
-    data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
+    data1,2 (...,n_obs,...) ndarrays. Single-channel continuous (eg LFP) data for 2 distinct channels.
             Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            For raw data, axis corresponding to time must be given in <time_axis>.
             Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+            For raw data, axis corresponding to time must be given in <time_axis>.
 
             Other than those constraints, data can have arbitrary shape, with
             analysis performed in mass-bivariate fashion independently
@@ -78,19 +78,22 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', return_
 
     method  String. Synchrony estimation method. Options: 'PPC' [default] | 'PLV' | 'coherence'
             
+    return_phase    Bool. If True, also returns mean phase difference (or coherence phase) 
+            between data1 and data2 (in radians) in additional output. Default: False
+            
     **kwargs    All other kwargs passed as-is to synchrony estimation function.
             See there for details.
 
     RETURNS
     sync    ndarray. Synchrony between data1 and data2.
-            If data is spectral, this has shape as data, but with <axis> removed.
+            If data is spectral, this has same shape as data, but with <axis> removed.
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
     freqs   (n_freqs,). List of frequencies in <sync>.  
             Only returned for raw data, [] otherwise.
             
-    timepts (n_timepts,). List of timepoints in <sync> (in s, referenced to start of
+    timepts (n_timepts_out,). List of timepoints in <sync> (in s, referenced to start of
             data). Only returned for raw data, [] otherwise.
             
     dphi   ndarray. Mean phase difference (or coherence phase) between data1 and data2 in radians.
@@ -98,13 +101,14 @@ def synchrony(data1, data2, axis=0, method='PPC', spec_method='wavelet', return_
            Negative values correspond to data1 lagging behind data2.
            Optional: Only returned if return_phase is True.            
     """
-    if method.lower() in ['ppc','pairwise_phase_consistency']:  sync_fun = pairwise_phase_consistency
-    elif method.lower() in ['plv','phase_locking_value']:       sync_fun = phase_locking_value
-    elif method.lower() in ['coh','coherence']:                 sync_fun = coherence
+    method = method.lower()
+    if method in ['ppc','pairwise_phase_consistency']:  sync_func = pairwise_phase_consistency
+    elif method in ['plv','phase_locking_value']:       sync_func = phase_locking_value
+    elif method in ['coh','coherence']:                 sync_func = coherence
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
     
-    return sync_fun(data1, data2, axis=axis, method=spec_method, return_phase=return_phase, **kwargs)
+    return sync_func(data1, data2, axis=axis, return_phase=return_phase, **kwargs)
     
         
 def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
@@ -123,8 +127,8 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
             Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            For raw data, axis corresponding to time must be given in <time_axis>.
             Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+            For raw data, axis corresponding to time must be given in <time_axis>.
 
             Other than those constraints, data can have arbitrary shape, with
             analysis performed in mass-bivariate fashion independently
@@ -354,8 +358,8 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
             Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            For raw data, axis corresponding to time must be given in <time_axis>.
             Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+            For raw data, axis corresponding to time must be given in <time_axis>.
 
             Other than those constraints, data can have
             Can have arbitrary shape, with analysis performed independently
@@ -509,8 +513,8 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     data1,data2   (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
             Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            For raw data, axis corresponding to time must be given in <time_axis>.
             Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+            For raw data, axis corresponding to time must be given in <time_axis>.
 
             Other than those constraints, data can have
             Can have arbitrary shape, with analysis performed independently
