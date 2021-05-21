@@ -281,22 +281,34 @@ def variables_to_mat(variables):
     """
     new_vbl_dict = {}     # In case we need to create new variables in loop below
 
+    def _size_general(x):
+        if isinstance(x,np.ndarray):        return x.size 
+        elif isinstance(x, (list,tuple)):   return len(x)
+        else:                               return 1
+
     for variable,value in variables.items():
         # Call function recursively with dictionary variables
         if isinstance(value,dict):
             variables[variable] = variables_to_mat(value)
 
         elif isinstance(value,list):
-            # Convert lists with any strings -> Numpy object arrays
-            # (numerical lists are auto-converted to Numpy numerical arrays)
+            # Convert lists with any strings or with unequal-length entries -> object arrays
+            # (same-length numerical lists are auto-converted to numerical arrays)
             # todo should we recurse here in case of nested lists?
-            if np.any([isinstance(item,str) for item in value]):
+            is_str = np.any([isinstance(item,str) for item in value])
+            sizes = [_size_general(item) for item in value]
+            is_unequal_size = np.any(np.diff(sizes) != 0) 
+            if is_str or is_unequal_size:
                 variables[variable] = np.asarray(value,dtype=object)
 
         # Convert strings to Numpy object arrays
         elif isinstance(value,str):
             variables[variable] = np.asarray([value],dtype=object)
 
+        # Convert Pandas DataFrame to dict and call this func recursively on items (cols)
+        elif isinstance(value,pd.DataFrame):
+            variables[variable] = variables_to_mat(value.to_dict(orient='list'))
+            
         # Conversion from xarray -> numpy array + dict (skip if xarray not installed)
         # Extract metadata attributes as new dict variable called <variable>_attr
         elif _HAS_XARRAY and isinstance(value,xr.DataArray):

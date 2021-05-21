@@ -2,11 +2,11 @@
 import pytest
 import numpy as np
 
-from ..utils import setup_sliding_windows
+from ..utils import setup_sliding_windows, unsorted_unique
 from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
-                     cut_trials, realign_data, bin_rate, density
+                     cut_trials, realign_data, pool_electrode_units,\
+                     bin_rate, density
 
-# TODO  Tests for pool_electrode_units
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -266,7 +266,7 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
     """ Unit tests for cut_trials function """
     data, _ = spike_data[data_type]
     uncut_data, _ = spike_data_trial_uncut[data_type]
-    n_trials, n_units = 10, 2
+    n_trials, n_units = data.shape[:2]
     
     if data_type == 'spike_timestamp':
         trial_lims = np.asarray([0,1])[np.newaxis,:] + np.arange(n_trials)[:,np.newaxis]        
@@ -288,7 +288,7 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
 def test_realign_data(spike_data, data_type):    
     """ Unit tests for realign_data function """
     data, timepts = spike_data[data_type]
-    n_trials, n_units = 10, 2
+    n_trials, n_units = data.shape[:2]
         
     # For timestamp data, realign timestamps, then realign back to original timebase and test if same
     if data_type == 'spike_timestamp':
@@ -325,3 +325,44 @@ def test_realign_data(spike_data, data_type):
         realigned = np.concatenate((realigned1,realigned2), axis=0)
         assert realigned.shape == data.T.shape
         assert (realigned == data.T).all()
+
+ 
+@pytest.mark.parametrize('data_type',
+                         [('spike_timestamp'),('spike_bool')])                        
+def test_pool_electrode_units(spike_data, data_type):    
+    """ Unit tests for pool_electrode_units function """
+
+    def _count_all_spikes(data,elecs=None):
+        if elecs is None: elecs = np.zeros(data.shape[1])
+        elec_set = unsorted_unique(elecs)
+    
+        result = np.empty((len(elec_set,)),dtype=int)
+        for i_elec,elec in enumerate(elec_set):
+            if data_type == 'spike_bool':
+                result[i_elec] = data[:,elecs==elec,:].sum()
+            else:
+                result[i_elec] = np.asarray([len(spikes) for spikes in data[:,elecs==elec].flatten()]).sum()
+        
+        return result
+
+    data, timepts = spike_data[data_type]
+    result = _count_all_spikes(data)
+    # Concatenate data to simulate spiking data from 2 units on 2 electrodes
+    data = np.concatenate((data,data), axis=1)
+    electrodes = [1,1,2,2]
+    n_trials, n_units = data.shape[:2]
+    if data_type == 'spike_bool': n_timepts = data.shape[2]
+    out_shape = (n_trials,2,n_timepts) if data_type == 'spike_bool' else (n_trials,2)
+    
+    # Check if overall spike count, size is consistent after pooling
+    data_mua,elec_idxs = pool_electrode_units(data, electrodes, axis=1, return_idxs=True)
+    print(data_mua.shape, _count_all_spikes(data,electrodes), result)
+    assert data_mua.shape == out_shape
+    assert (elec_idxs == np.array([0,2])).all()
+    assert (_count_all_spikes(data,electrodes) == np.array([result,result])).all()
+    
+    # Check for consistent output with axis-transposed data
+    data_mua,elec_idxs = pool_electrode_units(np.moveaxis(data,1,0), electrodes, axis=0, return_idxs=True)
+    assert data_mua.shape == (out_shape[1],out_shape[0],*out_shape[2:])
+    assert (elec_idxs == np.array([0,2])).all()
+    assert (_count_all_spikes(data,electrodes) == np.array([result,result])).all()    

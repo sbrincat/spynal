@@ -1203,8 +1203,10 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
         elec_idxs   = electrodes == elec
         slicer_sua[axis] = elec_idxs    # Extract current electrode units from sua
         slicer_mua[axis] = i_elec       # Save pooled data to current electrode in mua
-        
-        data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].any(axis=axis,keepdims=True)
+
+        data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].any(axis=axis,keepdims=False)
+        # DEL This didn't work for reasons I don't understand
+        # data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].any(axis=axis,keepdims=True)
     
     # Generate list of indexes of 1st occurrence of each electrode, if requested
     if return_idxs:
