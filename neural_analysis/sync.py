@@ -12,6 +12,12 @@ ztransform_coherence Z-transform coherence so ~ normally distributed
 phase_locking_value Phase locking value (PLV) between pair of channels
 pairwise_phase_consistency Pairwise phase consistency (PPC) btwn pair of channels
 
+### Spike-field synchrony ###
+spike_field_coupling    General spike-field coupling/synchrony btwn spike/LFP pair
+spike_field_coherence   Spike-field coherence between a spike/LFP pair
+spike_field_plv         Spike-field PLV between a spike/LFP pair
+spike_field_ppc         Spike-field PPC between a spike/LFP pair
+
 ### Data simulation ###
 simulate_multichannel_oscillation Generates simulated oscillatory paired data
 
@@ -41,15 +47,16 @@ from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
 from scipy.stats import norm,mode
 
 try: 
-    from .utils import set_random_seed
+    from .utils import set_random_seed, setup_sliding_windows
     from .spectra import spectrogram, simulate_oscillation
     from .randstats import jackknifes
 # TEMP    
 except ImportError:
-    from utils import set_random_seed
+    from utils import set_random_seed, setup_sliding_windows
     from spectra import spectrogram, simulate_oscillation
     from randstats import jackknifes
     
+
 # =============================================================================
 # Field-Field Synchrony functions
 # =============================================================================
@@ -79,7 +86,7 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
     axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
 
     method  String. Synchrony estimation method. Options: 'PPC' [default] | 'PLV' | 'coherence'
-            
+                        
     return_phase    Bool. If True, also returns mean phase difference (or coherence phase) 
             between data1 and data2 (in radians) in additional output. Default: False
             
@@ -114,7 +121,7 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
     
         
 def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztransform=False,
-              method='wavelet', data_type=None, smp_rate=None, time_axis=None, taper_axis=None,
+              spec_method='wavelet', data_type=None, smp_rate=None, time_axis=None, taper_axis=None,
               **kwargs):
     """
     Computes pairwise coherence between pair of channels of raw or
@@ -122,7 +129,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
 
     coh,freqs,timepts[,dphi] = coherence(data1,data2,axis=0,return_phase=False,
                                          single_trial=None,ztransform=False,
-                                         method='wavelet',data_type=None,smp_rate=None,
+                                         spec_method='wavelet',data_type=None,smp_rate=None,
                                          time_axis=None,taper_axis=None,**kwargs)
 
     ARGS
@@ -154,9 +161,10 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
                 'raw' or 'spectral'
                 Default: assume 'raw' if data is real; 'spectral' if complex
 
-    Following args are only used for spectral analysis for data_type == 'raw'
+    Following args are only used for spectral analysis for data_type == 'raw':
 
-    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
+    spec_method String. Method to use for spectral analysis.
+                Options: 'wavelet' [default] | 'multitaper' | 'bandfilter'
 
     smp_rate    Scalar. Sampling rate of data (only needed for raw data)
 
@@ -187,7 +195,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     REFERENCE
     Single-trial method:    Womelsdorf, Fries, Mitra, Desimone (2006) Science
     Single-trial method:    Richter, ..., Fries (2015) NeuroImage
-    """
+    """    
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
             
@@ -204,26 +212,26 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     if data_type == 'raw':
         assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
-        if method == 'multitaper': kwargs.update(keep_tapers=True)
-        data1,freqs,timepts = spectrogram(data1, smp_rate, axis=time_axis, method=method,
+        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
+        data1,freqs,timepts = spectrogram(data1, smp_rate, axis=time_axis, method=spec_method,
                                           data_type='lfp', spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=method,
+        data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=spec_method,
                                           data_type='lfp', spec_type='complex', **kwargs)
         # Account for new frequency (and/or taper) axis prepended before time_axis
-        n_new_axes = 2 if method == 'multitaper' else 1
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
-        if method == 'multitaper': taper_axis = time_axis-1
+        if spec_method == 'multitaper': taper_axis = time_axis-1
         
     else:
         freqs = []
         timepts = []
-        if method == 'multitaper':
+        if spec_method == 'multitaper':
             assert taper_axis is not None, \
                 ValueError("Must set value for taper_axis for multitaper spectral inputs")
 
     # For multitaper, compute means across trials, tapers; df = 2*n_trials*n_tapers
-    if method == 'multitaper':
+    if spec_method == 'multitaper':
         reduce_axes = (axis,taper_axis)
         df = 2*data1.shape[axis]*data1.shape[taper_axis]
     # Otherwise, just compute means across trials; df = 2*n_trials (TODO is this true?)
@@ -340,7 +348,7 @@ def ztransform_coherence(coh, df, beta=23/20):
 
 
 def phase_locking_value(data1, data2, axis=0, return_phase=False,
-                        single_trial=None, method='wavelet', data_type=None,
+                        single_trial=None, spec_method='wavelet', data_type=None,
                         smp_rate=None, time_axis=None, taper_axis=None, **kwargs):
     """
     Computes phase locking value (PLV) between raw or spectral (time-frequency) LFP data
@@ -352,7 +360,7 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
 
     plv,freqs,timepts[,dphi] = phase_locking_value(data1,data2,axis=0,return_phase=False,
                                                  single_trial=None,
-                                                 method='wavelet',data_type=None,
+                                                 spec_method='wavelet',data_type=None,
                                                  smp_rate=None,time_axis=None,
                                                  taper_axis=None,**kwargs)
 
@@ -380,8 +388,9 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
 
     Following args are only used for spectral analysis for data_type == 'raw'
 
-    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
-
+    spec_method String. Method to use for spectral analysis.
+                Options: 'wavelet' [default] | 'multitaper' | 'bandfilter'
+                
     data_type   Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
                 Default: assume 'raw' if data is real; 'spectral' if complex
 
@@ -427,28 +436,28 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     if data_type == 'raw':
         assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
-        if method == 'multitaper': kwargs.update(keep_tapers=True)
+        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
         
-        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
-                                          method=method,data_type='lfp', spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
-                                          method=method,data_type='lfp', spec_type='complex', **kwargs)
+        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,method=spec_method,
+                                          data_type='lfp', spec_type='complex', **kwargs)
+        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,method=spec_method,
+                                          data_type='lfp', spec_type='complex', **kwargs)
         
         # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if method == 'multitaper' else 1
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
-        if method == 'multitaper': taper_axis = time_axis-1
+        if spec_method == 'multitaper': taper_axis = time_axis-1
         
     else:
         freqs = []
         timepts = []
-        if method == 'multitaper':
+        if spec_method == 'multitaper':
             assert taper_axis is not None, \
                 ValueError("Must set value for taper_axis for multitaper spectral inputs")
 
     # For multitaper, compute means across trials, tapers
-    if method == 'multitaper':  reduce_axes = (axis,taper_axis)
+    if spec_method == 'multitaper':  reduce_axes = (axis,taper_axis)
     # Otherwise, just compute means across trials
     else:                       reduce_axes = axis
         
@@ -494,7 +503,7 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
 
 
 def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
-                               single_trial=None, method='wavelet',
+                               single_trial=None, spec_method='wavelet',
                                data_type=None, smp_rate=None, time_axis=None,
                                taper_axis=None, **kwargs):
     """
@@ -507,7 +516,7 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
 
     ppc,freqs,timepts[,dphi] = pairwise_phase_consistency(data1,data2,axis=0,
                                                           return_phase=False,single_trial=None,
-                                                          method='wavelet',data_type=None,
+                                                          spec_method='wavelet',data_type=None,
                                                           smp_rate=None,time_axis=None,
                                                           taper_axis=None,**kwargs)
 
@@ -535,8 +544,9 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
 
     Following args are only used for spectral analysis for data_type == 'raw'
 
-    method      String. Spectral method. 'wavelet' [default] | 'multitaper'
-
+    spec_method String. Method to use for spectral analysis.
+                Options: 'wavelet' [default] | 'multitaper' | 'bandfilter'
+                
     data_type   Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
                 Default: assume 'raw' if data is real; 'spectral' if complex
 
@@ -585,28 +595,28 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     if data_type == 'raw':
         assert smp_rate is not None, "For raw/time-series data, need to input value for <smp_rate>"
         assert time_axis is not None, "For raw/time-series data, need to input value for <time_axis>"
-        if method == 'multitaper': kwargs.update(keep_tapers=True)
+        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
         
-        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,
-                                          method=method,data_type='lfp',spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,
-                                          method=method,data_type='lfp',spec_type='complex', **kwargs)
+        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,method=spec_method,
+                                          data_type='lfp',spec_type='complex', **kwargs)
+        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,method=spec_method,
+                                          data_type='lfp',spec_type='complex', **kwargs)
         
         # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if method == 'multitaper' else 1
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
-        if method == 'multitaper': taper_axis = time_axis-1
+        if spec_method == 'multitaper': taper_axis = time_axis-1
         
     else:
         freqs = []
         timepts = []
-        if method == 'multitaper':
+        if spec_method == 'multitaper':
             assert taper_axis is not None, \
                 ValueError("Must set value for taper_axis for multitaper spectral inputs")        
 
     # For multitaper, compute means across trials, tapers
-    if method == 'multitaper':  reduce_axes = (axis,taper_axis)
+    if spec_method == 'multitaper':  reduce_axes = (axis,taper_axis)
     # Otherwise, just compute means across trials
     else:                       reduce_axes = axis
     
@@ -659,6 +669,391 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
 def plv_to_ppc(plv, n):
     """ Converts PLV to PPC as PPC = (n*PLV^2 - 1)/(n-1) """
     return (n*plv**2 - 1) / (n - 1)
+
+
+# =============================================================================
+# Spike-Field Synchrony functions
+# =============================================================================
+def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=False, **kwargs):   
+    """
+    Computes measure of pairwise coupling between a pair of spike and continuous(eg LFP) 
+    raw or spectral (time-frequency) data, using given estimation method
+        
+    Convenience wrapper function around specific spike-field coupling estimation functions
+    spike_field_coherence, spike_field_plv, spike_field_ppc
+
+    ARGS
+    TODO Docs for spikes
+    
+    lfpdata (...,n_obs,...) ndarray. Single-channel continuous (eg LFP) data.
+            Can be given as raw LFPs or complex-valued time-frequency transform.
+
+            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+            For raw data, axis corresponding to time must be given in <time_axis>.
+
+            Other than those constraints, data can have arbitrary shape, with
+            analysis performed in mass-bivariate fashion independently
+            along each dimension other than observation <axis> (eg different
+            frequencies, timepoints, conditions, etc.)
+
+    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+
+    method  String. Synchrony estimation method. 
+            Options: 'PPC' [default] | 'PLV' | 'coherence'
+            
+    return_phase    Bool. If True, also returns mean LFP phase of spikes (or coherence phase) 
+            (in radians) in additional output variable. Default: False
+                        
+    **kwargs    All other kwargs passed as-is to synchrony estimation function.
+            See there for details.
+
+    RETURNS
+    sync    ndarray. Synchrony between data1 and data2.
+            If data is spectral, this has shape as data, but with <axis> removed.
+            If data is raw, this has same shape with <axis> removed and a new
+            frequency axis inserted immediately before <time_axis>.
+
+    freqs   (n_freqs,). List of frequencies in <sync>.  
+            Only returned for raw data, [] otherwise.
+            
+    timepts (n_timepts,). List of timepoints in <sync> (in s, referenced to start of
+            data). Only returned for raw data, [] otherwise.
+            
+    dphi   ndarray. Mean phase of LFPs at spike times (or coherence phase) in radians.
+           Optional: Only returned if return_phase is True.
+    """
+    method = method.lower()
+    if method in ['ppc','pairwise_phase_consistency']:  sfc_func = spike_field_ppc
+    elif method in ['plv','phase_locking_value']:       sfc_func = spike_field_plv
+    elif method in ['coh','coherence']:                 sfc_func = spike_field_coherence
+    else:
+        raise ValueError("Unsuuported value '%s' given for <method>. \
+                         Should be 'PPC'|'PLV'|'coherence'" % method)
+
+    return sfc_func(spkdata, lfpdata, axis=axis, return_phase=return_phase, **kwargs)
+
+
+def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None, return_phase=False,
+                          spec_method='multitaper', smp_rate=None, time_axis=None, **kwargs):
+    """
+    Computes pairwise coherence between single-channel spiking data and LFP data
+
+    coh,freqs,timepts = spike_field_coherence(spkdata,lfpdata,axis=0,data_type=None,
+                                            spec_method='multitaper',smp_rate=None,
+                                            time_axis=None,**kwargs)
+
+    ARGS
+    TODO Fix documentation
+    data1,data2   (...,n_obs,...) ndarray. Single-channel LFP data for 2 distinct channels.
+            Can be given as raw LFPs or complex-valued time-frequency transform.
+
+            For raw data, axis corresponding to time must be given in <time_axis>.
+            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+
+            Other than those constraints, data can have
+            Can have arbitrary shape, with analysis performed independently
+            along each dimension other than observation <axis> (eg different
+            frequencies, timepoints, conditions, etc.)
+
+    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+
+    single_trial String or None. What type of coherence estimator to compute:
+            None        standard across-trial estimator [default]
+            'pseudo'    single-trial estimates using jackknife pseudovalues
+            'richter'   single-trial estimates using actual jackknife estimates
+                        as in Richter & Fries 2015
+
+    ztransform Bool. If True, returns z-transformed coherence using Jarvis &
+            Mitra (2001) method. If false [default], returns raw coherence.
+
+    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
+            Default: assume 'raw' if data is real; 'spectral' if complex
+
+    return_phase    Bool. If True, also returns mean LFP phase of spikes (or coherence phase) 
+            (in radians) in additional output variable. Default: False
+            
+    Following args are only used for spectral analysis for data_type == 'raw'
+
+    spec_method String. Method to use for spectral analysis.
+                Options: 'wavelet' [default] | 'multitaper' | 'bandfilter'
+                
+    smp_rate Scalar. Sampling rate of data (only needed for raw data)
+
+    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
+
+    Any other kwargs passed as-is to spectrogram() function.
+
+    RETURNS
+    coh     ndarray. Magnitude of coherence between spikeData and lfpdata.
+            If lfpdata is spectral, this has shape as lfpdata, but with <axis> removed.
+            If lfpdata is raw, this has same shape with <axis> removed and a new
+            frequency axis inserted immediately before <time_axis>.
+
+    freqs   (n_freqs,). List of frequencies in coh (only for raw data)
+    timepts (n_timepts,). List of timepoints in coh (only for raw data)
+    
+    dphi   ndarray. Coherence phase in radians.
+           Optional: Only returned if return_phase is True.    
+    """
+    if 'method' in kwargs: 
+        spec_method = kwargs.pop(method)
+        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
+        
+    if axis < 0: axis = lfpdata.ndim + axis
+    if time_axis < 0: time_axis = lfpdata.ndim + time_axis
+        
+    if data_type is None: 
+        spk_data_type = _infer_data_type(spkdata)
+        lfp_data_type = _infer_data_type(lfpdata)
+        assert spk_data_type == lfp_data_type, \
+            ValueError("Spiking (%s) and LFP (%s) data must have same data type" % 
+                       (spk_data_type,lfp_data_type))
+        data_type = lfp_data_type
+            
+    # If raw data is input, compute spectral transform first
+    if data_type == 'raw':
+        # Ensure spkdata is boolean array with 1's for spiking times
+        assert spkdata.dtype != object, \
+            TypeError("Spiking data must be converted from timestamps to boolean format for this function")
+        spkdata = spkdata.astype(bool)
+
+        spkdata,freqs,timepts = spectrogram(spkdata, smp_rate, axis=time_axis,
+                                            method=spec_method, data_type='spike',
+                                            **kwargs)
+        lfpdata,freqs,timepts = spectrogram(lfpdata, smp_rate, axis=time_axis,
+                                            method=spec_method, data_type='lfp',
+                                            **kwargs)
+        
+        # Frequency axis always inserted just before time axis, so if
+        # observation/trial axis is later, must increment it
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
+        
+    else:
+        freqs = []
+        timepts = []
+    if return_phase:
+        coh,_,_,dphi = coherence(spkdata, lfpdata, axis=axis, data_type='spectral', return_phase=True)        
+        return coh,freqs,timepts,None,dphi
+    else:
+        coh,_,_ = coherence(spkdata, lfpdata, axis=axis, data_type='spectral', return_phase=False)
+        return coh,freqs,None,timepts
+
+
+def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None, 
+                    width=0.5, spacing=None, lims=None, timewins=None,
+                    data_type=None, spec_method='wavelet', smp_rate=None, 
+                    return_phase=False, **kwargs):
+    """
+    Computes phase locking value (PLV) of spike-triggered LFP phase
+
+    PLV is the mean resultant length (magnitude of the vector mean) of the
+    spike-triggered LFP phase phi:
+        plv  = abs( trialMean(exp(i*phi)) )
+
+    plv,freqs,timepts = spike_field_plv(spkdata,lfpdata,axis=0,time_axis=None,timepts=None,
+                                        width=0.5,spacing=width,lims=(timepts[0],timepts[-1]),
+                                        data_type=None,spec_method='wavelet',smp_rate=None,
+                                        return_phase=False,**kwargs)
+
+    ARGS
+    TODO Redo docs
+    spkdata (...,n_obs,...) ndarray of bool. Binary spike trains (with 1's labelling)
+            spike times. Shape is arbitrary, but MUST have same shape as lfpdata.
+            Thus, if lfpdata is spectral, must pre-pend singleton dimension to
+            spkdata to match (eg using np.newaxis).
+
+    lfpdata (...,n_obs,...) ndarray of float or complex. LFP data, given either
+            as (real) raw data, or as complex spectral data.
+
+            For raw data, axis corresponding to time must be given in <time_axis>.
+            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+
+            Other than those constraints, data can have arbitrary shape, with
+            analysis performed independently in mass-bivariate fashion along
+            each dimension other than observation <axis> (eg different conditions)
+
+    axis    Scalar. Axis corresponding to distinct observations/trials. Default: 0
+
+    return_phase Bool. If True, returns add'l output with mean spike-triggered phase
+
+    timewins (n_wins,2) ndarray. Time windows to compute PLV within, given as
+            series of window [start end]'s
+
+            Can instead give window parameters as kwargs:
+            width  Scalar. Window width (s). Default: 0.5
+            spacing Scalar. Window spacing (s)
+                    Default: <width> (giving exactly non-overlapping windows)
+            lims    (2,) array-like. [Start,end] limits for windows
+                    Default: (timepts[0],timepts[-1]) (full sampled time of LFPs)
+
+    Following args are only used for spectral analysis for data_type == 'raw'
+
+    spec_method String. Method to use for spectral analysis.
+                Options: 'wavelet' [default] | 'multitaper' | 'bandfilter'
+                
+    data_type Str. What kind of data are we given in data1,data2: 'raw' or 'spectral'
+            Default: assume 'raw' if data is real; 'spectral' if complex
+
+    smp_rate Scalar. Sampling rate of data (only needed for raw data)
+    time_axis Scalar. Axis of data corresponding to time (only needed for raw data)
+
+    Any other kwargs passed as-is to spectrogram() function.
+
+    RETURNS
+    plv     ndarray. Phase locking value between spike and LFP data.
+            If lfpdata is spectral, this has same shape, but with <axis> removed.
+            If lfpdata is raw, this has same shape with <axis> removed and a new
+            frequency axis inserted immediately before <time_axis>.
+
+    freqs   (n_freqs,). List of frequencies in plv (only for raw data)
+    timepts (n_timepts,). List of timepoints in plv (only for raw data)
+
+    phi     ndarray. If return_phase is True, mean spike-triggered LFP phase
+            (in radians) is also returned here
+
+    REFERENCES
+    Lachaux et al. (1999) Human Brain Mapping
+    """
+    # FIXME I think we need to require timepts argument, no?
+    # TODO  We kind of need to know freq,time axes or require specific shape. Do we allow flexible shape?
+    if 'method' in kwargs: 
+        spec_method = kwargs.pop(method)
+        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
+            
+    # Ensure spkdata is boolean array (not timestamps or spectral)
+    assert spkdata.dtype != object, \
+        TypeError("Spiking data must be converted from timestamps to boolean format for this function")
+    assert _infer_data_type(spkdata) == 'raw', \
+        ValueError("Spiking data must be given as raw, not spectral, data for this function")
+    assert (spkdata.ndim == lfpdata.ndim) and (spkdata.shape == lfpdata.shape), \
+        ValueError("Spiking data must have same size/shape as LFP data (w/ singleton to match freq axis)")
+        
+    # Set timewins based on given parameters if not set explicitly in args
+    if timewins is None:    timewins = setup_sliding_windows(width,lims,spacing)
+    else:                   timewins = np.asarray(timewins)
+                
+    spkdata = spkdata.astype(bool)  # Ensure spkdata is boolean array
+
+    if data_type is None: data_type = _infer_data_type(lfpdata)
+    if axis < 0: axis = lfpdata.ndim + axis
+    if time_axis < 0: time_axis = lfpdata.ndim + time_axis
+
+    # If raw data is input, compute spectral transform first
+    if data_type == 'raw':
+        lfpdata,freqs,times = spectrogram(lfpdata, smp_rate, axis=time_axis,
+                                          method=spec_method, data_type='lfp', **kwargs)
+        timepts = times + timepts[0] if timepts is not None else times
+
+        # Frequency axis always inserted just before time axis, so if
+        # observation/trial axis is later, must increment it
+        # Account for new frequency (and/or taper) axis
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
+        
+        # Prepend singleton dimension(s) into spkdata to match freq/taper dim(s) in lfpdata
+        slicer = [np.newaxis]*n_new_axes + [slice(None)]*spkdata.ndim
+        spkdata = spkdata[slicer]
+
+    else:
+        freqs = []
+
+    data_ndims = lfpdata.ndims
+    # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,n_trials)
+    if not ((time_axis == data_ndims-2) and (axis == data_ndims-1)):
+        lfpdata = np.moveaxis(lfpdata,time_axis,-1)
+        lfpdata = np.moveaxis(lfpdata,axis,-1)
+        spkdata = np.moveaxis(spkdata,time_axis,-1)        
+        spkdata = np.moveaxis(spkdata,axis,-1)
+    data_shape = lfpdata.shape   # Cache data shape after axes shift
+    n_timepts,n_trials = data_shape[-2], data_shape[-1]
+    
+    # Unwrap all other axes (incl. frequency) -> (n_data_series,n_timepts,n_trials) 
+    if data_ndims > 2:
+        lfpdata = np.reshape(lfpdata, (-1,n_timepts,n_trials))
+        spkdata = np.reshape(spkdata, (-1,n_timepts,n_trials))
+    n_data_series = lfpdata.shape[0]
+    n_timewins = timewins.shape[0]
+
+    # Normalize LFP spectrum/spectrogram so data is all unit-length complex vectors
+    lfpdata = lfpdata / np.abs(lfpdata)
+
+    # Convert time sampling vector and time windows to int-valued ms,
+    #  to avoid floating-point issues in indexing below
+    timepts_ms  = np.round(timepts*1000).astype(int)
+    timewins_ms = np.round(timewins*1000).astype(int)
+
+    # TODO Prolly want to init this to same C/F order as data, right?
+    vector_mean = np.full((n_data_series,n_timewins,1),np.nan,dtype=complex)
+    n = np.zeros((n_timewins,))
+
+    for i_win,timewin in enumerate(timewins_ms):
+        # Boolean vector flagging all time points within given time window
+        tbool = (timepts_ms >= timewin[0]) & (timepts_ms <= timewin[1])
+
+        # Logical AND btwn window and spike train booleans to get spikes in window
+        win_spikes = spkdata & tbool[np.newaxis,:,np.newaxis]
+
+        # Count of all spikes within time window across all trials/observations
+        n[i_win] = win_spikes.sum()
+
+        # If no spikes in window, can't compute PLV. Skip and leave = nan.
+        if n[i_win] == 0: continue
+
+        # Use windowed spike times to index into LFPs and compute complex mean across trials,timepts
+        vector_mean[:,i_win,0] = lfpdata[np.tile(win_spikes,(n_data_series,1,1))].mean(axis=(-1,-2))
+        
+        # todo Need to timetest against these alternatives
+        # vector_mean[:,i_win] = lfpdata[win_spikes[[0]*n_data_series,:,:]].mean(axis=(-1,-2))
+        # vector_mean[:,i_win] = lfpdata[win_spikes[np.zeros((n_data_series,),dtype=int),:,:]].mean(axis=(-1,-2))
+
+    # Reshape axes (incl. frequency) to original data shape -> (n_data_series,n_timepts,n_trials) 
+    if data_ndims > 2:
+        vector_mean = np.reshape(vector_mean, (data_shape[:-2],n_timewins,1))
+        
+    # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,n_trials)
+    if not ((time_axis == data_ndims-2) and (axis == data_ndims-1)):
+        vector_mean = np.moveaxis(vector_mean,-1,axis)
+        vector_mean = np.moveaxis(vector_mean,-1,time_axis)
+        
+    # Compute absolute value of complex vector mean = mean resultant = PLV
+    # and optionally the mean phase angle as well. Also return spike counts.
+    if return_phase:
+        return np.abs(vector_mean), freqs, timepts, n, np.angle(vector_mean)
+    else:
+        return np.abs(vector_mean), freqs, timepts, n
+
+
+# Alias function with full name
+spike_field_phase_locking_value = spike_field_plv
+
+
+def spike_field_ppc(spkdata, lfpdata, axis=0, return_phase=False, **kwargs):
+    """
+    Computes pairwise phase consistency (PPC) of spike-triggered LFP phase,
+    which is unbiased by n (unlike PLV and coherence)
+
+    PPC is an unbiased estimator of PLV^2, and can be expressed (and computed
+    efficiently) in terms of PLV and n:
+        PPC = (n*PLV^2 - 1) / (n-1)
+
+    TODO Rest of docs
+    """
+    if return_phase:
+        plv,freqs,timepts,n,phi = \
+        spike_field_plv(spkdata,lfpdata,axis=axis, return_phase=True, **kwargs)
+        return plv_to_ppc(plv,n), freqs, timepts, n, phi
+
+    else:
+        plv,freqs,timepts,n = \
+        spike_field_plv(spkdata,lfpdata,axis=axis, return_phase=False, **kwargs)
+        return plv_to_ppc(plv,n), freqs, timepts, n
+
+# Alias function with full name
+spike_field_pairwise_phase_consistency = spike_field_ppc
 
 
 # =============================================================================
