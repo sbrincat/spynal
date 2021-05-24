@@ -483,7 +483,8 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                     data[vbl] = _convert_string(data[vbl])
                     
                 # Convert binary-valued variables to bool type
-                elif (file[vbl].attrs['MATLAB_class'] == b'logical') and (data[vbl].dtype != bool):
+                elif ('MATLAB_class' in file[vbl].attrs) and \
+                     (file[vbl].attrs['MATLAB_class'] == b'logical') and (data[vbl].dtype != bool):
                     data[vbl] = data[vbl].astype(bool)
 
             # Cell arrays -- Need to work a bit to extract values
@@ -572,7 +573,8 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                 elif file[vbl][key].size == 1:
                     data[vbl][key] = file[vbl][key][()].item()
                     # Convert binary-valued variables to bool type
-                    if file[vbl][key].attrs['MATLAB_class'] == b'logical':
+                    if ('MATLAB_class' in file[vbl][key].attrs) and \
+                       (file[vbl][key].attrs['MATLAB_class'] == b'logical'):
                         data[vbl][key] = bool(data[vbl][key])
                     
                 # Numeric dtypes -- just load as is
@@ -581,7 +583,8 @@ def _load73(filename, variables=None, typemap=None, order='C'):
 
 
                 # Convert binary-valued variables to bool type
-                if (file[vbl][key].attrs['MATLAB_class'] == b'logical') and \
+                if ('MATLAB_class' in file[vbl][key].attrs) and \
+                    (file[vbl][key].attrs['MATLAB_class'] == b'logical') and \
                     isinstance(data[vbl][key],np.ndarray) and (data[vbl][key].dtype != bool):
                     data[vbl][key] = data[vbl][key].astype(bool)
 
