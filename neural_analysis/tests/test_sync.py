@@ -45,18 +45,21 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     
     smp_rate = 1000
     n_trials = 40
-    n_freqs = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
-    n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}    
+    method_to_n_freqs   = {'wavelet': 26, 'multitaper':257,  'bandfilter': 3}
+    method_to_n_timepts = {'wavelet': 1000, 'multitaper':2,  'bandfilter': 1000}
+    n_freqs     = method_to_n_freqs[spec_method]
+    n_timepts   = method_to_n_timepts[spec_method]    
+    freqs_shape = (n_freqs,2) if spec_method == 'bandfilter' else (n_freqs,)
         
     # Basic test of shape, dtype, value of output. 
     # Test values averaged over all timepts, freqs for simplicity
     sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=-1)
     print(sync.shape, np.round(sync.mean(),4), dphi.shape, np.round(dphi.mean(),4), freqs.shape, timepts.shape)
-    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
-    assert timepts.shape == (n_timepts[spec_method],)
-    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
-    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert sync.shape == (n_freqs, n_timepts)
+    assert dphi.shape == (n_freqs, n_timepts)
     assert np.issubdtype(sync.dtype,np.float)
     assert np.issubdtype(dphi.dtype,np.float)    
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
@@ -65,8 +68,8 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     # Test for consistent output with return_phase=False
     sync2, freqs2, timepts2 = synchrony(data1, data2, axis=0, method=method, spec_method=spec_method,
                                         return_phase=False, smp_rate=smp_rate, time_axis=-1)
-    assert freqs2.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
-    assert timepts2.shape == (n_timepts[spec_method],)    
+    assert freqs2.shape == freqs_shape
+    assert timepts2.shape == (n_timepts,)    
     assert np.allclose(sync2, sync, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with reversed time axis (dphi should change sign, otherwise same)
@@ -92,10 +95,10 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
                                            np.stack((data2,data2),axis=2),
                                            axis=0, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=1)
-    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
-    assert timepts.shape == (n_timepts[spec_method],)
-    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method], 2)
-    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method], 2)
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert sync.shape == (n_freqs, n_timepts, 2)
+    assert dphi.shape == (n_freqs, n_timepts, 2)
     assert np.issubdtype(sync.dtype,np.float)
     assert np.issubdtype(dphi.dtype,np.float)
     # HACK Loosen tolerance bc this doesn't quite match up for bandfilter (TODO why???)
@@ -105,10 +108,10 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     # Test for consistent output with transposed data dimensionality -> (time,trials)
     sync, freqs, timepts, dphi = synchrony(data1.T, data2.T, axis=-1, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=0)
-    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else freqs.shape == (n_freqs[spec_method],)
-    assert timepts.shape == (n_timepts[spec_method],)
-    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
-    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert sync.shape == (n_freqs, n_timepts)
+    assert dphi.shape == (n_freqs, n_timepts)
     assert np.issubdtype(sync.dtype,np.float)
     assert np.issubdtype(dphi.dtype,np.float)    
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
@@ -122,11 +125,10 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     print(data1.shape, spec2.shape)
     sync, _, _, dphi = synchrony(spec1, spec2, axis=0, taper_axis=2, method=method, spec_method=spec_method, 
                                  return_phase=True)
-    assert freqs.shape == (n_freqs[spec_method],2) if spec_method == 'bandfilter' else \
-           freqs.shape == (n_freqs[spec_method],)
-    assert timepts.shape == (n_timepts[spec_method],)
-    assert sync.shape == (n_freqs[spec_method], n_timepts[spec_method])
-    assert dphi.shape == (n_freqs[spec_method], n_timepts[spec_method])
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert sync.shape == (n_freqs, n_timepts)
+    assert dphi.shape == (n_freqs, n_timepts)
     assert np.issubdtype(sync.dtype,np.float)
     assert np.issubdtype(dphi.dtype,np.float)    
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
