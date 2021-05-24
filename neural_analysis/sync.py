@@ -196,6 +196,10 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     Single-trial method:    Womelsdorf, Fries, Mitra, Desimone (2006) Science
     Single-trial method:    Richter, ..., Fries (2015) NeuroImage
     """    
+    if 'method' in kwargs: 
+        spec_method = kwargs.pop('method')
+        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
+            
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
             
@@ -423,6 +427,10 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
     """
+    if 'method' in kwargs: 
+        spec_method = kwargs.pop('method')
+        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
+            
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
 
@@ -580,6 +588,10 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     Original concept:   Vinck et al. (2010) NeuroImage
     Relation to PLV:    Kornblith, Buschman, Miller (2015) Cerebral Cortex
     """
+    if 'method' in kwargs: 
+        spec_method = kwargs.pop('method')
+        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
+            
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
     assert (single_trial is None) or (single_trial in ['pseudo','richter']), \
@@ -794,11 +806,7 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None, return_phase
     
     dphi   ndarray. Coherence phase in radians.
            Optional: Only returned if return_phase is True.    
-    """
-    if 'method' in kwargs: 
-        spec_method = kwargs.pop(method)
-        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
-        
+    """        
     if axis < 0: axis = lfpdata.ndim + axis
     if time_axis < 0: time_axis = lfpdata.ndim + time_axis
         
@@ -919,10 +927,6 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
     """
     # FIXME I think we need to require timepts argument, no?
     # TODO  We kind of need to know freq,time axes or require specific shape. Do we allow flexible shape?
-    if 'method' in kwargs: 
-        spec_method = kwargs.pop(method)
-        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
-            
     # Ensure spkdata is boolean array (not timestamps or spectral)
     assert spkdata.dtype != object, \
         TypeError("Spiking data must be converted from timestamps to boolean format for this function")
