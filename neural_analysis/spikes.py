@@ -388,6 +388,83 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     return rates, timepts
 
 
+# TODO What about ddof here?
+def fano(data, axis=None, ddof=0):
+    """
+    Computes Fano factor (variance/mean) of spike rate data 
+    
+    Fano factor is computed across a given array axis (eg trials) or across an entire array
+    
+    np.nan is returned for cases where the mean ~ 0
+    
+    fano = fano(data, axis=None, ddof=0)
+    
+    ARGS
+    data        (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
+    
+    axis        Int. Array axis to compute Fano factor on (usually corresponding to
+                distict trials/observations). If None [default], computes Fano
+                factor across entire array (analogous to np.mean/var).
+                
+    ddof        Int. Sets divisor for computing variance = N - ddof. Set=0 for max 
+                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
+                Default: 0
+                                
+    RETURNS
+    fano        Float | (...,1,...) ndarray. Fano factor (variance/mean) of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.   
+    """
+    mean    = data.mean(axis=axis,keepdims=True)
+    var     = data.var(axis=axis,keepdims=True,ddof=ddof)
+    fano_   = var/mean
+    # Find any data values w/ mean ~ 0 and set output = NaN for those points    
+    fano_[np.isclose(mean,0)] = np.nan
+
+    if fano_.size == 1: fano_ = fano_.item()
+    
+    return fano_
+
+
+def cv(data, axis=None, ddof=0):
+    """
+    Computes Coefficient of Variation (std dev/mean) of spike rate data 
+    
+    CV is computed across a given array axis (eg trials) or across an entire array
+    
+    np.nan is returned for cases where the mean ~ 0
+    
+    cv = cv(data, axis=None, ddof=0)
+    
+    ARGS
+    rates       (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
+    
+    axis        Int. Array axis to compute CV on (usually corresponding to
+                distict trials/observations). If None [default], computes Fano
+                factor across entire array (analogous to np.mean/var).
+                
+    ddof        Int. Sets divisor for computing std dev = N - ddof. Set=0 for max 
+                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
+                Default: 0
+                                
+    RETURNS
+    cv          Float | (...,1,...) ndarray. CV (SD/mean) of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.   
+    """
+    mean    = data.mean(axis=axis,keepdims=True)
+    sd      = data.std(axis=axis,keepdims=True,ddof=ddof)
+    cv_     = sd/mean
+    # Find any data values w/ mean ~ 0 and set output = NaN for those points    
+    cv_[np.isclose(mean,0)] = np.nan
+
+    if cv_.size == 1: cv_ = cv_.item()
+    
+    return cv_
+
+    
 #==============================================================================
 # Plotting functions
 #==============================================================================
