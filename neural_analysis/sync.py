@@ -181,10 +181,10 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in <coh>.  
+    freqs   (n_freqs,) ndarray. List of frequencies in <coh>.  
             Only returned for raw data, [] otherwise.
             
-    timepts (n_timepts,). List of timepoints in <coh> (in s, referenced to start of
+    timepts (n_timepts,) ndarray. List of timepoints in <coh> (in s, referenced to start of
             data). Only returned for raw data, [] otherwise.
 
     dphi   ndarray. Coherence phase in radians.
@@ -713,7 +713,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
     method  String. Synchrony estimation method. 
             Options: 'PPC' [default] | 'PLV' | 'coherence'
             
-    return_phase    Bool. If True, also returns mean LFP phase of spikes (or coherence phase) 
+    return_phase    Bool. If True, also returns mean LFP phase of spikes or coherence phase 
             (in radians) in additional output variable. Default: False
                         
     **kwargs    All other kwargs passed as-is to synchrony estimation function.
@@ -746,7 +746,8 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
 
 
 def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None, return_phase=False,
-                          spec_method='multitaper', smp_rate=None, time_axis=None, **kwargs):
+                          spec_method='multitaper', smp_rate=None, time_axis=None, taper_axis=None,
+                          **kwargs):
     """
     Computes pairwise coherence between single-channel spiking data and LFP data
 
@@ -817,14 +818,22 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None, return_phase
             ValueError("Spiking (%s) and LFP (%s) data must have same data type" % 
                        (spk_data_type,lfp_data_type))
         data_type = lfp_data_type
-            
+           
+    if data_type == 'raw':
+        # Ensure spkdata is boolean array with 1's for spiking times
+        assert spkdata.dtype != object, \
+            TypeError("Spiking data must be converted from timestamps to boolean format for this function")
+        spkdata = spkdata.astype(bool)
+        
+    print("0", spkdata.shape, lfpdata.shape, axis, time_axis)            
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
         # Ensure spkdata is boolean array with 1's for spiking times
         assert spkdata.dtype != object, \
             TypeError("Spiking data must be converted from timestamps to boolean format for this function")
         spkdata = spkdata.astype(bool)
-
+        
+        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
         spkdata,freqs,timepts = spectrogram(spkdata, smp_rate, axis=time_axis,
                                             method=spec_method, data_type='spike',
                                             **kwargs)
@@ -838,16 +847,24 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, data_type=None, return_phase
         n_new_axes = 2 if spec_method == 'multitaper' else 1
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
+        if spec_method == 'multitaper': taper_axis = time_axis - 1
         
     else:
         freqs = []
         timepts = []
+        
+    print("1", spkdata.shape, lfpdata.shape, axis, time_axis)            
+        
+    extra_args = dict(axis=axis, data_type='spectral', spec_method=spec_method,
+                      return_phase=return_phase)
+    if spec_method == 'multitaper': extra_args.update(taper_axis=taper_axis)
+                
     if return_phase:
-        coh,_,_,dphi = coherence(spkdata, lfpdata, axis=axis, data_type='spectral', return_phase=True)        
+        coh,_,_,dphi = coherence(spkdata, lfpdata, **extra_args)
         return coh,freqs,timepts,None,dphi
     else:
-        coh,_,_ = coherence(spkdata, lfpdata, axis=axis, data_type='spectral', return_phase=False)
-        return coh,freqs,None,timepts
+        coh,_,_ = coherence(spkdata, lfpdata, **extra_args)
+        return coh,freqs,timepts,None
 
 
 def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None, 
@@ -932,18 +949,25 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
         TypeError("Spiking data must be converted from timestamps to boolean format for this function")
     assert _infer_data_type(spkdata) == 'raw', \
         ValueError("Spiking data must be given as raw, not spectral, data for this function")
-    assert (spkdata.ndim == lfpdata.ndim) and (spkdata.shape == lfpdata.shape), \
-        ValueError("Spiking data must have same size/shape as LFP data (w/ singleton to match freq axis)")
-        
-    # Set timewins based on given parameters if not set explicitly in args
-    if timewins is None:    timewins = setup_sliding_windows(width,lims,spacing)
-    else:                   timewins = np.asarray(timewins)
-                
-    spkdata = spkdata.astype(bool)  # Ensure spkdata is boolean array
-
+    assert (spkdata.ndim == lfpdata.ndim) and \
+           ((np.array(spkdata.shape) != np.array(lfpdata.shape)).sum() <= 1), \
+        ValueError("Spiking data " + str(spkdata.shape) + 
+                   " must have same size/shape as LFP data " + str(lfpdata.shape) + 
+                   " (w/ singleton to match freq axis)")
+    
     if data_type is None: data_type = _infer_data_type(lfpdata)
     if axis < 0: axis = lfpdata.ndim + axis
     if time_axis < 0: time_axis = lfpdata.ndim + time_axis
+        
+    if timepts is None:     timepts = np.arange(lfpdata.shape[time_axis]) / smp_rate   
+    if lims is None:        lims = (timepts[0],timepts[-1])
+    
+    # Set timewins based on given parameters if not set explicitly in args
+    if timewins is None:    timewins = setup_sliding_windows(width,lims,spacing)
+    else:                   timewins = np.asarray(timewins)
+
+    spkdata = spkdata.astype(bool)  # Ensure spkdata is boolean array
+    print("00", lfpdata.shape, spkdata.shape)    
 
     # If raw data is input, compute spectral transform first
     if data_type == 'raw':
@@ -955,19 +979,23 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
         # observation/trial axis is later, must increment it
         # Account for new frequency (and/or taper) axis
         n_new_axes = 2 if spec_method == 'multitaper' else 1
+        # Set up indexing to preserve axes before/after time axis, but insert n_new_axis just before it
+        slicer = [slice(None)]*time_axis + [np.newaxis]*n_new_axes + [slice(None)]*(spkdata.ndim-time_axis) 
         if axis >= time_axis: axis += n_new_axes
         time_axis += n_new_axes
         
-        # Prepend singleton dimension(s) into spkdata to match freq/taper dim(s) in lfpdata
-        slicer = [np.newaxis]*n_new_axes + [slice(None)]*spkdata.ndim
+        # Insert singleton dimension(s) into spkdata to match freq/taper dim(s) in lfpdata
+        # DEL slicer = [np.newaxis]*n_new_axes + [slice(None)]*spkdata.ndim
         spkdata = spkdata[slicer]
 
     else:
         freqs = []
 
-    data_ndims = lfpdata.ndims
+    print("01", lfpdata.shape, spkdata.shape)    
+
+    data_ndim = lfpdata.ndim
     # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,n_trials)
-    if not ((time_axis == data_ndims-2) and (axis == data_ndims-1)):
+    if not ((time_axis == data_ndim-2) and (axis == data_ndim-1)):
         lfpdata = np.moveaxis(lfpdata,time_axis,-1)
         lfpdata = np.moveaxis(lfpdata,axis,-1)
         spkdata = np.moveaxis(spkdata,time_axis,-1)        
@@ -975,12 +1003,16 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
     data_shape = lfpdata.shape   # Cache data shape after axes shift
     n_timepts,n_trials = data_shape[-2], data_shape[-1]
     
+    print("02", lfpdata.shape, spkdata.shape)    
+    
     # Unwrap all other axes (incl. frequency) -> (n_data_series,n_timepts,n_trials) 
-    if data_ndims > 2:
+    if data_ndim > 2:
         lfpdata = np.reshape(lfpdata, (-1,n_timepts,n_trials))
         spkdata = np.reshape(spkdata, (-1,n_timepts,n_trials))
     n_data_series = lfpdata.shape[0]
     n_timewins = timewins.shape[0]
+
+    print("03", lfpdata.shape, spkdata.shape)    
 
     # Normalize LFP spectrum/spectrogram so data is all unit-length complex vectors
     lfpdata = lfpdata / np.abs(lfpdata)
@@ -992,7 +1024,7 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
 
     # TODO Prolly want to init this to same C/F order as data, right?
     vector_mean = np.full((n_data_series,n_timewins,1),np.nan,dtype=complex)
-    n = np.zeros((n_timewins,))
+    n = np.zeros((n_timewins,),dtype=int)
 
     for i_win,timewin in enumerate(timewins_ms):
         # Boolean vector flagging all time points within given time window
@@ -1007,28 +1039,35 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, timepts=None,
         # If no spikes in window, can't compute PLV. Skip and leave = nan.
         if n[i_win] == 0: continue
 
-        # Use windowed spike times to index into LFPs and compute complex mean across trials,timepts
-        vector_mean[:,i_win,0] = lfpdata[np.tile(win_spikes,(n_data_series,1,1))].mean(axis=(-1,-2))
+        # Use windowed spike times to index into LFPs and compute complex mean  
+        # across all spikes (within all trials/observations and window timepoints)
+        vector_mean[:,i_win,0] = (lfpdata[np.tile(win_spikes,(n_data_series,1,1))].reshape((n_data_series,n[i_win]))
+                                                                                  .mean(axis=-1))
         
         # todo Need to timetest against these alternatives
         # vector_mean[:,i_win] = lfpdata[win_spikes[[0]*n_data_series,:,:]].mean(axis=(-1,-2))
         # vector_mean[:,i_win] = lfpdata[win_spikes[np.zeros((n_data_series,),dtype=int),:,:]].mean(axis=(-1,-2))
 
+    print("0", vector_mean.shape)    
     # Reshape axes (incl. frequency) to original data shape -> (n_data_series,n_timepts,n_trials) 
-    if data_ndims > 2:
-        vector_mean = np.reshape(vector_mean, (data_shape[:-2],n_timewins,1))
-        
+    if data_ndim > 2:
+        vector_mean = np.reshape(vector_mean, (*data_shape[:-2],n_timewins,1))
+    print("1", vector_mean.shape)    
     # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,n_trials)
-    if not ((time_axis == data_ndims-2) and (axis == data_ndims-1)):
+    if not ((time_axis == data_ndim-2) and (axis == data_ndim-1)):
         vector_mean = np.moveaxis(vector_mean,-1,axis)
+        print("2", vector_mean.shape)    
         vector_mean = np.moveaxis(vector_mean,-1,time_axis)
-        
+        print("3", vector_mean.shape)    
+    vector_mean = vector_mean.squeeze(axis=axis)
+    print("4", vector_mean.shape)    
+
     # Compute absolute value of complex vector mean = mean resultant = PLV
     # and optionally the mean phase angle as well. Also return spike counts.
     if return_phase:
-        return np.abs(vector_mean), freqs, timepts, n, np.angle(vector_mean)
+        return np.abs(vector_mean), freqs, timewins.mean(axis=1), n, np.angle(vector_mean)
     else:
-        return np.abs(vector_mean), freqs, timepts, n
+        return np.abs(vector_mean), freqs, timewins.mean(axis=1), n
 
 
 # Alias function with full name
