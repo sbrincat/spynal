@@ -394,7 +394,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
                 xlabel=None, ylabel=None):
     """
-    Plots rasters.  Currently super slow, needs to be optimized (TODO)
+    Generates raster plot of spike times
     
     ARGS
     spike_times (n_spikes,) array-like | (n_trains,) object array of (n_spikes,) arrays.
