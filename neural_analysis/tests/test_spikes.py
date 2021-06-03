@@ -5,7 +5,7 @@ import numpy as np
 from ..utils import setup_sliding_windows, unsorted_unique
 from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
                      cut_trials, realign_data, pool_electrode_units,\
-                     bin_rate, density
+                     bin_rate, density, fano, cv
 
 
 # =============================================================================
@@ -113,7 +113,7 @@ def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
 
              
 # =============================================================================
-# Unit tests for rate computation functions
+# Unit tests for rate computation and stats functions
 # =============================================================================
 @pytest.mark.parametrize('data_type, count, result',
                          [('spike_timestamp', True, 105),
@@ -218,6 +218,40 @@ def test_density(spike_data, data_type, kernel, result):
     assert tout.shape == (101,)
     assert rates.shape == (10, 2, 101)
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
+             
+             
+@pytest.mark.parametrize('data_type, stat, result',
+                         [('spike_timestamp', 'fano', 42.0),
+                          ('spike_timestamp', 'fano', 42.0),
+                          ('spike_bool', 'cv', 2.29),
+                          ('spike_bool', 'cv', 2.29)])
+def test_rate_stats(spike_data, data_type, stat, result):    
+    """ Unit tests for bin_rate function for computing binned spike rates """
+    # Extract given data type from data dict
+    data, timepts = spike_data[data_type]
+    
+    stat_func = fano if stat == 'fano' else cv
+    
+    # Compute spike rates from timestamp/binary spike data -> (n_trials,n_unit,n_timepts)
+    rates, _ = bin_rate(data, lims=[0,1], count=False, axis=-1, timepts=timepts)
+    n_trials,n_chnls,n_timepts = rates.shape
+    
+    # Basic test of shape, value of output
+    # Test values averaged over entire array -> scalar
+    stats = stat_func(rates, axis=0)
+    print(stats[0,0,0])
+    assert stats.shape == (1, n_chnls, n_timepts)
+    assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent output with different data array shape (additional axis inserted)
+    stats = stat_func(np.concatenate((rates[:,:,np.newaxis,:],rates[:,:,np.newaxis,:]), axis=2), axis=0)
+    assert stats.shape == (1, n_chnls, 2, n_timepts)
+    assert np.isclose(stats[0,0,0,0], result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent output with transposed data dimensionality
+    stats = stat_func(rates.T, axis=-1)
+    assert stats.shape == (n_timepts, n_chnls, 1)
+    assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
                   
         
 # =============================================================================

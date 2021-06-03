@@ -20,7 +20,8 @@ from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ..spikes import simulate_spike_trains, times_to_bool, rate
+from .data_fixtures import simulate_dataset
+from ..spikes import simulate_spike_trains, times_to_bool, rate, fano, cv
 
 
 def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
@@ -145,3 +146,156 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
         
     return means, sems
                 
+
+def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson', 
+                    n_trials=1000, n_reps=100, plot=False, plot_dir=None, seed=1, **kwargs):
+    """
+    Basic testing for functions estimating spike rate statistics
+    
+    Generates synthetic spike rate data with given parameters, 
+    estimates stats using given function, and compares estimated to expected.
+    
+
+                              
+    ARGS
+    stat  String. Name of rate stat function to test: 'fano' | 'cv'
+            
+    test    String. Type of test to run. Default: 'rate'. Options: 'rate' | 'spread'
+
+    test_values  (n_values,) array-like. List of values to test. 
+            Interpretation and defaults are test-specific:
+            'mean'      Mean spike rate. Default: [1,2,5,10,20]
+            'spread'    Gaussian SDs for generating rates. Default: [1,2,5,10,20]
+            'n'         Trial numbers. Default: [25,50,100,200,400,800]
+
+    distribution    String. Name of distribution to simulate data from. 
+                    Options: 'normal' | 'poisson' [default]
+                    
+    n_trials        Int. Number of trials to simulate data for. Default: 1000
+                        
+    plot    Bool. Set=True to plot test results. Default: False
+          
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+          
+    seed    Int. Random generator seed for repeatable results.
+            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
+    """
+    # Note: Set random seed once here, not for every random data generation loop below    
+    if seed is not None: np.random.seed(seed)
+    
+    stat = stat.lower()
+    test = test.lower()
+    distribution = distribution.lower()
+    if test in ['spread','spreads','sd']:
+        assert distribution != 'poisson', \
+            "Can't run 'spread' test with Poisson data (variance is fixed ~ mean rate)"
+               
+    # Set defaults for tested values and set up data generator function depending on <test>
+    # Note: Only set random seed once above, don't reset in data generator function calls
+    # todo Should we move some/all of these into function arguments, instead of hard-coding?
+    sim_args = dict(gain=5.0, offset=0.0, spreads=5.0, n_conds=1, n=n_trials, 
+                    distribution=distribution, seed=None)
+       
+    if test in ['mean','rate','gain']:
+        test_values = [1,2,5,10,20] if test_values is None else test_values
+        del sim_args['gain']                    # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda mean: simulate_dataset(**sim_args,gain=mean)
+        
+    elif test in ['spread','spreads','sd']:
+        test_values = [1,2,5,10,20] if test_values is None else test_values
+        del sim_args['spreads']                 # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda spread: simulate_dataset(**sim_args,spreads=spread)
+
+    elif test in ['n','n_trials']:
+        test_values = [25,50,100,200,400,800] if test_values is None else test_values
+        del sim_args['n']                       # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda n_trials: simulate_dataset(**sim_args,n=n_trials)
+        
+    else:
+        raise ValueError("Unsupported value '%s' set for <test>" % test)
+          
+    if stat == 'fano':    stat_func = fano
+    elif stat == 'cv':    stat_func = cv
+    else:
+        raise ValueError("Unsupported value '%s' set for <stat>" % stat)
+         
+    stat_values = np.empty((len(test_values),n_reps))              
+    for i_value,test_value in enumerate(test_values):        
+        for i_rep in range(n_reps):
+            # Generate simulated data with current test value
+            data,_ = gen_data(test_value)
+                                        
+            stat_values[i_value,i_rep] = stat_func(data, axis=0)
+
+    # Compute mean and std dev across different reps of simulation            
+    stat_sds    = stat_values.std(axis=1,ddof=0)
+    stat_means  = stat_values.mean(axis=1)
+    
+    if plot:
+        plt.figure()
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.errorbar(test_values, stat_means, stat_sds, marker='o')
+        xlabel = 'n' if test == 'bias' else test
+        plt.xlabel(xlabel)
+        plt.ylabel("%s(rate)" % stat)
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'stat-summary-%s-%s' % (stat,test)))
+       
+    # Determine if test actually produced the expected values 
+    # 'mean' : Test if stat decreases monotonically with mean rate for normal data, remains ~ same for Poisson       
+    if test == 'mean':
+        if distribution == 'normal':
+            assert (np.diff(stat_means) <= 0).all(), \
+                AssertionError("%s does not deccrease monotonically with increase in mean" % stat)
+        elif distribution == 'poisson':
+            assert stat_means.ptp() < stat_sds.max(), \
+                AssertionError("%s has larger than expected range for increase in mean of Poisson data" % stat)
+
+    # 'spread' : Test if stat increases monotonically with increasing distribution spread (rate SD)
+    elif test in ['spread','spreads','sd']:
+        assert (np.diff(stat_means) >= 0).all(), \
+            AssertionError("%s does not increase monotonically with spread increase" % stat)
+                                
+    # 'n' : Test if stat is ~ same for all values of n (unbiased by n)      
+    elif test in ['n','n_trials']:
+        assert stat_means.ptp() < stat_sds.max(), \
+            AssertionError("%s has larger than expected range across n's (likely biased by n)" % stat)
+        
+    return stat_means, stat_sds
+
+
+def rate_stat_test_battery(stats=['fano','cv'], tests=['mean','spread','n'], 
+                           distributions=['normal','poisson'], **kwargs):
+    """ 
+    Runs a battery of given tests on given spike rate statistic computation methods
+    
+    rate_stat_test_battery(stats=['fano','cv'], tests=['mean','spread','n'], **kwargs)
+    
+    ARGS
+    stats       Array-like. List of spike rate stat to evaluate.
+                Default: ['fano','cv'] (all supported methods)
+                                                
+    tests       Array-like. List of tests to run.
+                Default: ['mean','spread','n'] (all supported tests)
+                
+    distributions Array-like. List of data distributions to test.
+                Default: ['normal','poisson'] (all supported tests)
+                     
+    kwargs      Any other kwargs passed directly to test_randstats()
+    
+    ACTION
+    Throws an error if any estimated value for any (stat,test) is too far from expected value    
+    """
+    if isinstance(stats,str): stats = [stats]    
+    if isinstance(tests,str): tests = [tests]
+    
+    for stat in stats:
+        for test in tests:
+            for distribution in distributions:
+                print("Running %s test on %s %s" % (test,stat,distribution))
+                # Skip test of distribution spread (SD) for Poisson, bc SD is defined by mean
+                if (test.lower() == 'spread') and (distribution.lower() == 'poisson'): continue
+                
+                test_rate_stats(stat, test=test, distribution=distribution, **kwargs)
+                    
+                print('PASSED')
+                if 'plot_dir' in kwargs: plt.close('all')

@@ -388,7 +388,6 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     return rates, timepts
 
 
-# TODO What about ddof here?
 def fano(data, axis=None, ddof=0):
     """
     Computes Fano factor (variance/mean) of spike rate data 
