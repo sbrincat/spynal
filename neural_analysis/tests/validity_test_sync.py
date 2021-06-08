@@ -15,14 +15,18 @@ synchrony_test_battery  Runs standard battery of tests of synchrony estimation f
 """
 import os
 import time
+from warnings import warn
 from math import pi, ceil, floor, log2
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.stats import bernoulli
+
 from ..sync import simulate_multichannel_oscillation, synchrony
 
                 
-def test_synchrony(method, test='frequency', test_values=None, spec_method='wavelet', plot=False, plot_dir=None,
+def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=None, 
+                   spec_method='wavelet', plot=False, plot_dir=None,
                    seed=1, phi_sd=pi/4, dphi=0, damp=1, amp=5.0, freq=32, phi=0, noise=0.5,n=1000, time_range=3.0, 
                    smp_rate=1000, burst_rate=0, **kwargs):    
     """
@@ -162,6 +166,8 @@ def test_synchrony(method, test='frequency', test_values=None, spec_method='wave
         
         # Simulate data with oscillation of given params in additive noise -> (n_timepts,n_trials,n_chnls=2)
         data = gen_data(value)
+        if pair_type == 'spk-lfp':
+            data[:,:,0] = _continuous_to_spiking(data[:,:,0])
                  
         # Compute time-frequency/spectrogram representation of data and
         # bivariate measure of synchrony -> (n_freqs,n_timepts)
@@ -169,6 +175,9 @@ def test_synchrony(method, test='frequency', test_values=None, spec_method='wave
                                              spec_method=spec_method, smp_rate=smp_rate,
                                              time_axis=0, return_phase=True, **kwargs)
         n_freqs,n_timepts = sync.shape
+        if freqs.ndim == 2: 
+            bands = freqs
+            freqs = freqs.mean(axis=1)  # Compute center of freq bands
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
         if i == 0:
@@ -196,7 +205,7 @@ def test_synchrony(method, test='frequency', test_values=None, spec_method='wave
         freq_transform  = lambda x: np.argmin(np.abs(x - freqs))  # Index of closest sampled freq
         plot_freqs      = np.arange(len(freqs))
         freq_ticks      = np.arange(len(freqs))
-        freq_tick_labels= freqs
+        freq_tick_labels= bands
                      
     # For other spectral analysis, evaluate and plot frequency on linear scale        
     else:
@@ -206,14 +215,21 @@ def test_synchrony(method, test='frequency', test_values=None, spec_method='wave
         fmax            = floor(freqs[-1]/10.0)*10.0                
         freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
         freq_tick_labels= freq_ticks        
-                         
+                
+    freqs_transformed   = np.asarray([freq_transform(f) for f in freqs])
+                             
     # For frequency test, find frequency with maximal power for each test
     if test in ['frequency','freq']:
         idxs = np.argmax(marginal_syncs,axis=0)
         peak_freqs = freqs[idxs] if spec_method != 'bandfilter' else idxs
+
+        # Find frequency in spectrogram closest to each simulated frequency
+        test_freq_idxs  = np.asarray([np.argmin(np.abs(freq_transform(f) - freqs_transformed)) for f in test_values])
+    else:        
+        # Find frequency in spectrogram closest to simulated frequency
+        test_freq_idxs  = np.argmin(np.abs(freq_transform(freq) - freqs_transformed))
         
-    # Find frequency in spectrogram closest to each simulated frequency
-    test_freq_idxs      = np.argmin(np.abs(freq_transform(freq) - np.asarray([freq_transform(f) for f in freqs])))
+    # Extract synchrony and phase at tested frequency(s)        
     test_freq_syncs     = marginal_syncs[test_freq_idxs,:]
     test_freq_phases    = marginal_phases[test_freq_idxs,:]
                 
@@ -295,12 +311,14 @@ def test_synchrony(method, test='frequency', test_values=None, spec_method='wave
                 plt.ylim(lim)            
                 ax.set_aspect('equal', 'box')
             else:
-                test_freq_values = test_freq_syncs if variable == 'sync' else test_freq_phases
+                test_freq_results = test_freq_syncs if variable == 'sync' else test_freq_phases
+                xplot = [freq_transform(f) for f in test_values] if spec_method == 'bandfilter' and test in ['frequency','freq'] \
+                        else test_values
                 ylim = [0,1.05*test_freq_syncs.max()] if variable == 'sync' else [-pi,pi]
-                plt.plot(test_values, test_freq_values, marker='o')
+                plt.plot(xplot, test_freq_results, marker='o')
                 plt.ylim(ylim)
-            plt.xlabel(test)
-            plt.ylabel('frequency' if test in ['frequency','freq'] else variable)
+            plt.xlabel('Phase SD' if test == 'synchrony' else test)
+            plt.ylabel('frequency' if test in ['frequency','freq'] and variable == 'sync' else variable)
             if i_vbl == 0: plt.title("%s %s %s test" % (spec_method,method,test), horizontalalignment='left')            
         plt.show()
         if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'synchrony-summary-%s-%s-%s.png' % (method,test,spec_method)))
@@ -364,7 +382,7 @@ def synchrony_test_battery(methods=['PPC','PLV','coherence'],
     kwargs      Any other kwargs passed directly to test_synchrony()
     
     ACTION
-    Throws an error if any estimated synchrony or phase  value for any (method,test) is too far from expected value    
+    Throws an error if any estimated synchrony or phase value for any (method,test) is too far from expected value    
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -381,10 +399,70 @@ def synchrony_test_battery(methods=['PPC','PLV','coherence'],
                 if (test in ['n','n_trials']) and (method in ['coherence','coh','plv']): continue
                 if (test in ['ampratio','amp_ratio','damp']) and (method in ['coherence','coh']): continue
                                 
-                test_synchrony(method, test=test, spec_method=spec_method, **kwargs)
+                test_synchrony(method, pair_type='lfp-lfp', test=test, spec_method=spec_method, **kwargs)
                 print('PASSED (test ran in %.1f s)' % (time.time()-t1))
                                 
-
+                # If saving plots to file, let's not leave them all open
+                if 'plot_dir' in kwargs: plt.close('all')
+                
+            
+def spike_field_test_battery(methods=['PPC','PLV','coherence'],
+                           tests=['synchrony','relphase','ampratio','frequency','amplitude','phase','n'],
+                           spec_methods=['wavelet','multitaper','bandfilter'], **kwargs):
+    """ 
+    Runs a battery of given tests on given oscillatory spike-field coupling computation methods
+    
+    spike_field_test_battery(methods=['PPC','PLV','coherence'],
+                           tests=['synchrony','relphase','frequency','amplitude','phase','n'],
+                           spec_methods=['wavelet','multitaper','bandfilter'], **kwargs)
+    
+    ARGS
+    methods     Array-like. List of spike-field coupling computation methods to test.
+                Default: ['PPC','PLV','coherence'] (all supported methods)
+                
+    tests       Array-like. List of tests to run.
+                Note: certain combinations of methods,tests are skipped, as they are not expected to pass
+                Default: ['synchrony','relphase','frequency','amplitude','phase','n'] (all supported tests)
+                
+    spec_methods Array-like. List of underlying spectral analysis methods to test.                
+                Default: ['wavelet','multitaper','bandfilter'] (all supported methods)
+                
+    kwargs      Any other kwargs passed directly to test_synchrony()
+    
+    ACTION
+    Throws an error if any estimated synchrony or phase value for any (method,test) is too far from expected value    
+    """
+    if isinstance(methods,str): methods = [methods]
+    if isinstance(tests,str): tests = [tests]
+    if isinstance(spec_methods,str): spec_methods = [spec_methods]
+    tests = [test.lower() for test in tests]
+    methods = [method.lower() for method in methods]
+    
+    for test in tests:
+        for method in methods:
+            for spec_method in spec_methods:
+                print("Running %s test on %s %s" % (test,spec_method,method))
+                t1 = time.time()
+                # Skip tests expected to fail due to properties of given info measures (eg ones that are biased/affected by n)
+                if (test in ['n','n_trials']) and (method in ['coherence','coh','plv']): continue
+                if (test in ['ampratio','amp_ratio','damp']) and (method in ['coherence','coh']): continue
+                                
+                test_synchrony(method, pair_type='spk-lfp', test=test, spec_method=spec_method, **kwargs)
+                print('PASSED (test ran in %.1f s)' % (time.time()-t1))
+                
+                # If saving plots to file, let's not leave them all open
+                if 'plot_dir' in kwargs: plt.close('all')                
+                
 def _amp_phase_to_complex(amp,theta):
     """ Converts amplitude and phase angle to complex variable """
     return amp * np.exp(1j*theta)
+
+
+def _continuous_to_spiking(data):
+    """ Converts continuous data to thresholded spiking response """
+    # Convert continuous oscillation to probability (range 0-1)
+    data = (data - data.min()) / data.ptp()
+    data = data**2  # Sparsen high rates some
+    
+    # Use probabilities to generate Bernoulli random variable at each time point
+    return bernoulli.ppf(0.5, data).astype(bool)

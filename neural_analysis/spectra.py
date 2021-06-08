@@ -593,8 +593,8 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         tapers = compute_tapers(smp_rate,time_width=time_width,freq_width=freq_width,n_tapers=n_tapers)
 
     # Set up parameters for data time windows
-    # Set window starts to range from time 0 to time n - window width (1e-12 for fp err)
-    win_starts  = np.arange(0,n_timepts/smp_rate-window+1e-12,spacing)
+    # Set window starts to range from time 0 to time n - window width
+    win_starts  = iarange(0,n_timepts/smp_rate - window,spacing)
     # Set sampled timepoint vector = center of each window
     timepts     = win_starts + window/2.0
 

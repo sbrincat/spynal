@@ -149,7 +149,9 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
             data = bernoulli.ppf(0.5, data).astype(bool)        
                         
         spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,**kwargs)
-        if freqs.ndim == 2: freqs = freqs.mean(axis=1)  # Compute center of freq bands
+        if freqs.ndim == 2:
+            bands = freqs            
+            freqs = freqs.mean(axis=1)  # Compute center of freq bands
         n_freqs,n_timepts,n_trials = spec.shape
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
@@ -171,7 +173,7 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         freq_transform  = lambda x: np.argmin(np.abs(x - freqs))  # Index of closest sampled freq
         plot_freqs      = np.arange(n_freqs)
         freq_ticks      = np.arange(n_freqs)
-        freq_tick_labels= freqs
+        freq_tick_labels= bands
              
     # For wavelets, evaluate and plot frequency on log scale
     elif method == 'wavelet':
@@ -190,15 +192,21 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         fmax            = floor(freqs[-1]/10.0)*10.0                
         freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
         freq_tick_labels= freq_ticks        
+          
+    freqs_transformed   = np.asarray([freq_transform(f) for f in freqs])
             
     # For frequency test, find frequency with maximal power for each test
     if test in ['frequency','freq']:
         idxs = np.argmax(marginal_means,axis=0)
         peak_freqs = freqs[idxs] if not(do_burst or (method == 'bandfilter')) else idxs
         
-    # Find frequency in spectrogram closest to each simulated frequency
-    test_freq_idxs  = np.argmin(np.abs(freq_transform(freq) - np.asarray([freq_transform(f) for f in freqs])))
-    # Extract mean,SEM of power at each tested frequency
+        # Find frequency in spectrogram closest to each simulated frequency
+        test_freq_idxs  = np.asarray([np.argmin(np.abs(freq_transform(f) - freqs_transformed)) for f in test_values])
+    else:        
+        # Find frequency in spectrogram closest to simulated frequency
+        test_freq_idxs  = np.argmin(np.abs(freq_transform(freq) - freqs_transformed))
+                
+    # Extract mean,SEM of power at tested frequency(s)
     test_freq_means = marginal_means[test_freq_idxs,:]
     test_freq_errs  = marginal_sems[test_freq_idxs,:]
     
@@ -272,9 +280,7 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         plt.title("%s %s test" % (method,test))
         plt.show()
         if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-summary-%s-%s.png' % (method,test)))
-        
-        if plot_dir is not None: plt.close('all')   # If saving plots to file, close figs
-        
+                
     ## Determine if test actually produced the expected values
     # frequency test: check if frequency of peak power matches simulated target frequency
     if test in ['frequency','freq']:
@@ -334,3 +340,5 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
             test_power(method, test=test, **extra_args)
             print('PASSED (test ran in %.1f s)' % (time.time()-t1))
             
+            # If saving plots to file, let's not leave them all open
+            if 'plot_dir' in kwargs: plt.close('all')            
