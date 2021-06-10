@@ -41,10 +41,10 @@ def spike_field_pair(oscillation_pair):
 
     lfpdata (1000,40) ndarray of float. Simulated oscillatory LFP data 
             (eg simulating 1000 timepoints x 4 trials or channels)            
-    """
+    """    
     # todo code up something actually proper (rate-modulated Poisson process?)
     spkdata,lfpdata = oscillation_pair[:,:,0], oscillation_pair[:,:,1]
-    
+        
     # Convert continuous oscillation to probability (range 0-1)
     spkdata = (spkdata - spkdata.min()) / spkdata.ptp()
     spkdata = spkdata**2  # Sparsen high rates some
@@ -169,16 +169,16 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
                           ('coherence', 'multitaper',   (0.1218,0.1530)),
                           ('coherence', 'bandfilter',   (0.3721,0.2676)),
                           ('PLV',       'wavelet',      (0.1600,-0.2363,1994)),
-                          ('PLV',       'multitaper',   (0.0581,0.991,5260)),
+                          ('PLV',       'multitaper',   (0.0576,0.9140,6032)),
                           ('PLV',       'bandfilter',   (0.3041,-0.2260,1994)),
                           ('PPC',       'wavelet',      (0.0764,-0.2363,1994)),
-                          ('PPC',       'multitaper',   (0.0100,0.2228,1994)),
-                          ('PPC',       'bandfilter',   (0.0086,0.991,5260))])
+                          ('PPC',       'multitaper',   (0.0085,0.9140,6032)),
+                          ('PPC',       'bandfilter',   (0.1417,-0.2260,1994))])
 def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     """ Unit tests for spike_field_coupling() function """
     # Extract per-channel data and reshape -> (n_trials,n_timepts)
     spkdata, lfpdata = spike_field_pair[0].T, spike_field_pair[1].T
-    
+
     smp_rate = 1000
     method_to_n_freqs   = {'wavelet': 26, 'multitaper':129,  'bandfilter': 3}
     method_to_n_timepts = {'wavelet': 1000, 'multitaper':5,  'bandfilter': 1000} \
@@ -197,7 +197,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     # Test values averaged over all timepts, freqs for simplicity
     sync, freqs, timepts, n, phi = spike_field_coupling(spkdata, lfpdata, axis=0, time_axis=-1, method=method, 
                                                         spec_method=spec_method, smp_rate=smp_rate,
-                                                        return_phase=True, **extra_args)
+                                                        return_phase=True, **extra_args)    
     print(sync.shape, np.round(np.nanmean(sync),4), phi.shape, np.round(np.nanmean(phi),4), freqs.shape, timepts.shape)
     if method != 'coherence': print(n.shape, np.round(n.mean()))
     assert isinstance(freqs, np.ndarray)
@@ -255,9 +255,8 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         assert phi.shape == (n_freqs, n_timepts, 2)
         assert np.issubdtype(sync.dtype,np.float)
         assert np.issubdtype(phi.dtype,np.float)
-        # HACK Loosen tolerance bc this doesn't quite match up for bandfilter (TODO why???)
-        assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-3, atol=1e-3)
-        assert np.isclose(phi[:,:,0].mean(), result[1], rtol=1e-3, atol=1e-3)
+        assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-4, atol=1e-4)
+        assert np.isclose(phi[:,:,0].mean(), result[1], rtol=1e-4, atol=1e-4)
         if method != 'coherence': assert np.round(n.mean()) == result[2]
 
     # Test for consistent output with transposed data dimensionality -> (time,trials)
@@ -265,7 +264,8 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                         axis=-1, time_axis=0, method=method,
                                                         spec_method=spec_method, smp_rate=smp_rate,
                                                         return_phase=True, **extra_args)
-    print(sync.shape, np.round(np.nanmean(sync),4), phi.shape, np.round(np.nanmean(phi),4), freqs.shape, timepts.shape)    
+    print(sync.shape, np.round(np.nanmean(sync),4), phi.shape, np.round(np.nanmean(phi),4), freqs.shape, timepts.shape)
+    if method != 'coherence': print(n.shape, np.round(n.mean()))    
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
     assert sync.shape == (n_freqs, n_timepts)
@@ -273,7 +273,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert np.issubdtype(sync.dtype,np.float)
     assert np.issubdtype(phi.dtype,np.float)    
     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
-    # TEMP assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
+    assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
     if method != 'coherence': assert np.round(n.mean()) == result[2]
     
     # Test for consistent output with spectral data input
@@ -301,7 +301,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         timepts_raw = np.arange(0,lfpdata.shape[1])/smp_rate
         retained_times = (timepts_raw >= timepts[0]) & (timepts_raw <= timepts[-1])
         spkspec = index_axis(spkspec, time_axis, retained_times)
-        extra_args.update(timepts=extra_args['timepts'][retained_times])        
+        extra_args.update(timepts=extra_args['timepts'][retained_times], taper_axis=time_axis-1)        
     elif spec_method == 'multitaper':
         extra_args.update(timepts=timepts, taper_axis=time_axis-1, width=0.2)
                         
@@ -309,6 +309,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     sync, _, _, n, phi = spike_field_coupling(spkspec, lfpspec, axis=0, time_axis=time_axis,
                                               method=method, spec_method=spec_method, 
                                               return_phase=True, **extra_args)
+    print(sync.shape, np.round(np.nanmean(sync),4), phi.shape, np.round(np.nanmean(phi),4), freqs.shape, timepts.shape)    
     assert sync.shape == (n_freqs, n_timepts)
     assert phi.shape == (n_freqs, n_timepts)
     assert np.issubdtype(sync.dtype,np.float)
