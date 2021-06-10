@@ -25,7 +25,8 @@ from ..spectra import simulate_oscillation, power_spectrogram, burst_analysis
 
 # TODO  Run tests of burst_analysis
 
-def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=None, seed=1,
+def test_power(method, test='frequency', test_values=None, 
+               do_tests=True, do_plots=False, plot_dir=None, seed=1,
                amp=5.0, freq=32, phi=0, noise=0.5, n=1000, time_range=3.0, smp_rate=1000, 
                burst_rate=0, spikes=False, **kwargs):
     """
@@ -34,7 +35,8 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
     Generates synthetic LFP data using given network simulation,
     estimates spectrogram using given function, and compares estimated to expected.
     
-    means,sems = test_power(method,test='frequency',value=None,plot=False,plot_dir=None,seed=1,
+    means,sems = test_power(method,test='frequency',value=None,
+                            do_tests=True,do_plots=False,plot_dir=None,seed=1,
                             amp=5.0,freq=32,phi=0,noise=0.5,n=1000,time_range=3.0,smp_rate=1000,
                             burst_rate=0,**kwargs)
                               
@@ -58,7 +60,10 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
             'amplitude' List of oscillation amplitudes to test. Default: [1,2,5,10,20]
             'n'         Trial numbers. Default: [25,50,100,200,400,800]
 
-    plot    Bool. Set=True to plot test results. Default: False
+    do_tests Bool. Set=True to evaluate test results against expected values and
+            raise an error if they fail. Default: True
+            
+    do_plots Bool. Set=True to plot test results. Default: False
           
     plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
           
@@ -82,8 +87,8 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
     sems    (n_freqs,n_timepts,n_values) ndarray. SEM of mean spectrogram for each tested value.
     
     ACTION
-    Throws an error if any estimated power value is too far from expected value
-    If <plot> is True, also generates a plot summarizing expected vs estimated power
+    If do_tests is True, raisers an error if any estimated power value is too far from expected value
+    If do_plots is True, also generates a plot summarizing expected vs estimated power
     """
     method = method.lower()
     test = test.lower()
@@ -149,7 +154,9 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
             data = bernoulli.ppf(0.5, data).astype(bool)        
                         
         spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,**kwargs)
-        if freqs.ndim == 2: freqs = freqs.mean(axis=1)  # Compute center of freq bands
+        if freqs.ndim == 2:
+            bands = freqs            
+            freqs = freqs.mean(axis=1)  # Compute center of freq bands
         n_freqs,n_timepts,n_trials = spec.shape
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
@@ -171,7 +178,7 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         freq_transform  = lambda x: np.argmin(np.abs(x - freqs))  # Index of closest sampled freq
         plot_freqs      = np.arange(n_freqs)
         freq_ticks      = np.arange(n_freqs)
-        freq_tick_labels= freqs
+        freq_tick_labels= bands
              
     # For wavelets, evaluate and plot frequency on log scale
     elif method == 'wavelet':
@@ -190,20 +197,31 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         fmax            = floor(freqs[-1]/10.0)*10.0                
         freq_ticks      = np.arange(fmin,fmax+1,10).astype(int)
         freq_tick_labels= freq_ticks        
+          
+    freqs_transformed   = np.asarray([freq_transform(f) for f in freqs])
             
     # For frequency test, find frequency with maximal power for each test
     if test in ['frequency','freq']:
         idxs = np.argmax(marginal_means,axis=0)
         peak_freqs = freqs[idxs] if not(do_burst or (method == 'bandfilter')) else idxs
         
-    # Find frequency in spectrogram closest to each simulated frequency
-    test_freq_idxs  = np.argmin(np.abs(freq_transform(freq) - np.asarray([freq_transform(f) for f in freqs])))
-    # Extract mean,SEM of power at each tested frequency
-    test_freq_means = marginal_means[test_freq_idxs,:]
-    test_freq_errs  = marginal_sems[test_freq_idxs,:]
+        # Find frequency in spectrogram closest to each simulated frequency
+        test_freq_idxs  = np.asarray([np.argmin(np.abs(freq_transform(f) - freqs_transformed)) for f in test_values])
+        
+        # Extract mean,SEM of power at each tested frequency   
+        test_freq_means = marginal_means[test_freq_idxs,np.arange(n_values)]
+        test_freq_errs  = marginal_sems[test_freq_idxs,np.arange(n_values)]
+                
+    else:        
+        # Find frequency in spectrogram closest to simulated frequency
+        test_freq_idx   = np.argmin(np.abs(freq_transform(freq) - freqs_transformed))
+                
+        # Extract mean,SEM of power at tested frequency
+        test_freq_means = marginal_means[test_freq_idx,:]
+        test_freq_errs  = marginal_sems[test_freq_idx,:]
     
     # Plot summary of test results                
-    if plot:
+    if do_plots:
         dt      = np.diff(timepts).mean()
         tlim    = [timepts[0]-dt/2, timepts[-1]+dt/2]
         df      = np.diff(plot_freqs).mean()
@@ -272,40 +290,39 @@ def test_power(method, test='frequency', test_values=None, plot=False, plot_dir=
         plt.title("%s %s test" % (method,test))
         plt.show()
         if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-summary-%s-%s.png' % (method,test)))
-        
-        if plot_dir is not None: plt.close('all')   # If saving plots to file, close figs
-        
-    ## Determine if test actually produced the expected values
-    # frequency test: check if frequency of peak power matches simulated target frequency
-    if test in ['frequency','freq']:
-        assert (np.diff(peak_freqs) >= 0).all(), \
-            AssertionError("Estimated peak frequency does not increase monotonically with expected frequency")
-            
-    # 'amplitude' : Test if power increases monotonically with simulated amplitude            
-    elif test in ['amplitude','amp']:
-        assert (np.diff(test_freq_means) > 0).all(), \
-            AssertionError("Estimated power does not increase monotonically with simulated oscillation amplitude")
+                
+    # Determine if test actually produced the expected values
+    if do_tests:
+        # frequency test: check if frequency of peak power matches simulated target frequency
+        if test in ['frequency','freq']:
+            assert (np.diff(peak_freqs) >= 0).all(), \
+                AssertionError("Estimated peak frequency does not increase monotonically with expected frequency")
+                
+        # 'amplitude' : Test if power increases monotonically with simulated amplitude            
+        elif test in ['amplitude','amp']:
+            assert (np.diff(test_freq_means) > 0).all(), \
+                AssertionError("Estimated power does not increase monotonically with simulated oscillation amplitude")
 
-    # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
-    elif test in ['n','n_trials']:
-        assert test_freq_means.ptp() < test_freq_errs.max(), \
-            AssertionError("Estimated power has larger than expected range across n's (likely biased by n)")
-    
-    # 'burst_rate': Test if measured burst rate increases monotonically with simulated burst rate
-    elif test in ['burst_rate','burst']:
-        assert (np.diff(test_freq_means) > 0).all(), \
-            AssertionError("Estimated burst rate does not increase monotonically with simulated oscillation burst rate")
+        # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
+        elif test in ['n','n_trials']:
+            assert test_freq_means.ptp() < test_freq_errs.max(), \
+                AssertionError("Estimated power has larger than expected range across n's (likely biased by n)")
+        
+        # 'burst_rate': Test if measured burst rate increases monotonically with simulated burst rate
+        elif test in ['burst_rate','burst']:
+            assert (np.diff(test_freq_means) > 0).all(), \
+                AssertionError("Estimated burst rate does not increase monotonically with simulated oscillation burst rate")
 
     return means,sems
     
     
 def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
-                       tests=['frequency','amplitude','n','burst_rate'], **kwargs):
+                       tests=['frequency','amplitude','n','burst_rate'], do_tests=True, **kwargs):
     """ 
     Runs a battery of given tests on given oscillatory power computation methods
     
     power_test_battery(methods=['wavelet','multitaper','bandfilter'],
-                       tests=['frequency','amplitude','n','burst_rate'], **kwargs)
+                       tests=['frequency','amplitude','n','burst_rate'],do_tests=True,**kwargs)
     
     ARGS
     methods     Array-like. List of power computation methods to test.
@@ -314,7 +331,10 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
     tests       Array-like. List of tests to run.
                 Default: ['frequency','amplitude','n','burst_rate'] (all supported tests)
                 
-    kwargs      Any other kwargs passed directly to test_power()
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+                            
+    kwargs      Any other keyword args passed directly to test_power()
     
     ACTION
     Throws an error if any estimated power value for any (method,test) is too far from expected value    
@@ -331,6 +351,8 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
                 
             t1 = time.time()
             
-            test_power(method, test=test, **extra_args)
+            test_power(method, test=test, do_tests=do_tests, **extra_args)
             print('PASSED (test ran in %.1f s)' % (time.time()-t1))
             
+            # If saving plots to file, let's not leave them all open
+            if 'plot_dir' in kwargs: plt.close('all')            
