@@ -106,8 +106,10 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync, freqs, timepts, dphi = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
                                            axis=0, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=-1)
+    # HACK Bandfilter not time-reversal invariant due to initial conditions
     if spec_method != 'bandfilter':
         assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    # HACK Only synchrony magnitude -- not phase -- is time-reversal invariant for multitaper    
     if spec_method == 'wavelet':    
         assert np.isclose(dphi.mean(), -result[1], rtol=1e-4, atol=1e-4)
     
@@ -227,20 +229,25 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert np.isclose(np.nanmean(sync2), result[0], rtol=1e-4, atol=1e-4)
     if method != 'coherence': assert np.round(n.mean()) == result[2]
 
-    # DELETE -- Doesn't work for windowed output here -- not time-reversal invariant
-    # # Test for consistent output with reversed time axis (phi should change sign, otherwise same)
-    # # Skip test for multitaper/bandfilter phase, bandfilter sync -- not time-reversal invariant    
-    # sync, freqs, timepts, n, phi = spike_field_coupling(np.flip(spkdata,axis=-1),
-    #                                                     np.flip(lfpdata,axis=-1),
-    #                                                     axis=0, time_axis=-1, method=method,
-    #                                                     spec_method=spec_method, smp_rate=smp_rate,
-    #                                                     return_phase=True, **extra_args)
-    # print(np.round(np.nanmean(sync),4),  np.round(np.nanmean(phi),4))
-    # if spec_method != 'bandfilter':
-    #     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
-    # if spec_method == 'wavelet':    
-    #     assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
-    # if method != 'coherence': assert np.round(n.mean()) == result[2]
+    # Test for consistent output with reversed time axis (phi should change sign, otherwise same)
+    # Note: Due to windowing, results not time-reveral invariant for PLV/PPC, so skip those
+    # Skip test for multitaper/bandfilter phase, bandfilter sync -- not time-reversal invariant    
+    sync, freqs, timepts, n, phi = spike_field_coupling(np.flip(spkdata,axis=-1),
+                                                        np.flip(lfpdata,axis=-1),
+                                                        axis=0, time_axis=-1, method=method,
+                                                        spec_method=spec_method, smp_rate=smp_rate,
+                                                        return_phase=True, **extra_args)
+    print(sync.shape, np.round(np.nanmean(sync),4), phi.shape, np.round(np.nanmean(phi),4), freqs.shape, timepts.shape)
+    assert sync.shape == (n_freqs, n_timepts)    
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert phi.shape == (n_freqs, n_timepts)
+    # HACK Bandfilter not time-reversal invariant due to initial conditions
+    if (spec_method != 'bandfilter') and (method not in ['PLV','PPC']):
+        assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
+    # HACK Only synchrony magnitude -- not phase -- is time-reversal invariant for multitaper    
+    if (spec_method == 'wavelet') and (method not in ['PLV','PPC']):
+        assert np.isclose(np.nanmean(phi), -result[1], rtol=1e-4, atol=1e-4)
             
     # Test for consistent output with different data array shape (3rd axis)
     if method == 'coherence':

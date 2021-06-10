@@ -5,12 +5,10 @@ sync    A module for analysis of neural synchrony
 FUNCTIONS
 ### Field-field synchrony ###
 synchrony           Synchrony between pair of channels using given method
-
 coherence           Time-frequency coherence between pair of channels
 ztransform_coherence Z-transform coherence so ~ normally distributed
-
-phase_locking_value Phase locking value (PLV) between pair of channels
-pairwise_phase_consistency Pairwise phase consistency (PPC) btwn pair of channels
+plv                 Phase locking value (PLV) between pair of channels
+ppc                 Pairwise phase consistency (PPC) btwn pair of channels
 
 ### Spike-field synchrony ###
 spike_field_coupling    General spike-field coupling/synchrony btwn spike/LFP pair
@@ -69,7 +67,7 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
                                           return_phase=False,**kwargs)
                                   
     Convenience wrapper function around specific synchrony estimation functions
-    coherence, phase_locking_value, pairwise_phase_consistency
+    coherence, plv, ppc
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel continuous (eg LFP) data for 2 distinct channels.
@@ -111,8 +109,8 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
            Optional: Only returned if return_phase is True.            
     """
     method = method.lower()
-    if method in ['ppc','pairwise_phase_consistency']:  sync_func = pairwise_phase_consistency
-    elif method in ['plv','phase_locking_value']:       sync_func = phase_locking_value
+    if method in ['ppc','pairwise_phase_consistency']:  sync_func = ppc
+    elif method in ['plv','phase_locking_value']:       sync_func = plv
     elif method in ['coh','coherence']:                 sync_func = coherence
     else:
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
@@ -350,22 +348,20 @@ def ztransform_coherence(coh, df, beta=23/20):
     return beta*(np.sqrt(-(df-2)*np.log(1-coh**2)) - beta)
 
 
-def phase_locking_value(data1, data2, axis=0, return_phase=False,
-                        single_trial=None, spec_method='wavelet', data_type=None,
-                        smp_rate=None, time_axis=None, taper_axis=None, **kwargs):
+def plv(data1, data2, axis=0, return_phase=False, single_trial=None,
+        spec_method='wavelet', data_type=None, smp_rate=None, 
+        time_axis=None, taper_axis=None, **kwargs):
     """
     Computes phase locking value (PLV) between raw or spectral (time-frequency) LFP data
 
     PLV is the mean resultant length (magnitude of the vector mean) of phase
     differences dphi btwn phases of data1 and data2:
         dphi = phase(data1) - phase(data2)
-        plv  = abs( trial_mean(exp(i*dphi)) )
+        PLV  = abs( trial_mean(exp(i*dphi)) )
 
-    plv,freqs,timepts[,dphi] = phase_locking_value(data1,data2,axis=0,return_phase=False,
-                                                 single_trial=None,
-                                                 spec_method='wavelet',data_type=None,
-                                                 smp_rate=None,time_axis=None,
-                                                 taper_axis=None,**kwargs)
+    PLV,freqs,timepts[,dphi] = plv(data1,data2,axis=0,return_phase=False,single_trial=None,
+                                   spec_method='wavelet',data_type=None,smp_rate=None,
+                                   time_axis=None,taper_axis=None,**kwargs)
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -407,15 +403,15 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    plv     ndarray. Phase locking value between data1 and data2.
+    PLV     ndarray. Phase locking value between data1 and data2.
             If data is spectral, this has shape as data, but with <axis> removed.
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in <plv>.  
+    freqs   (n_freqs,). List of frequencies in <PLV>.  
             Only returned for raw data, [] otherwise.
             
-    timepts (n_timepts,). List of timepoints in <plv> (in s, referenced to start of
+    timepts (n_timepts,). List of timepoints in <PLV> (in s, referenced to start of
             data). Only returned for raw data, [] otherwise.
 
     dphi   ndarray. Mean phase difference between data1 and data2 in radians.
@@ -488,31 +484,33 @@ def phase_locking_value(data1, data2, axis=0, return_phase=False,
     # Standard across-trial PLV estimator
     if single_trial is None:
         if return_phase:
-            plv,dphi = _spec_to_plv(data1,data2,reduce_axes,return_phase,False)
-            return  plv, freqs, timepts, dphi
+            PLV,dphi = _spec_to_plv(data1,data2,reduce_axes,return_phase,False)
+            return  PLV, freqs, timepts, dphi
 
         else:
-            plv = _spec_to_plv(data1,data2,reduce_axes,return_phase,False)
-            return  plv, freqs, timepts
+            PLV = _spec_to_plv(data1,data2,reduce_axes,return_phase,False)
+            return  PLV, freqs, timepts
 
     # Single-trial PLV estimator using jackknife resampling method
     else:
         # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
         jackfunc = lambda data1,data2: _spec_to_plv(data1,data2,0,False,False)
         # Jackknife resampling of PLV statistic (this is the 'richter' estimator)
-        plv = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
+        PLV = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
         # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
         if single_trial == 'pseudo':
             plv_full = _spec_to_plv(data1,data2,reduce_axes,False,True)
-            plv = jackknife_to_pseudoval(plv_full,plv,n_obs)
+            PLV = jackknife_to_pseudoval(plv_full,PLV,n_obs)
 
-        return  plv, freqs, timepts
+        return  PLV, freqs, timepts
+
+# Alias funcion plv as phase_locking_value
+phase_locking_value = plv
 
 
-def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
-                               single_trial=None, spec_method='wavelet',
-                               data_type=None, smp_rate=None, time_axis=None,
-                               taper_axis=None, **kwargs):
+def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
+        spec_method='wavelet', data_type=None, smp_rate=None,
+        time_axis=None, taper_axis=None, **kwargs):
     """
     Computes pairwise phase consistency (PPC) between raw or spectral
     (time-frequency) LFP data, which is bias-corrected (unlike PLV and coherence,
@@ -522,11 +520,9 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     efficiently) in terms of PLV and n:
         PPC = (n*PLV^2 - 1) / (n-1)
 
-    ppc,freqs,timepts[,dphi] = pairwise_phase_consistency(data1,data2,axis=0,
-                                                          return_phase=False,single_trial=None,
-                                                          spec_method='wavelet',data_type=None,
-                                                          smp_rate=None,time_axis=None,
-                                                          taper_axis=None,**kwargs)
+    PPC,freqs,timepts[,dphi] = ppc(data1,data2,axis=0,return_phase=False,single_trial=None,
+                                   spec_method='wavelet',data_type=None,smp_rate=None,
+                                   time_axis=None,taper_axis=None,**kwargs)
 
     ARGS
     data1,data2   (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -568,7 +564,7 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
     **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    ppc     Pairwise phase consistency between data1 and data2.
+    PPC     Pairwise phase consistency between data1 and data2.
             If data is spectral, this has shape as data, but with <axis> removed.
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
@@ -646,41 +642,44 @@ def pairwise_phase_consistency(data1, data2, axis=0, return_phase=False,
             # Compute vector mean across trial/observations
             vector_mean = np.mean(csd,axis=axis,keepdims=keepdims)
             # Compute PLV, phase difference as absolute value, angle of vector mean
-            plv, dphi = np.abs(vector_mean), np.angle(vector_mean)
-            return plv_to_ppc(plv, n), dphi
+            PLV, dphi = np.abs(vector_mean), np.angle(vector_mean)
+            return plv_to_ppc(PLV, n), dphi
         else:
             # Compute vector mean across trial/observations -> absolute value
-            plv = np.abs(np.mean(csd,axis=axis,keepdims=keepdims))
-            return plv_to_ppc(plv, n)
+            PLV = np.abs(np.mean(csd,axis=axis,keepdims=keepdims))
+            return plv_to_ppc(PLV, n)
         
         
     # Standard across-trial PPC estimator
     if single_trial is None:
         if return_phase:
-            ppc,dphi = _spec_to_ppc(data1,data2,reduce_axes,return_phase,False)
-            return ppc, freqs, timepts, dphi
+            PPC,dphi = _spec_to_ppc(data1,data2,reduce_axes,return_phase,False)
+            return PPC, freqs, timepts, dphi
 
         else:
-            ppc = _spec_to_ppc(data1,data2,reduce_axes,return_phase,False)
-            return ppc, freqs, timepts
+            PPC = _spec_to_ppc(data1,data2,reduce_axes,return_phase,False)
+            return PPC, freqs, timepts
 
     # Single-trial PPC estimator using jackknife resampling method
     else:
         # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
         jackfunc = lambda data1,data2: _spec_to_ppc(data1,data2,0,False,False)
         # Jackknife resampling of PPC statistic (this is the 'richter' estimator)
-        ppc = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
+        PPC = two_sample_jackknife(jackfunc,data1,data2,axis=reduce_axes)
         # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
         if single_trial == 'pseudo':
             ppc_full = _spec_to_ppc(data1,data2,reduce_axes,False,True)
-            ppc = jackknife_to_pseudoval(ppc_full,ppc,n_obs)
+            PPC = jackknife_to_pseudoval(ppc_full,PPC,n_obs)
 
-        return ppc, freqs, timepts
+        return PPC, freqs, timepts
+
+# Alias funcion ppc as pairwise_phase_consistency
+pairwise_phase_consistency = ppc
 
 
-def plv_to_ppc(plv, n):
+def plv_to_ppc(PLV, n):
     """ Converts PLV to PPC as PPC = (n*PLV^2 - 1)/(n-1) """
-    return (n*plv**2 - 1) / (n - 1)
+    return (n*PLV**2 - 1) / (n - 1)
 
 
 # =============================================================================
@@ -900,13 +899,13 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None, t
 
     PLV is the mean resultant length (magnitude of the vector mean) of the
     spike-triggered LFP phase 'phi':
-        plv  = abs( trial_mean(exp(i*phi)) )
+        PLV  = abs( trial_mean(exp(i*phi)) )
         
     Because spiking response are sparse, spike-LFP PLV is typically computed within sliding
     time windows (ie summation across trials AND across within-window timepoints). These can
     be specified either explicitly using 'timewins' or implicitly using width/spacing/lims.        
 
-    plv,freqs,timepts = spike_field_plv(spkdata,lfpdata,axis=0,time_axis=None,taper_axis=None,timepts=None,
+    PLV,freqs,timepts = spike_field_plv(spkdata,lfpdata,axis=0,time_axis=None,taper_axis=None,timepts=None,
                                         width=0.5,spacing=width,lims=(timepts[0],timepts[-1]),
                                         timewins=from width/spacing/lims,return_phase=False,
                                         data_type=None,spec_method='wavelet',smp_rate=None,**kwargs)
@@ -972,7 +971,7 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None, t
     **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    plv     ndarray. Phase locking value between spike and LFP data. Windows without
+    PLV     ndarray. Phase locking value between spike and LFP data. Windows without
             any spikes are set = np.nan.
             If lfpdata is spectral, this has same shape, but with <axis> removed
             (and taper_axis as well for multitaper), and time axis reduced to n_timewins.
@@ -980,14 +979,14 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None, t
             reduced to n_timewins, and a new frequency axis inserted immediately 
             before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in plv (only for raw data)
-    timepts (n_timepts,). List of timepoints in plv (only for raw data)
+    freqs   (n_freqs,). List of frequencies in PLV (only for raw data)
+    timepts (n_timepts,). List of timepoints in PLV (only for raw data)
 
     n       (n_timewins,) ndarray. Number of spikes contributing to PLV computation
             within each sliding time window.
             
     phi     ndarray. If return_phase is True, mean spike-triggered LFP phase
-            (in radians) is also returned here, with same shape as plv.
+            (in radians) is also returned here, with same shape as PLV.
 
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
@@ -1112,7 +1111,6 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None, t
     n_data_series = lfpdata.shape[0]
     n_timepts_out = timewins.shape[0]
 
-    # TODO Prolly want to init this to same C/F order as data, right?
     vector_mean = np.full((n_data_series,n_timepts_out,1),np.nan,dtype=complex)
     
     n = np.zeros((n_timepts_out,),dtype=int)
@@ -1253,7 +1251,7 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, return_phase=False, **kwargs):
     **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    ppc     ndarray. Phase locking value between spike and LFP data. Windows without
+    PPC     ndarray. Phase locking value between spike and LFP data. Windows without
             any spikes are set = np.nan.
             If lfpdata is spectral, this has same shape, but with <axis> removed
             (and taper_axis as well for multitaper), and time axis reduced to n_timewins.
@@ -1261,24 +1259,24 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, return_phase=False, **kwargs):
             reduced to n_timewins, and a new frequency axis inserted immediately 
             before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in ppc (only for raw data)
-    timepts (n_timepts,). List of timepoints in ppc (only for raw data)
+    freqs   (n_freqs,). List of frequencies in PPC (only for raw data)
+    timepts (n_timepts,). List of timepoints in PPC (only for raw data)
 
     n       (n_timewins,) ndarray. Number of spikes contributing to PPC computation
             within each sliding time window.
             
     phi     ndarray. If return_phase is True, mean spike-triggered LFP phase
-            (in radians) is also returned here, with same shape as ppc.
+            (in radians) is also returned here, with same shape as PPC.
     """
     if return_phase:
-        plv,freqs,timepts,n,phi = \
+        PLV,freqs,timepts,n,phi = \
         spike_field_plv(spkdata,lfpdata,axis=axis, return_phase=True, **kwargs)
-        return plv_to_ppc(plv,n), freqs, timepts, n, phi
+        return plv_to_ppc(PLV,n), freqs, timepts, n, phi
 
     else:
-        plv,freqs,timepts,n = \
+        PLV,freqs,timepts,n = \
         spike_field_plv(spkdata,lfpdata,axis=axis, return_phase=False, **kwargs)
-        return plv_to_ppc(plv,n), freqs, timepts, n
+        return plv_to_ppc(PLV,n), freqs, timepts, n
 
 # Alias function with full name
 spike_field_pairwise_phase_consistency = spike_field_ppc
