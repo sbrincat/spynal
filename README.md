@@ -11,7 +11,7 @@ Vectorized mass-univariate analysis: analysis runs in parallel across all channe
 matIO -- Simple, painless loading of MATLAB .mat data files into Python  
 spikes -- Basic preprocessing and analyses of neural spiking activity  
 spectra -- Spectral analysis and LFP/continuous data preprocessing  
-sync -- Analysis of oscillatory neural synchrony  
+sync -- Analysis of oscillatory neural synchrony (field-field and spike-field)  
 info -- Measures of neural information about task/behavior variables  
 randstats -- Nonparametric randomization, permutation, and bootstrap stats  
 
