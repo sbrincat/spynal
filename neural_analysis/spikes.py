@@ -3,10 +3,13 @@
 spikes  A module for basic analyses of neural spiking activity
 
 FUNCTIONS
-### Rate analysis ###
+### Rate analysis and stats ###
 rate                Wrapper around all rate estimation functions
 bin_rate            Computes spike counts/rates in series of time bins (regular or not)
 density             Computes spike density (smoothed rate) with given kernel
+
+fano                Computes Fano factor (var/mean) of spike rate data
+CV                  Computes Coefficient of Variantion (SD/mean) of spike rate data
 
 ### Preprocessing ###
 times_to_bool       Converts spike timestamps to binary spike trains
@@ -415,6 +418,9 @@ def fano(data, axis=None, ddof=0):
                 Otherwise, it's an array w/ same shape as data, but with <axis>
                 reduced to length 1.   
     """
+    data_type = _spike_data_type(data)
+    assert data_type not in ['timestamp','bool'], "Must input spike *rate* data for this function"
+    
     mean    = data.mean(axis=axis,keepdims=True)
     var     = data.var(axis=axis,keepdims=True,ddof=ddof)
     fano_   = var/mean
@@ -426,7 +432,7 @@ def fano(data, axis=None, ddof=0):
     return fano_
 
 
-def cv(data, axis=None, ddof=0):
+def CV(data, axis=None, ddof=0):
     """
     Computes Coefficient of Variation (std dev/mean) of spike rate data 
     
@@ -434,7 +440,7 @@ def cv(data, axis=None, ddof=0):
     
     np.nan is returned for cases where the mean ~ 0
     
-    cv = cv(data, axis=None, ddof=0)
+    cv = CV(data, axis=None, ddof=0)
     
     ARGS
     rates       (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
@@ -453,15 +459,18 @@ def cv(data, axis=None, ddof=0):
                 Otherwise, it's an array w/ same shape as data, but with <axis>
                 reduced to length 1.   
     """
+    data_type = _spike_data_type(data)
+    assert data_type not in ['timestamp','bool'], "Must input spike *rate* data for this function"
+    
     mean    = data.mean(axis=axis,keepdims=True)
     sd      = data.std(axis=axis,keepdims=True,ddof=ddof)
-    cv_     = sd/mean
+    cv      = sd/mean
     # Find any data values w/ mean ~ 0 and set output = NaN for those points    
-    cv_[np.isclose(mean,0)] = np.nan
+    cv[np.isclose(mean,0)] = np.nan
 
-    if cv_.size == 1: cv_ = cv_.item()
+    if cv.size == 1: cv = cv.item()
     
-    return cv_
+    return cv
 
     
 #==============================================================================

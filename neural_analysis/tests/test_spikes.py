@@ -5,7 +5,7 @@ import numpy as np
 from ..utils import setup_sliding_windows, unsorted_unique
 from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
                      cut_trials, realign_data, pool_electrode_units,\
-                     bin_rate, density, fano, cv
+                     bin_rate, density, fano, CV
 
 
 # =============================================================================
@@ -230,14 +230,14 @@ def test_rate_stats(spike_data, data_type, stat, result):
     # Extract given data type from data dict
     data, timepts = spike_data[data_type]
     
-    stat_func = fano if stat == 'fano' else cv
+    stat_func = fano if stat == 'fano' else CV
     
     # Compute spike rates from timestamp/binary spike data -> (n_trials,n_unit,n_timepts)
     rates, _ = bin_rate(data, lims=[0,1], count=False, axis=-1, timepts=timepts)
     n_trials,n_chnls,n_timepts = rates.shape
     
     # Basic test of shape, value of output
-    # Test values averaged over entire array -> scalar
+    # Test value of 1st trial/channel as exemplar
     stats = stat_func(rates, axis=0)
     print(stats[0,0,0])
     assert stats.shape == (1, n_chnls, n_timepts)
