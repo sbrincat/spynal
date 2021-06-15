@@ -55,7 +55,7 @@ except ImportError:
     
 
 # =============================================================================
-# Spike count/rate computation functions
+# Spike count/rate computation and statistics functions
 # =============================================================================
 def rate(data, method='bin', **kwargs):
     """
@@ -471,6 +471,78 @@ def CV(data, axis=None, ddof=0):
     if cv.size == 1: cv = cv.item()
     
     return cv
+
+
+def ISI(data, axis=-1, timepts=None):
+    """
+    Computes inter-spike intervals of one or more spike trains
+    
+    Spiking data can be timestamps or binary (0/1) spike trains
+    
+    ISIs = ISI(data,axis=-1,timepts=None)
+
+    ARGS
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
+                -or-
+                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                spike times, for either a single or multiple spike trains.
+
+    axis        Int. Axis of binary data corresponding to time dimension.
+                Not used for spike timestamp data. Default: -1 (last axis of array)           
+
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
+                Not used for spike timestamp data, but MUST be input for binary data.
+                                
+    RETURNS
+    ISIs        (n_spikes-1,) array | object array of (n_spikes-1,) arrays. Time intervals
+                 between each successive pair of spikes in data (in same time units as data).    
+                For timestamp inputs, same shape as <data>.
+                If only a single spike train is input, output is (n_spikes-1,) vector.
+                For boolean inputs, output is converted to timestamp-like configuration.   
+    """
+    # Convert boolean spike train data to timestamps for easier computation    
+    data_type = _spike_data_type(data)
+    if data_type == 'bool':
+        assert timepts is not None, \
+            "For binary spike train data, a time sampling vector <timepts> MUST be given"
+        if axis < 0: axis = data.ndim + axis
+        data = bool_to_times(data,timepts,axis=axis)
+        
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(data,list) or (data.dtype != object)
+        
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: data = _enclose_in_object_array(np.asarray(data))  
+            
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    data_flat = data.flat
+    
+    ISIs = np.empty_like(data,dtype=object)
+    
+    for _ in range(data.size):
+        # Multidim coordinates into data array
+        coords = data_flat.coords
+        
+        # Compute ISIs for given data cell (unit/trial/etc.)
+        ISIs[coords] = np.diff(data[coords])
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        next(data_flat)
+        
+    # If only a single spike train was input, squeeze out singleton axis 0
+    if single_train: rates = rates.squeeze(axis=0)        
+
+    return ISIs
+
+
+                
+#==============================================================================
+# Interspike interval computation and statistics functions
+#==============================================================================
 
     
 #==============================================================================
