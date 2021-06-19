@@ -27,6 +27,8 @@ bandfilter_spectrum Band-filtered frequency spectrum
 bandfilter_spectrogram Band-filtered, Hilbert-transformed time-frequency of data
 set_filter_params   Sets filter coefficients for use in band-filtered analysis
 
+### Other spectral analyses ###
+itpc                Intertrial phase clustering (analysis of phase locking to trial events)
 burst_analysis      Computes oscillatory burst analysis of Lundqvist et al 2016
 
 ### Preprocessing ###
@@ -359,7 +361,7 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', **kwargs)
 
-
+ 
 # =============================================================================
 # Multitaper spectral analysis functions
 # =============================================================================
@@ -1011,7 +1013,7 @@ def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
 
 
 # =============================================================================
-# Band-pass filtering and oscillatory burst analysis functions
+# Band-pass filtering functions
 # =============================================================================
 def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freqs=((2,8),(10,32),(40,100)), removeDC=True,
@@ -1343,6 +1345,109 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
 
     if return_dict: return params
     else:           return params.values()
+
+
+# =============================================================================
+# Other spectral analysis functions
+# =============================================================================
+def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis=None, **kwargs):
+    """
+    Intertrial phase clustering (ITPC) measures frequency-specific phase locking of continuous
+    neural activity (eg LFPs) to trial events. A spectral analog (roughly) of evoked potentials.
+    
+    aka "intertrial coherence", "intertrial phase-locking value/factor"
+    
+    ARGS
+    data        (...,n_timepts,...,n_trials,...) ndarray. Data to compute ITPC of, 
+                aligned to some within-trial event.
+                Arbitrary shape; spectral analysis is computed along <axis>,
+                and ITPC is computed along <trial_axis>.
+
+    smp_rate    Scalar. Data sampling rate (Hz)
+
+    axis        Int. Axis of <data> to do spectral analysis on
+                (usually time dimension). Default: 0
+
+    method      String. Specific spectral analysis method to use:
+                'wavelet' :     Continuous Morlet wavelet analysis [default]
+                'multitaper' :  Multitaper spectral analysis
+                'bandfilter' :  Band-pass filtering and Hilbert transform
+                'burst' :       Oscillatory burst analysis
+    
+    itpc_method String. Method to use for computing intertrial phase clustering:
+                'PLV' : Phase locking value (length of cross-trial complex vector mean)
+                        Standard/traditional measure of ITPC, but is positively biased
+                        for small n, and is biased > 0 even for no phase clustering.
+                'Z' :   Rayleigh's Z normalization of PLV (Z = n*PLV**2). Reduces small-n bias. 
+                'PPC' : Pairwise Phase Consistency normalization (PPC = (n*PLV**2 - 1)/(n - 1))
+                        of PLV. Debiased and has expected value 0 for no clustering.
+                Default: 'PLV'        
+                
+    **kwargs    All other kwargs passed directly to method-specific
+                spectrogram function. See there for details.
+
+    RETURNS
+    ITPC        (...,n_freqs,n_timepts,...) ndarray.
+                Time-frequency spectrogram representation of intertrial phase clustering.
+                Frequency axis is always inserted just before time axis, and trial axis is 
+                removed, but otherwise shape is same as input data             
+
+    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
+                frequencies (Hz) used to generate <ITPC>.
+                For other methods: (n_freqs,) ndarray. List of frequencies in <ITPC> (Hz).                
+
+    timepts     (n_timepts,) ndarray. List of time points / time window centers in <ITPC> 
+                (in s, referenced to start of data).
+                    
+    REFERENCE
+    Cohen _Analyzing Neural Time Series Data_ Ch. 19
+    """
+    method = method.lower()    
+    itpc_method = itpc_method.lower()
+    if axis < 0:        axis = data.ndim + axis
+    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
+        
+    n = data.shape[trial_axis]
+    
+    if method == 'wavelet':         spec_fun = wavelet_spectrogram
+    elif method == 'multitaper':    spec_fun = multitaper_spectrogram
+    elif method == 'bandfilter':    spec_fun = bandfilter_spectrogram
+    else:
+        raise ValueError("Unsupported value set for <method>: '%s'" % method)
+
+    if method == 'multitaper': kwargs.update(keep_tapers=True)
+
+    # Compute spectrogram using given method    
+    spec,freqs,timepts = spec_fun(data, smp_rate, axis=axis, spec_type='complex', **kwargs)
+    # Account for new frequency (and/or taper) axis prepended before time axis
+    n_new_axes = 2 if method == 'multitaper' else 1
+    if trial_axis >= axis: trial_axis += n_new_axes
+    axis += n_new_axes
+    if method == 'multitaper': taper_axis = axis - 1
+                
+    spec = spec / np.abs(spec)     # Normalize spectrum to unit length
+    
+    # Compute mean resultant length (aka PLV) = length of complex vector mean across trials
+    # For multitaper spectral analysis, take mean across both trials and tapers
+    reduce_axes = (trial_axis,taper_axis) if method == 'multitaper' else trial_axis
+    ITPC = np.abs(spec.mean(axis=reduce_axes))
+    
+    # PLV -- we are done, return ITPC as-is
+    if itpc_method in ['plv','plf']:         pass
+    
+    # PPC -- debiasing normalization
+    elif itpc_method in ['ppc']:             ITPC = (n*ITPC**2 - 1) / (n - 1)
+    
+    # Rayleigh's Z -- debiasing normalization
+    elif itpc_method in ['z','rayleighz']:   ITPC = n*ITPC**2
+    
+    else:
+        raise ValueError("%s in an unsupported ITPC method" % itpc_method)
+        
+    return ITPC, freqs, timepts        
+    
+# Also alias itpc as intertrial_phase_clustering
+intertrial_phase_clustering = itpc
 
 
 def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet', 

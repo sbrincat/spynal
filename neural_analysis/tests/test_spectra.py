@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import bernoulli
 
 from ..spectra import simulate_oscillation, spectrum, power_spectrum, \
-                      spectrogram, power_spectrogram, phase_spectrogram, \
+                      spectrogram, power_spectrogram, phase_spectrogram, itpc, \
                       cut_trials, realign_data
 
 # =============================================================================
@@ -235,7 +235,66 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
         assert spec.shape == (n_freqs, n_timepts, n_trials)
         assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
         
-  
+
+@pytest.mark.parametrize('itpc_method, method, result',
+                         [('plv',   'wavelet',     0.5494),
+                          ('plv',   'multitaper',  0.2705),
+                          ('plv',   'bandfilter',  0.6556),
+                          ('z',     'wavelet',     1.5316),
+                          ('z',     'multitaper',  0.3762),
+                          ('z',     'bandfilter',  2.0734),
+                          ('ppc',   'wavelet',     0.1772),
+                          ('ppc',   'multitaper',  -0.2079),
+                          ('ppc',   'bandfilter',  0.3578)])  
+def test_itpc(oscillation, itpc_method, method, result):
+    """ Unit tests for spectrogram() function """
+    # Extract given data type from data dict
+    data = oscillation
+    smp_rate = 1000
+    n_trials = 4
+    
+    method_to_n_freqs   = {'wavelet': 26, 'multitaper':257, 'bandfilter': 3, 'burst':4}
+    method_to_n_timepts = {'wavelet': 1000, 'multitaper':2, 'bandfilter': 1000}
+    n_freqs = method_to_n_freqs[method]
+    freqs_shape = (n_freqs,2) if method == 'bandfilter' else (n_freqs,)
+    n_timepts = method_to_n_timepts[method]
+        
+    # Basic test of shape, dtype, value of output. 
+    # Test values averaged over all timepts, freqs for 1st trial for simplicity
+    spec, freqs, timepts = itpc(data, smp_rate, axis=0, method=method, itpc_method=itpc_method,
+                                trial_axis=-1)
+    print(spec.shape, np.round(spec[:,:].mean(),4))
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_freqs, n_timepts)
+    assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
+    
+    # Test for consistent output with different data array shape (3rd axis)
+    spec, freqs, timepts = itpc(np.tile(data[:,:,np.newaxis],(1,1,2)), smp_rate, axis=0,
+                                method=method, itpc_method=itpc_method, trial_axis=1)
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_freqs, n_timepts, 2)
+    assert np.isclose(spec[:,:,0].mean(), result, rtol=1e-4, atol=1e-4)
+ 
+    # Test for consistent output with transposed data dimensionality
+    spec, freqs, timepts = itpc(data.T, smp_rate, axis=-1, method=method, itpc_method=itpc_method,
+                                trial_axis=0)
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_freqs, n_timepts)
+    assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
+           
+    # Test for expected output with time-reversed data
+    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for multitaper method -- not time-reversal invariant due to windowing
+    if method not in ['bandfilter','multitaper']:
+        spec, freqs, timepts = itpc(np.flip(data,axis=0), smp_rate, axis=0, method=method,
+                                    itpc_method=itpc_method, trial_axis=-1)
+        assert spec.shape == (n_freqs, n_timepts)
+        assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
+       
+           
 # =============================================================================
 # Unit tests for preprocessing/utility functions
 # =============================================================================        
