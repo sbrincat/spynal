@@ -22,14 +22,13 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from ..spectra import simulate_oscillation, power_spectrogram, burst_analysis
+from ..spectra import simulate_oscillation, power_spectrogram, burst_analysis, itpc
 
-# TODO  Run tests of burst_analysis
 
-def test_power(method, test='frequency', test_values=None, 
+def test_power(method, test='frequency', test_values=None, spec_type='power',
                do_tests=True, do_plots=False, plot_dir=None, seed=1,
-               amp=5.0, freq=32, phi=0, noise=0.5, n=1000, time_range=3.0, smp_rate=1000, 
-               burst_rate=0, spikes=False, **kwargs):
+               amp=5.0, freq=32, phi=0, phi_sd=0, noise=0.5, n=1000, burst_rate=0,
+               time_range=3.0, smp_rate=1000, spikes=False, **kwargs):
     """
     Basic testing for functions estimating time-frequency spectral power 
     
@@ -38,8 +37,8 @@ def test_power(method, test='frequency', test_values=None,
     
     means,sems,passed = test_power(method,test='frequency',value=None,
                                    do_tests=True,do_plots=False,plot_dir=None,seed=1,
-                                   amp=5.0,freq=32,phi=0,noise=0.5,n=1000,time_range=3.0,
-                                   smp_rate=1000,burst_rate=0,**kwargs)
+                                   amp=5.0,freq=32,phi=0,phi_sd=0noise=0.5,n=1000,burst_rate=0,
+                                   time_range=3.0,smp_rate=1000,spikes=False,**kwargs)
                               
     ARGS
     method  String. Name of time-frequency spectral estimation function to test:
@@ -47,9 +46,12 @@ def test_power(method, test='frequency', test_values=None,
             
     test    String. Type of test to run. Default: 'frequency'. Options:
             'frequency' Tests multiple simulated oscillatory frequencies
-                        Checks for monotonic increase of peak freq
+                        Checks power for monotonic increase of peak freq
             'amplitude' Tests multiple simulated amplitudes at same freq
-                        Checks for monotonic increase of amplitude
+                        Checks power for monotonic increase of amplitude
+            'phase_sd'  Tests multiple simulated phase std dev's (ie evoked vs induced)
+                        Checks that power doesn't greatly vary with phase SD.
+                        Checks that ITPC decreases monotonically with phase SD
             'n'         Tests multiple values of number of trials (n)
                         Checks that power doesn't greatly vary with n.
             'burst_rate' Checks that oscillatory burst rate increases
@@ -61,6 +63,9 @@ def test_power(method, test='frequency', test_values=None,
             'amplitude' List of oscillation amplitudes to test. Default: [1,2,5,10,20]
             'n'         Trial numbers. Default: [25,50,100,200,400,800]
 
+    spec_type String. Type of spectral signal to return: 'power' [default] | 
+            'itpc' (intertrial phase clustering)
+                
     do_tests Bool. Set=True to evaluate test results against expected values and
             raise an error if they fail. Default: True
             
@@ -74,12 +79,13 @@ def test_power(method, test='frequency', test_values=None,
     - Following args set param's for simulation, may be overridden by <test_values> depending on test -
     amp     Scalar. Simulated oscillation amplitude (a.u.) if test != 'amplitude'. Default: 5.0
     freq    Scalar. Simulated oscillation frequency (Hz) if test != 'frequency'. Default: 32
-    phi     Scalar. Simulated oscillation phase (rad). Default: 0
+    phi     Scalar. Simulated oscillation (mean) phase (rad). Default: 0
+    phi_sd  Scalar. Simulated oscillation phase std dev (rad). Default: 0
     noise   Scalar. Additive noise for simulated signal (a.u., same as amp). Default: 0.5
     n       Int. Number of trials to simulate if test != 'n'. Default: 1000
+    burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)    
     time_range Scalar. Full time range to simulate oscillation over (s). Default: 1.0
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
-    burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
     
     **kwargs All other keyword args passed to spectral estimation function given by <method>.
     
@@ -96,32 +102,41 @@ def test_power(method, test='frequency', test_values=None,
     """
     method = method.lower()
     test = test.lower()
+    spec_type = spec_type.lower()
     
     # Set defaults for tested values and set up rate generator function depending on <test>
+    sim_args = dict(amplitude=amp, phase=phi, phase_sd=phi_sd,
+                    n_trials=n, noise=noise, time_range=time_range, burst_rate=burst_rate, seed=seed)
+        
     if test in ['frequency','freq']:
         test_values = [4,8,16,32,64] if test_values is None else test_values
-        gen_data = lambda freq: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
+        gen_data = lambda freq: simulate_oscillation(freq,**sim_args)
         
     elif test in ['amplitude','amp']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
-        gen_data = lambda amp: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
+        del sim_args['amplitude']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda amp: simulate_oscillation(freq,**sim_args,amplitude=amp)
         
     elif test in ['phase','phi']:
         test_values = [-pi,-pi/2,0,pi/2,pi] if test_values is None else test_values
-        gen_data = lambda phi: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                    time_range=time_range,burst_rate=burst_rate,seed=seed)
+        del sim_args['phase']       # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda phi: simulate_oscillation(freq,**sim_args,phase=phi)
+        
+    elif test in ['phase_sd','phi_sd']:
+        test_values = [pi, pi/2, pi/4, 0] if test_values is None else test_values
+        del sim_args['phase_sd']   # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda phi_sd: simulate_oscillation(freq,**sim_args,phase_sd=phi_sd)
         
     elif test in ['n','n_trials']:
         test_values = [25,50,100,200,400,800] if test_values is None else test_values
-        gen_data = lambda n: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     time_range=time_range,burst_rate=burst_rate,seed=seed)
+        del sim_args['n_trials']    # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda n: simulate_oscillation(freq,**sim_args,n_trials=n)
         
     elif test in ['burst_rate','burst']:
         test_values = [0.1,0.2,0.4,0.8] if test_values is None else test_values
-        gen_data = lambda rate: simulate_oscillation(freq,amplitude=amp,phase=phi,n_trials=n,noise=noise,
-                                                     time_range=time_range,burst_rate=rate,seed=seed)        
+        del sim_args['burst_rate']  # Delete preset arg so it uses argument to lambda below        
+        gen_data = lambda rate: simulate_oscillation(freq,**sim_args,burst_rate=rate)
+                        
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
     
@@ -129,8 +144,10 @@ def test_power(method, test='frequency', test_values=None,
     test_values = sorted(test_values)
     n_values = len(test_values)
         
-    # Set default parameters for each spectral estimation method
+    # Set default parameters for each spectral estimation method    
     do_burst = method in ['burst','burst_analysis']
+    do_itpc = spec_type == 'itpc'
+    
     # Special case: oscillatory burst analysis
     if do_burst:
         # KLUDGE  Reset spectral analysis <method> to 'wavelet' (unless something set explicitly in kwargs)
@@ -143,6 +160,12 @@ def test_power(method, test='frequency', test_values=None,
         if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
             
     if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
+          
+    if do_itpc:
+        if 'itpc_method' not in kwargs: kwargs['itpc_method'] = 'PLV'
+        kwargs['trial_axis'] = 1
+                            
+    spec_fun = itpc if do_itpc else power_spectrogram
                     
     for i,value in enumerate(test_values):
         # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
@@ -157,11 +180,12 @@ def test_power(method, test='frequency', test_values=None,
             # Use probabilities to generate Bernoulli random variable at each time point
             data = bernoulli.ppf(0.5, data).astype(bool)        
                         
-        spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method=method,**kwargs)
+        spec,freqs,timepts = spec_fun(data,smp_rate,axis=0,method=method,**kwargs)
         if freqs.ndim == 2:
             bands = freqs            
             freqs = freqs.mean(axis=1)  # Compute center of freq bands
-        n_freqs,n_timepts,n_trials = spec.shape
+        if do_itpc: n_freqs,n_timepts = spec.shape
+        else:       n_freqs,n_timepts,n_trials = spec.shape
         
         # KLUDGE Initialize output arrays on 1st loop, once spectrogram output shape is known
         if i == 0:
@@ -169,9 +193,13 @@ def test_power(method, test='frequency', test_values=None,
             sems = np.empty((n_freqs,n_timepts,n_values))
             
         # Compute across-trial mean and SEM of time-frequency data -> (n_freqs,n_timepts,n_values)
-        means[:,:,i] = spec.mean(axis=2)
-        sems[:,:,i]  = spec.std(axis=2,ddof=0) / sqrt(n_trials)
-
+        if not do_itpc:
+            means[:,:,i] = spec.mean(axis=2)
+            sems[:,:,i]  = spec.std(axis=2,ddof=0) / sqrt(n_trials)
+        # HACK ITPC by definition is already reduced across trials, so just copy results into "means"    
+        else:
+            means[:,:,i] = spec
+            sems[:,:,i]  = 0
 
     # Compute mean across all timepoints -> (n_freqs,n_values) frequency marginal
     marginal_means = means.mean(axis=1)
@@ -249,7 +277,10 @@ def test_power(method, test='frequency', test_values=None,
         #     plt.title(np.round(value,decimal=2))
         #     plt.colorbar()
         # plt.show()
-        # if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-spectrogram-%s-%s-%s.png' % (method,test)))
+        # if plot_dir is not None: 
+        #     filename = 'power-spectrogram-%s-%s-%s.png' % (kwargs['itpc_method'],method,test) \
+        #                 if do_itpc else 'power-spectrogram-%s-%s.png' % (method,test)            
+        #     plt.savefig(os.path.join(plot_dir,filename))
         
         # Plot time-averaged spectrum for each tested value
         plt.figure()
@@ -266,10 +297,13 @@ def test_power(method, test='frequency', test_values=None,
         plt.xticks(freq_ticks,freq_tick_labels)
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
         plt.xlabel('Frequency (Hz)')
-        plt.ylabel('Power')
+        plt.ylabel(spec_type)
         plt.title("%s %s test" % (method,test))
         plt.show()
-        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-spectrum-%s-%s.png' % (method,test)))
+        if plot_dir is not None:
+            filename = 'power-spectrum-%s-%s-%s.png' % (kwargs['itpc_method'],method,test) \
+                        if do_itpc else 'power-spectrum-%s-%s.png' % (method,test)            
+            plt.savefig(os.path.join(plot_dir,filename))
             
         # Plot summary curve of power (or peak frequency) vs tested value
         plt.figure()
@@ -290,10 +324,13 @@ def test_power(method, test='frequency', test_values=None,
         else:
             plt.errorbar(test_values, test_freq_means, 3*test_freq_errs, marker='o')    
         plt.xlabel(test)
-        plt.ylabel('frequency' if test in ['frequency','freq'] else 'power')
+        plt.ylabel('frequency' if test in ['frequency','freq'] else spec_type)
         plt.title("%s %s test" % (method,test))
         plt.show()
-        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'power-summary-%s-%s.png' % (method,test)))
+        if plot_dir is not None:
+            filename = 'power-summary-%s-%s-%s.png' % (kwargs['itpc_method'],method,test) \
+                        if do_itpc else 'power-summary-%s-%s.png' % (method,test)
+            plt.savefig(os.path.join(plot_dir,filename))
                 
     ## Determine if test actually produced the expected values
     # frequency test: check if frequency of peak power matches simulated target frequency
@@ -303,13 +340,32 @@ def test_power(method, test='frequency', test_values=None,
             
     # 'amplitude' : Test if power increases monotonically with simulated amplitude            
     elif test in ['amplitude','amp']:
-        evals = [((np.diff(test_freq_means) > 0).all(),
-                    "Estimated power does not increase monotonically with simulated oscillation amplitude")]
+        if spec_type == 'power':
+            evals = [((np.diff(test_freq_means) > 0).all(),
+                        "Estimated power does not increase monotonically with simulated oscillation amplitude")]
+        else:
+            evals = {}
 
+    # 'phase' : Test if power is ~ constant across phase    
+    elif test in ['phase','phi']:
+        crit = 0.2 if do_itpc else test_freq_errs.max()        
+        evals = [(test_freq_means.ptp() < crit,
+                    "Estimated %s has larger than expected range across different simulated phases" % spec_type)]
+
+    # 'phase_sd' : Test if power is ~ constant across phase SD; Test if ITPC decreases monotonically with it    
+    elif test in ['phase_sd','phi_sd']:
+        if do_itpc:
+            evals = [((np.diff(test_freq_means) < 0).all(),
+                        "Estimated ITPC does not decrease monotonically with simulated phase SD")]
+        else:
+            evals = [(test_freq_means.ptp() < test_freq_errs.max(),
+                        "Estimated %s has larger than expected range across simulated phase SDs" % spec_type)]
+        
     # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
     elif test in ['n','n_trials']:
-        evals = [(test_freq_means.ptp() < test_freq_errs.max(),
-                    "Estimated power has larger than expected range across n's (likely biased by n)")]
+        crit = 0.2 if do_itpc else test_freq_errs.max()        
+        evals = [(test_freq_means.ptp() < crit,
+                    "Estimated %s has larger than expected range across n's (likely biased by n)" % spec_type)]
     
     # 'burst_rate': Test if measured burst rate increases monotonically with simulated burst rate
     elif test in ['burst_rate','burst']:
@@ -329,19 +385,22 @@ def test_power(method, test='frequency', test_values=None,
     
     
 def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
-                       tests=['frequency','amplitude','n','burst_rate'], do_tests=True, **kwargs):
+                       tests=['frequency','amplitude','phase','phase_sd','n','burst_rate'],
+                       do_tests=True, **kwargs):
     """ 
     Runs a battery of given tests on given oscillatory power computation methods
     
     power_test_battery(methods=['wavelet','multitaper','bandfilter'],
-                       tests=['frequency','amplitude','n','burst_rate'],do_tests=True,**kwargs)
+                       tests=['frequency','amplitude','phase','phase_sd','n','burst_rate'],
+                       do_tests=True,**kwargs)
     
     ARGS
     methods     Array-like. List of power computation methods to test.
                 Default: ['wavelet','multitaper','bandfilter'] (all supported methods)
                 
     tests       Array-like. List of tests to run.
-                Default: ['frequency','amplitude','n','burst_rate'] (all supported tests)
+                Default: ['frequency','amplitude','phase','phase_sd','n','burst_rate']
+                (all supported tests)
                 
     do_tests    Bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
@@ -368,3 +427,53 @@ def power_test_battery(methods=['wavelet','multitaper','bandfilter'],
             
             # If saving plots to file, let's not leave them all open
             if 'plot_dir' in kwargs: plt.close('all')
+            
+            
+def itpc_test_battery(methods=['wavelet','multitaper','bandfilter'],
+                      tests=['frequency','amplitude','phase','phase_sd','n'],
+                      itpc_methods=['PLV','Z','PPC'], do_tests=True, **kwargs):
+    """ 
+    Runs a battery of given tests on given intertrial phase clustering computation methods
+    
+    itpc_test_battery(methods=['wavelet','multitaper','bandfilter'],
+                      tests=['frequency','amplitude','phase','phase_sd','n'],
+                      do_tests=True,**kwargs)
+    
+    ARGS
+    methods     Array-like. List of power computation methods to test.
+                Default: ['wavelet','multitaper','bandfilter'] (all supported methods)
+                
+    tests       Array-like. List of tests to run.
+                Default: ['frequency','amplitude','phase','phase_sd','n'] (all supported tests)
+                
+    itpc_method Array-like. List of methods to use for computing intertrial phase clustering
+                Default: ['PLV','Z','PPC'] (all supported options)
+                
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+                            
+    kwargs      Any other keyword args passed directly to test_power()
+    
+    ACTION
+    Throws an error if any estimated power value for any (method,test) is too far from expected value    
+    """
+    if isinstance(methods,str): methods = [methods]
+    if isinstance(tests,str): tests = [tests]
+    
+    # Default phase SD = 90 deg unless set otherwise
+    phi_sd = kwargs.pop('phi_sd',pi/4)
+    
+    for test in tests:
+        for itpc_method in itpc_methods:
+            for method in methods:
+                print("Running %s test on %s %s" % (test,method,itpc_method))
+                extra_args = kwargs                
+                t1 = time.time()
+                
+                _,_,passed = test_power(method, test=test, itpc_method=itpc_method,
+                                        spec_type='itpc', phi_sd=phi_sd, do_tests=do_tests,
+                                        **extra_args)
+                print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
+                
+                # If saving plots to file, let's not leave them all open
+                if 'plot_dir' in kwargs: plt.close('all')            
