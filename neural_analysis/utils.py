@@ -6,6 +6,7 @@ FUNCTIONS
 ### Numerical utility functions ###
 set_random_seed     Seeds Python/Nummpy random number generators with given seed
 interp1             Interpolates 1d data vector at given index values
+zscore              Z-scores data along given axis (or whole array)
 
 ### Data indexing and reshaping functions ###
 index_axis          Dynamically index into arbitrary axis of ndarray
@@ -16,8 +17,8 @@ undo_standardize_array Undoes effect of standardize_array after analysis
 ### Other utilities ###
 iarange             np.arange(), but with an inclusive endpoint
 unsorted_unique     np.unique(), but without sorting values
-setup_sliding_windows   Generates set of sliding windows using given parameters
 isarraylike         Tests if variable is "array-like" (ndarray, list, or tuple)
+setup_sliding_windows   Generates set of sliding windows using given parameters
 
 Created on Fri Apr  9 13:28:15 2021
 
