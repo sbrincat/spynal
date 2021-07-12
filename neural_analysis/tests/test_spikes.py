@@ -2,10 +2,10 @@
 import pytest
 import numpy as np
 
-from ..utils import setup_sliding_windows, unsorted_unique
+from ..utils import setup_sliding_windows, unsorted_unique, concatenate_object_array
 from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
                      cut_trials, realign_data, pool_electrode_units,\
-                     bin_rate, density, fano, CV
+                     rate, rate_stats, isi, isi_stats
 
 
 # =============================================================================
@@ -113,7 +113,7 @@ def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
 
              
 # =============================================================================
-# Unit tests for rate computation and stats functions
+# Unit tests for rate computation functions
 # =============================================================================
 @pytest.mark.parametrize('data_type, count, result',
                          [('spike_timestamp', True, 105),
@@ -128,7 +128,7 @@ def test_bin_rate(spike_data, data_type, count, result):
     # Basic test of shape, dtype, value of output
     # Test values summed over entire array -> scalar for spike counts
     # Test values averaged over entire array -> scalar for spike rates
-    rates, bins = bin_rate(data, lims=[0,1], count=count, axis=-1, timepts=timepts)
+    rates, bins = rate(data, method='bin', lims=[0,1], count=count, axis=-1, timepts=timepts)
     assert bins.shape == (20, 2)
     assert rates.shape == (10, 2, 20)
     assert np.issubdtype(rates.dtype,np.integer) if count else np.issubdtype(rates.dtype,np.float)
@@ -137,7 +137,8 @@ def test_bin_rate(spike_data, data_type, count, result):
     
     # Test for consistent output with different data array shape
     shape = (5,2,2,*data.shape[2:])
-    rates, bins = bin_rate(data.reshape(shape), lims=[0,1], count=count, axis=-1, timepts=timepts)
+    rates, bins = rate(data.reshape(shape), method='bin', lims=[0,1], count=count,
+                       axis=-1, timepts=timepts)
     assert bins.shape == (20, 2)
     assert rates.shape == (5, 2, 2, 20)
     assert np.isclose(rates.sum(), result, rtol=1e-2, atol=1e-2) if count else \
@@ -146,14 +147,16 @@ def test_bin_rate(spike_data, data_type, count, result):
     # Test for consistent output with transposed data dimensionality
     # Note: output dims are expected to be different for timestamp vs boolean data
     expected_shape = (20, 2, 10) if data_type == 'spike_bool' else (2, 10, 20)
-    rates, bins = bin_rate(data.transpose(), lims=[0,1], count=count, axis=0, timepts=timepts)
+    rates, bins = rate(data.transpose(), method='bin', lims=[0,1], count=count,
+                       axis=0, timepts=timepts)
     assert bins.shape == (20, 2)
     assert rates.shape == expected_shape
     assert np.isclose(rates.sum(), result, rtol=1e-2, atol=1e-2) if count else \
            np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
         
     # Test for consistent output with different sliding window length
-    rates, bins = bin_rate(data, lims=[0,1], width=20e-3, count=count, axis=-1, timepts=timepts)
+    rates, bins = rate(data, method='bin', lims=[0,1], width=20e-3, count=count,
+                       axis=-1, timepts=timepts)
     assert bins.shape == (50, 2)  
     assert rates.shape == (10, 2, 50)
     assert np.isclose(rates.sum(), result, rtol=1e-2, atol=1e-2) if count else \
@@ -161,7 +164,7 @@ def test_bin_rate(spike_data, data_type, count, result):
     
     # Test for consistent ouptut when bins are set explicitly
     bins = setup_sliding_windows(20e-3,[0,1])
-    rates, bins = bin_rate(data, bins=bins, count=count, axis=-1, timepts=timepts)
+    rates, bins = rate(data, method='bin', bins=bins, count=count, axis=-1, timepts=timepts)
     assert bins.shape == (50, 2)  
     assert rates.shape == (10, 2, 50)
     assert np.isclose(rates.sum(), result, rtol=1e-2, atol=1e-2) if count else \
@@ -170,7 +173,7 @@ def test_bin_rate(spike_data, data_type, count, result):
     # Test for consistent output for custom unequal-width bins
     # Note: Summed counts should be same, but mean rates are expected to be slightly different here
     bins = [[0,250e-3], [250e-3,750e-3], [750e-3,1000e-3]]
-    rates, bins = bin_rate(data, bins=bins, count=count, axis=-1, timepts=timepts)
+    rates, bins = rate(data, method='bin', bins=bins, count=count, axis=-1, timepts=timepts)
     assert rates.shape == (10, 2, 3)
     assert np.isclose(rates.sum(), result, rtol=1e-2, atol=1e-2) if count else \
            np.isclose(rates.mean(), 5.53, rtol=1e-2, atol=1e-2)
@@ -182,7 +185,7 @@ def test_bin_rate(spike_data, data_type, count, result):
                           ('spike_bool', 'gaussian', 4.92),
                           ('spike_bool', 'hanning', 4.93)])                        
 def test_density(spike_data, data_type, kernel, result):    
-    """ Unit tests for bin_rate function for computing binned spike rates """
+    """ Unit tests for density function for computing spike densities """
     # Extract given data type from data dict
     data, timepts = spike_data[data_type]
     # Set kernel width parameter so gaussian and hanning kernels are ~ identical
@@ -190,15 +193,15 @@ def test_density(spike_data, data_type, kernel, result):
 
     # Basic test of shape, dtype, value of output
     # Test values averaged over entire array -> scalar for spike rates
-    rates, tout = density(data, kernel=kernel, width=width, lims=[0,1], buffer=0, axis=-1, timepts=timepts)
+    rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0, axis=-1, timepts=timepts)
     assert tout.shape == (1001,)
     assert rates.shape == (10, 2, 1001)
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with different data array shape
     shape = (5,2,2,*data.shape[2:])
-    rates, tout = density(data.reshape(shape), kernel=kernel, width=width, lims=[0,1], buffer=0, 
-                          axis=-1, timepts=timepts)    
+    rates, tout = rate(data.reshape(shape), method='density', kernel=kernel, width=width,
+                       lims=[0,1], buffer=0, axis=-1, timepts=timepts)    
     assert tout.shape == (1001,)
     assert rates.shape == (5, 2, 2, 1001)
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
@@ -206,53 +209,93 @@ def test_density(spike_data, data_type, kernel, result):
     # Test for consistent output with transposed data dimensionality
     # Note: output dims are expected to be different for timestamp vs boolean data
     expected_shape = (1001, 2, 10) if data_type == 'spike_bool' else (2, 10, 1001)
-    rates, tout = density(data.transpose(), kernel=kernel, width=width, lims=[0,1], buffer=0,
-                          axis=0, timepts=timepts)    
+    rates, tout = rate(data.transpose(), method='density', kernel=kernel, width=width,
+                       lims=[0,1], buffer=0, axis=0, timepts=timepts)    
     assert tout.shape == (1001,)
     assert rates.shape == expected_shape
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
                 
     # Test for ~ consistent ouptut with 10x downsampling after spike density estimation
-    rates, tout = density(data, kernel=kernel, width=width, lims=[0,1], buffer=0, 
+    rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0, 
                           downsmp=10, axis=-1, timepts=timepts)
     assert tout.shape == (101,)
     assert rates.shape == (10, 2, 101)
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
              
              
+# =============================================================================
+# Unit tests for rate and ISI stats functions
+# =============================================================================             
 @pytest.mark.parametrize('data_type, stat, result',
-                         [('spike_timestamp', 'fano', 42.0),
-                          ('spike_timestamp', 'fano', 42.0),
-                          ('spike_bool', 'cv', 2.29),
-                          ('spike_bool', 'cv', 2.29)])
+                         [('spike_timestamp', 'Fano', 42.0),
+                          ('spike_bool', 'CV', 2.29)])
 def test_rate_stats(spike_data, data_type, stat, result):    
-    """ Unit tests for bin_rate function for computing binned spike rates """
+    """ Unit tests for rate_stats function for computing spike rate statistics """
     # Extract given data type from data dict
     data, timepts = spike_data[data_type]
-    
-    stat_func = fano if stat == 'fano' else CV
-    
+        
     # Compute spike rates from timestamp/binary spike data -> (n_trials,n_unit,n_timepts)
-    rates, _ = bin_rate(data, lims=[0,1], count=False, axis=-1, timepts=timepts)
+    rates, _ = rate(data, method='bin', lims=[0,1], count=False, axis=-1, timepts=timepts)
     n_trials,n_chnls,n_timepts = rates.shape
     
     # Basic test of shape, value of output
     # Test value of 1st trial/channel as exemplar
-    stats = stat_func(rates, axis=0)
+    stats = rate_stats(rates, stat=stat, axis=0)
     print(stats[0,0,0])
     assert stats.shape == (1, n_chnls, n_timepts)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with different data array shape (additional axis inserted)
-    stats = stat_func(np.concatenate((rates[:,:,np.newaxis,:],rates[:,:,np.newaxis,:]), axis=2), axis=0)
+    stats = rate_stats(np.concatenate((rates[:,:,np.newaxis,:],rates[:,:,np.newaxis,:]), axis=2),
+                       stat=stat, axis=0)
     assert stats.shape == (1, n_chnls, 2, n_timepts)
     assert np.isclose(stats[0,0,0,0], result, rtol=1e-2, atol=1e-2)
     
     # Test for consistent output with transposed data dimensionality
-    stats = stat_func(rates.T, axis=-1)
+    stats = rate_stats(rates.T, stat=stat, axis=-1)
     assert stats.shape == (n_timepts, n_chnls, 1)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
                   
+   
+@pytest.mark.parametrize('data_type, stat, result',
+                         [('spike_timestamp', 'Fano', 0.1006),
+                          ('spike_bool', 'CV', 0.9110),
+                          ('spike_bool', 'CV2', 0.9867),
+                          ('spike_bool', 'LV', 0.9423),
+                          ('spike_bool', 'burst_fract', 0.2041)])
+def test_isi_stats(spike_data, data_type, stat, result):    
+    """ Unit tests for isi_stats function for computing inter-spike interval statistics """
+    # Extract given data type from data dict
+    data, timepts = spike_data[data_type]
+    
+    # Compute inter-spike intervals from timestamp/binary spike data -> (n_trials,n_units)
+    ISIs = isi(data, axis=-1, timepts=timepts)
+    n_trials,n_chnls = ISIs.shape
+    
+    print(ISIs.shape)
+    # KLUDGE Pool ISI data across trials for locality-sensitive metrics, so output shape is same
+    if stat in ['CV2','LV']: ISIs = concatenate_object_array(ISIs,axis=0,sort=False)
+    axis = 'each' if stat in ['CV2','LV'] else 0
+    print(ISIs.shape, stat, axis)
+    
+    # Basic test of shape, value of output
+    # Test value of 1st trial/channel as exemplar
+    stats = isi_stats(ISIs, stat=stat, axis=axis)
+    print(stats.shape, stats[0,0])
+    assert stats.shape == (1, n_chnls)
+    assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent output with different data array shape (additional axis inserted)
+    stats = isi_stats(np.concatenate((ISIs[:,:,np.newaxis],ISIs[:,:,np.newaxis]), axis=2),
+                      stat=stat, axis=axis)
+    assert stats.shape == (1, n_chnls, 2)
+    assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent output with transposed data dimensionality
+    stats = isi_stats(ISIs.T, stat=stat, axis='each' if stat in ['CV2','LV'] else -1)
+    assert stats.shape == (n_chnls, 1)
+    assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
+    
         
 # =============================================================================
 # Unit tests for rate preprocessing/utility functions

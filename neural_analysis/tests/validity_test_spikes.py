@@ -22,7 +22,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from .data_fixtures import simulate_dataset
-from ..spikes import simulate_spike_trains, times_to_bool, rate, fano, CV
+from ..spikes import simulate_spike_trains, times_to_bool, rate, fano, cv
 
 
 def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
@@ -240,7 +240,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
         raise ValueError("Unsupported value '%s' set for <test>" % test)
           
     if stat == 'fano':    stat_func = fano
-    elif stat == 'cv':    stat_func = CV
+    elif stat == 'cv':    stat_func = cv
     else:
         raise ValueError("Unsupported value '%s' set for <stat>" % stat)
          
