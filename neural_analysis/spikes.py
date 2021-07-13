@@ -184,6 +184,16 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
     # Are bins "standard"? : equal-width, with start of each bin = end of previous bin
     std_bins = np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1])
     
+    def _histogram_count(data, bins):
+        """ Count spikes in equal-width, disjoint bins """
+        return np.histogram(data,bins)[0]
+
+
+    def _custom_bin_count(data, bins):
+        """ Count spikes in any arbitrary custom bins """
+        return np.asarray([((start <= data) & (data < end)).sum() 
+                        for (start,end) in bins], dtype='uint16')
+                
     # For standard bins, can use histogram algorithm
     if std_bins:
         count_spikes = _histogram_count
@@ -398,7 +408,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 #==============================================================================
 # Rate and inter-spike interval statistics functions
 #==============================================================================
-def rate_stats(data, stat='Fano', axis=None, **kwargs):
+def rate_stats(rates, stat='Fano', axis=None, **kwargs):
     """
     Computes given statistic on spike rates of one or more spike trains
     
@@ -406,10 +416,10 @@ def rate_stats(data, stat='Fano', axis=None, **kwargs):
     
     Stats may be along one/more array axes (eg trials) or across entire data array
        
-    stats = rate_stats(data, stat='Fano', axis=None, **kwargs)
+    stats = rate_stats(rates, stat='Fano', axis=None, **kwargs)
            
     ARGS
-    data        (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
+    rates       (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
     
     stat        String. Rate statistic to compute. Options:
                 'Fano' :    Fano factor = var(rate)/mean(rate) [default]
@@ -424,10 +434,10 @@ def rate_stats(data, stat='Fano', axis=None, **kwargs):
     RETURNS
     stats       Float | (...,1,...) ndarray. Rate statistic(s) computed on data.
                 For vector data or axis=None, a single scalar value is returned.
-                Otherwise, it's an array w/ same shape as data, but with <axis>
+                Otherwise, it's an array w/ same shape as <rates>, but with <axis>
                 reduced to length 1.        
     """
-    data_type = _spike_data_type(data)
+    data_type = _spike_data_type(rates)
     assert data_type not in ['timestamp','bool'], \
         TypeError("Must input spike *rate* data for this function (eg use rate())")
     
@@ -438,22 +448,22 @@ def rate_stats(data, stat='Fano', axis=None, **kwargs):
     else:
         raise ValueError("Unsupported value '%s' for <stat> (should be 'Fano'|'CV')" % stat)
     
-    return stat_func(data, axis=axis, **kwargs)
+    return stat_func(rates, axis=axis, **kwargs)
 
 
-def rate_fano(data, axis=None, **kwargs):
+def rate_fano(rates, axis=None, **kwargs):
     """
     Computes Fano factor (variance/mean) of rates of one or more spike trains    
     Convenience function that calls rate_stats(stat='Fano'). See there for details.
     """
-    return rate_stats(data, stat='Fano', axis=axis, **kwargs)
+    return rate_stats(rates, stat='Fano', axis=axis, **kwargs)
 
-def rate_cv(ISIs, axis=None, **kwargs):
+def rate_cv(rates, axis=None, **kwargs):
     """
     Computes Coefficient of Variation (SD/mean) of rates of one/more spike trains    
     Convenience function that calls rate_stats(stat='CV'). See there for details.
     """
-    return rate_stats(data, stat='CV', axis=axis, **kwargs)
+    return rate_stats(rates, stat='CV', axis=axis, **kwargs)
 
 
 def isi(data, axis=-1, timepts=None):
@@ -1540,9 +1550,6 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
         return data_mua    
 
 
-
-
-
 # =============================================================================
 # Synthetic data generation and testing functions
 # =============================================================================
@@ -1724,21 +1731,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
             trains[i_trial,idxs] = True
 
     return trains, labels
-
-
-# =============================================================================
-# Rate computation helper functions
-# =============================================================================
-def _histogram_count(data, bins):
-    """ Count spikes in equal-width, disjoint bins """
-    return np.histogram(data,bins)[0]
-
-
-def _custom_bin_count(data, bins):
-    """ Count spikes in any arbitrary custom bins """
-    return np.asarray([((start <= data) & (data < end)).sum() 
-                       for (start,end) in bins], dtype='uint16')
-                    
+            
 
 #==============================================================================
 # Other helper functions

@@ -412,7 +412,6 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
          
     stat_values = np.empty((len(test_values),n_reps))              
     for i_value,test_value in enumerate(test_values):
-        print(i_value, test_value)
         # Generate simulated spike timestamp data with current test value
         data,_  = gen_data(test_value)
         ISIs    = isi(data)
