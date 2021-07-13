@@ -263,7 +263,7 @@ def test_rate_stats(spike_data, data_type, stat, result):
                           ('spike_bool', 'CV2', 0.9867),
                           ('spike_bool', 'LV', 0.9423),
                           ('spike_bool', 'burst_fract', 0.2041)])
-def test_isi_stats(spike_data, data_type, stat, result):    
+def test_isi_stats(spike_data, data_type, stat, result):
     """ Unit tests for isi_stats function for computing inter-spike interval statistics """
     # Extract given data type from data dict
     data, timepts = spike_data[data_type]
@@ -272,11 +272,9 @@ def test_isi_stats(spike_data, data_type, stat, result):
     ISIs = isi(data, axis=-1, timepts=timepts)
     n_trials,n_chnls = ISIs.shape
     
-    print(ISIs.shape)
     # KLUDGE Pool ISI data across trials for locality-sensitive metrics, so output shape is same
     if stat in ['CV2','LV']: ISIs = concatenate_object_array(ISIs,axis=0,sort=False)
     axis = 'each' if stat in ['CV2','LV'] else 0
-    print(ISIs.shape, stat, axis)
     
     # Basic test of shape, value of output
     # Test value of 1st trial/channel as exemplar

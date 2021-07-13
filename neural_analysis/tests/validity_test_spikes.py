@@ -22,9 +22,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from .data_fixtures import simulate_dataset
-from ..spikes import simulate_spike_trains, times_to_bool, rate, fano, cv
+from ..spikes import simulate_spike_trains, times_to_bool, rate, rate_stats, isi, isi_stats
 
-
+# =============================================================================
+# Tests for rate computation functions
+# =============================================================================   
 def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
               do_tests=True, do_plots=False, plot_dir=None, seed=1, **kwargs):
     """
@@ -157,6 +159,9 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
     return means, sems, passed
                 
 
+# =============================================================================
+# Tests for rate stats functions
+# =============================================================================   
 def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson', n_trials=1000,
                     n_reps=100, do_tests=True, do_plots=False, plot_dir=None, seed=1, **kwargs):
     """
@@ -169,7 +174,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
                                        n_trials=1000,n_reps=100,do_tests=True,do_plots=False, plot_dir=None, seed=1, **kwargs)
                               
     ARGS
-    stat        String. Name of rate stat function to test: 'fano' | 'cv'
+    stat        String. Name of rate stat to test: 'Fano' | 'CV'
             
     test        String. Type of test to run. Default: 'rate'. Options: 'rate' | 'spread'
 
@@ -238,11 +243,6 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
         
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
-          
-    if stat == 'fano':    stat_func = fano
-    elif stat == 'cv':    stat_func = cv
-    else:
-        raise ValueError("Unsupported value '%s' set for <stat>" % stat)
          
     stat_values = np.empty((len(test_values),n_reps))              
     for i_value,test_value in enumerate(test_values):        
@@ -250,7 +250,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
             # Generate simulated data with current test value
             data,_ = gen_data(test_value)
                                         
-            stat_values[i_value,i_rep] = stat_func(data, axis=0)
+            stat_values[i_value,i_rep] = rate_stats(data, stat=stat, axis=0)
 
     # Compute mean and std dev across different reps of simulation            
     stat_sds    = stat_values.std(axis=1,ddof=0)
@@ -294,25 +294,6 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
         # Just issue a warning for test fails if do_tests is False
         elif not cond:  warn(message)
                     
-    # DELETE        
-    # if test == 'mean':
-    #     if distribution == 'normal':
-    #         assert (np.diff(stat_means) <= 0).all(), \
-    #             AssertionError("%s does not deccrease monotonically with increase in mean" % stat)
-    #     elif distribution == 'poisson':
-    #         assert stat_means.ptp() < stat_sds.max(), \
-    #             AssertionError("%s has larger than expected range for increase in mean of Poisson data" % stat)
-
-    # # 'spread' : Test if stat increases monotonically with increasing distribution spread (rate SD)
-    # elif test in ['spread','spreads','sd']:
-    #     assert (np.diff(stat_means) >= 0).all(), \
-    #         AssertionError("%s does not increase monotonically with spread increase" % stat)
-                                
-    # # 'n' : Test if stat is ~ same for all values of n (unbiased by n)      
-    # elif test in ['n','n_trials']:
-    #     assert stat_means.ptp() < stat_sds.max(), \
-    #         AssertionError("%s has larger than expected range across n's (likely biased by n)" % stat)
-        
     return stat_means, stat_sds, passed
 
 
@@ -325,7 +306,7 @@ def rate_stat_test_battery(stats=['fano','cv'], tests=['mean','spread','n'],
                            distributions=['normal','poisson'], do_tests=True,**kwargs)
     
     ARGS
-    stats       Array-like. List of spike rate stat to evaluate.
+    stats       Array-like. List of spike rate stats to evaluate.
                 Default: ['fano','cv'] (all supported methods)
                                                 
     tests       Array-like. List of tests to run.
@@ -361,3 +342,151 @@ def rate_stat_test_battery(stats=['fano','cv'], tests=['mean','spread','n'],
                     
                 print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
                 if 'plot_dir' in kwargs: plt.close('all')
+                
+                
+# =============================================================================
+# Tests for ISI stats functions
+# =============================================================================                   
+def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
+                   do_tests=True, do_plots=False, plot_dir=None, seed=1, **kwargs):
+    """
+    Basic testing for functions estimating inter-spike interval statistics
+    
+    Generates synthetic spike train data with given parameters, 
+    estimates ISI stats using given function, and compares estimated to expected.
+    
+    means,sds,passed = test_isi_stats(stat,test='mean',test_values=None,n_reps=100,
+                                      do_tests=True,do_plots=False, plot_dir=None, seed=1, **kwargs)
+                              
+    ARGS
+    stat        String. Name of ISI stat to test: 'Fano' | 'CV' | 'CV2 | 'LV' | 'burst_fract'
+            
+    test        String. Type of test to run. Default: 'mean'
+
+    test_values (n_values,) array-like. List of values to test. 
+                Interpretation and defaults are test-specific:
+                'mean'      Mean spike rate. Default: [1,2,5,10,20]
+                    
+    n_reps      Int. Number of indpendent repetitions of test to run. Default: 100
+          
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+                                        
+    do_plots    Bool. Set=True to plot test results. Default: False
+          
+    plot_dir    String. Full-path directory to save plots to. Set=None [default] to not save plots.
+          
+    seed        Int. Random generator seed for repeatable results.
+                Set=None for fully random numbers. Default: 1 (reproducible random numbers)
+        
+    RETURNS
+    means       (n_test_values,) ndarray. Mean of estimated stat values across reps.
+    
+    sems        (n_test_values,) ndarray. Std dev of estimated stat values across reps.
+    
+    passed      Bool. True if estimated results pass all tests; otherwise False.
+                
+    ACTION
+    If do_tests is True, raisers an error if any estimated stat is too far from expected value
+    If do_plots is True, also generates a plot summarizing results               
+    """
+    # Note: Set random seed once here, not for every random data generation loop below    
+    if seed is not None: np.random.seed(seed)
+    
+    stat = stat.lower()
+    test = test.lower()
+               
+    # Set defaults for tested values and set up data generator function depending on <test>
+    # Set up to run simulation for 10 s to get good estimates, and for n_reps separate trials
+    # Note: Only set random seed once above, don't reset in data generator function calls
+    # todo Should we move some/all of these into function arguments, instead of hard-coding?
+    sim_args = dict(gain=0.0, offset=5.0, n_conds=1, n_trials=n_reps, time_range=10.0, seed=None)
+       
+    if test in ['mean','rate','gain']:
+        test_values = [1,2,5,10,20] if test_values is None else test_values
+        del sim_args['offset']              # Delete preset arg so it uses argument to lambda below
+        gen_data = lambda mean: simulate_spike_trains(**sim_args,offset=float(mean))
+                
+    else:
+        raise ValueError("Unsupported value '%s' set for <test>" % test)
+         
+    stat_values = np.empty((len(test_values),n_reps))              
+    for i_value,test_value in enumerate(test_values):
+        print(i_value, test_value)
+        # Generate simulated spike timestamp data with current test value
+        data,_  = gen_data(test_value)
+        ISIs    = isi(data)
+                                    
+        stat_values[i_value,:] = isi_stats(ISIs, stat=stat, axis='each')
+
+    # Compute mean and std dev across different reps of simulation            
+    stat_sds    = stat_values.std(axis=1,ddof=0)
+    stat_means  = stat_values.mean(axis=1)
+    
+    if do_plots:
+        plt.figure()
+        plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
+        plt.errorbar(test_values, stat_means, stat_sds, marker='o')
+        xlabel = 'n' if test == 'bias' else test
+        plt.xlabel(xlabel)
+        plt.ylabel("%s(ISI)" % stat)
+        if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'stat-summary-%s-%s' % (stat,test)))
+       
+    # Determine if test actually produced the expected values 
+    # 'mean' : Test if stat remains ~ same for Poisson
+    if test == 'mean':
+        evals = [(stat_means.ptp() < stat_sds.max(),
+                    "%s has larger than expected range for increase in mean of Poisson data" % stat)]
+            
+    passed = True
+    for cond,message in evals:
+        if not cond:    passed = False
+        
+        # Raise an error for test fails if do_tests is True
+        if do_tests:    assert cond, AssertionError(message)
+        # Just issue a warning for test fails if do_tests is False
+        elif not cond:  warn(message)
+                    
+    return stat_means, stat_sds, passed
+
+
+def isi_stat_test_battery(stats=['Fano','CV','CV2','LV','burst_fract'], tests=['mean'],
+                          do_tests=True, **kwargs):
+    """ 
+    Runs a battery of given tests on given inter-spike interval statistic computation methods
+    
+    isi_stat_test_battery(stats=['Fano','CV','CV2','LV','burst_fract'],tests=['mean'],
+                          do_tests=True,**kwargs)
+    
+    ARGS
+    stats       Array-like. List of ISI stats to evaluate.
+                Default: ['Fano','CV','CV2','LV','burst_fract'] (all supported methods)
+                                                
+    tests       Array-like. List of tests to run.
+                Default: ['mean'] (all supported tests)
+                    
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+                                     
+    kwargs      Any other kwargs passed directly to test_randstats()
+    
+    ACTION
+    If do_tests is True, raises an error if any estimated value for any (stat,test)
+    is too far from expected value    
+    """
+    if isinstance(stats,str): stats = [stats]    
+    if isinstance(tests,str): tests = [tests]
+    
+    for stat in stats:
+        for test in tests:
+            print("Running %s test on %s" % (test,stat))
+            do_tests_ = False if (stat == 'burst_fract') and (test == 'mean') else do_tests
+
+            t1 = time.time()
+
+            _,_,passed = test_isi_stats(stat, test=test, do_tests=do_tests_, **kwargs)
+                
+            print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
+            if 'plot_dir' in kwargs: plt.close('all')
+            
+                
