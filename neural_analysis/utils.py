@@ -6,6 +6,10 @@ FUNCTIONS
 ### Numerical utility functions ###
 set_random_seed     Seeds Python/Nummpy random number generators with given seed
 interp1             Interpolates 1d data vector at given index values
+fano                Computes Fano factor (variance/mean) of data
+cv                  Computes Coefficient of Variation (SD/mean) of data
+cv2                 Computes local Coefficient of Variation (Holt 1996) of data
+lv                  Computes Local Variation (Shinomoto 2009) of data
 zscore              Z-scores data along given axis (or whole array)
 
 ### Data indexing and reshaping functions ###
@@ -67,6 +71,174 @@ def interp1(x, y, xinterp, **kwargs):
     Convenience wrapper around scipy.interpolate.interp1d w/o weird call structure
     """
     return interp1d(x,y,**kwargs).__call__(xinterp)
+
+
+def fano(data, axis=None, ddof=0):
+    """
+    Computes Fano factor (variance/mean) of data along a given array axis
+    (eg trials) or across an entire array
+    
+    np.nan is returned for cases where the mean ~ 0
+    
+    Fano factor has an expected value of 1 for a Poisson distribution/process.
+    
+    fano = fano(data, axis=None, ddof=0)
+    
+    ARGS
+    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    
+    axis        Int. Array axis to compute Fano factor on (usually corresponding to
+                distict trials/observations). If None [default], computes Fano
+                factor across entire array (analogous to np.mean/var).
+                
+    ddof        Int. Sets divisor for computing variance = N - ddof. Set=0 for max 
+                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
+                Default: 0
+                                
+    RETURNS
+    fano        Float | (...,1,...) ndarray. Fano factor (variance/mean) of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.   
+    """
+    mean    = data.mean(axis=axis,keepdims=True)
+    var     = data.var(axis=axis,keepdims=True,ddof=ddof)
+    fano_   = var/mean
+    # Find any data values w/ mean ~ 0 and set output = NaN for those points    
+    fano_[np.isclose(mean,0)] = np.nan
+
+    if fano_.size == 1: fano_ = fano_.item()
+    
+    return fano_
+
+# Alias fano() as fano_factor()
+fano_factor = fano
+
+
+def cv(data, axis=None, ddof=0):
+    """
+    Computes Coefficient of Variation (std dev/mean) of data, computed along
+    a given array axis (eg trials) or across an entire array
+    
+    np.nan is returned for cases where the mean ~ 0
+    
+    CV has an expected value of 1 for a Poisson distribution/process.
+    
+    CV = cv(data, axis=None, ddof=0)
+    
+    ARGS
+    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    
+    axis        Int. Array axis to compute CV on (usually corresponding to
+                distict trials/observations). If None [default], computes Fano
+                factor across entire array (analogous to np.mean/var).
+                
+    ddof        Int. Sets divisor for computing std dev = N - ddof. Set=0 for max 
+                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
+                Default: 0
+                                
+    RETURNS
+    CV          Float | (...,1,...) ndarray. CV (SD/mean) of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.   
+    """    
+    mean    = data.mean(axis=axis,keepdims=True)
+    sd      = data.std(axis=axis,keepdims=True,ddof=ddof)
+    CV      = sd/mean
+    # Find any data values w/ mean ~ 0 and set output = NaN for those points    
+    CV[np.isclose(mean,0)] = np.nan
+
+    if CV.size == 1: CV = CV.item()
+    
+    return CV
+
+# Alias cv() as coefficient_of_variation()
+coefficient_of_variation = cv
+
+
+def cv2(data, axis=0):
+    """
+    Computes local Coefficient of Variation (CV2) of data, computed along
+    a given array axis (eg trials). Typically used as measure of local variation
+    in inter-spike intervals.
+    
+    CV2 reduces effects of slow changes in data (eg changes in spike rate) on 
+    measure of variation by only comparing adjacent data values (eg adjacent ISIs).
+    CV2 has an expected value of 1 for a Poisson process.
+        
+    CV2 = cv2(data, axis=0)
+    
+    ARGS
+    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    
+    axis        Int. Array axis to compute CV2 on (usually corresponding to
+                distict trials/observations). Default: 0
+                                
+    RETURNS
+    CV2         Float | (...,1,...) ndarray. CV2 of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.
+                
+    REFERENCE
+    Holt et al. (1996) Journal of Neurophysiology https://doi.org/10.1152/jn.1996.75.5.1806
+    """
+    # Difference between adjacent values in array, along <axis>
+    diff    = np.diff(data,axis=axis)
+    # Sum between adjacent values in array, along <axis>
+    denom   = index_axis(data, axis, range(0,data.shape[axis]-1)) + \
+              index_axis(data, axis, range(1,data.shape[axis]))
+    
+    # CV2 formula (Holt 1996 eqn. 4)
+    CV2     = (2*np.abs(diff) / denom).mean(axis=axis)
+        
+    if CV2.size == 1: CV2 = CV2.item()
+    
+    return CV2
+
+
+def lv(data, axis=0):
+    """
+    Computes Local Variation (LV) of data, computed along a given array axis (eg trials).
+    Typically used as measure of local variation in inter-spike intervals.
+    
+    LV reduces effects of slow changes in data (eg changes in spike rate) on 
+    measure of variation by only comparing adjacent data values (eg adjacent ISIs).
+    LV has an expected value of 1 for a Poisson process.
+            
+    LV = lv(data, axis=0)
+    
+    ARGS
+    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    
+    axis        Int. Array axis to compute LV on (usually corresponding to
+                distict trials/observations). Default: 0
+                                
+    RETURNS
+    LV          Float | (...,1,...) ndarray. LV of data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as data, but with <axis>
+                reduced to length 1.
+                
+    REFERENCE
+    Shinomoto et al. (2009) PLoS Computational Biology https://doi.org/10.1371/journal.pcbi.1000433
+    """
+    # Difference between adjacent values in array, along <axis>
+    diff    = np.diff(data,axis=axis)
+    # Sum between adjacent values in array, along <axis>
+    denom   = index_axis(data, axis, range(0,data.shape[axis]-1)) + \
+              index_axis(data, axis, range(1,data.shape[axis]))
+    n       = data.shape[axis]
+    
+    # LV formula (Shinomoto 2009 eqn. 2)
+    # Note: np.diff() reverses sign from original formula, but it gets squared anyway
+    LV     = (((diff/denom)**2) * (3/(n-1))).sum(axis=axis)
+        
+    if LV.size == 1: LV = LV.item()
+    
+    return LV
+
 
 
 # =============================================================================
@@ -483,6 +655,78 @@ def undo_standardize_to_axis_end(data, data_shape, axis=-1):
     return data
 
 
+def concatenate_object_array(data,axis=None,sort=False):
+    """
+    Concatenates objects across one or more axes of an object array.
+    Useful for concatenating spike timestamps across trials, units, etc.
+    
+    data = concatenate_object_array(data,axis=None,sort=False)
+    
+    EXAMPLE
+    data = [[[1, 2],    [3, 4, 5]], 
+            [[6, 7, 8], [9, 10]  ]]
+    concatenate_object_array(data,axis=0)
+    >> [[1,2,6,7,8], [3,4,5,9,10]]
+    concatenate_object_array(data,axis=1)
+    >> [[1,2,3,4,5], [6,7,8,9,10]]
+    
+    ARGS
+    data    Object ndarray of arbitary shape containing 1d lists/arrays
+    
+    axis    Int | list of int | None. Axis(s) to concatenate object array across.
+            Set = list of ints to concatenate across multiple axes.
+            Set = None [default] to concatenate across *all* axes in data.
+
+    sort    Bool. If True, sorts items in concatenated list objects. Default: False
+
+    OUTPUTS
+    data    Concatenated object(s).
+            If axis is None, returns as single list extracted from object array.
+            Otherwise, returns as object ndarray with all concatenated axes 
+            reduced to singletons.
+    """
+    assert data.dtype == object, \
+        ValueError("data is not an object array. Use np.concatenate() instead.")
+    
+    # Convert axis=None to list of *all* axes in data
+    if axis is None:    axis_ = 0 if data.ndim == 1 else list(range(data.ndim))
+    else:               axis_ = axis
+
+    # If <axis> is a list of multiple axes, iterate thru each axis,
+    # recursively calling this function on each axis in list
+    if not np.isscalar(axis_):
+        for ax in axis_:
+            # Only need to sort for final concatenation axis
+            sort_ = sort if ax == axis_[-1] else False
+            data = concatenate_object_array(data,axis=ax,sort=sort_)
+            
+        # Extract single object if we concatenated across all axes (axis=None)            
+        if axis is None: data = data.item()
+        
+        return data
+    
+    # If concatenation axis is already a singleton, we are done, return as-is
+    if data.shape[axis_] == 1: return data    
+                
+                
+    # Reshape data so concatenation axis is axis 0, all other axes are unwrapped to 2d array
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
+    n_series = data.shape[1]
+    
+    data_concat = np.empty((1,n_series),dtype=object)
+    
+    for j in range(n_series):
+        # Concatenate objects across all entries 
+        data_concat[0,j] = np.concatenate([values for values in data[:,j]])
+        # Sort items in concatenated object, if requested
+        if sort: data_concat[0,j].sort()
+    
+    # Reshape data back to original axis order and shape
+    data_concat = undo_standardize_array(data_concat, data_shape, axis=axis, target_axis=0)
+
+    return data_concat
+
+    
 # =============================================================================
 # Other utility functions
 # =============================================================================

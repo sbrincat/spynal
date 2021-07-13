@@ -3,10 +3,15 @@
 spikes  A module for basic analyses of neural spiking activity
 
 FUNCTIONS
-### Rate analysis ###
+### Spike count/rate computation ###
 rate                Wrapper around all rate estimation functions
 bin_rate            Computes spike counts/rates in series of time bins (regular or not)
 density             Computes spike density (smoothed rate) with given kernel
+
+### Rate and inter-spike interval stats ###
+rate_stats          Computes given statistic on spike rate data
+isi                 Computes inter-spike intervals from spike data
+isi_stats           Computes given statistic on inter-spike interval data
 
 ### Preprocessing ###
 times_to_bool       Converts spike timestamps to binary spike trains
@@ -42,17 +47,19 @@ from scipy.stats import poisson, bernoulli, norm, expon
 
 try:
     from .utils import set_random_seed, iarange, unsorted_unique, index_axis, \
-                       standardize_array, undo_standardize_array, setup_sliding_windows
+                       standardize_array, undo_standardize_array, setup_sliding_windows, \
+                       concatenate_object_array, fano, cv, cv2, lv
     from .helpers import _check_window_lengths, _enclose_in_object_array
 # TEMP    
 except ImportError:
     from neural_analysis.utils import set_random_seed, iarange, unsorted_unique, index_axis, \
-                      standardize_array, undo_standardize_array, setup_sliding_windows
+                      standardize_array, undo_standardize_array, setup_sliding_windows, \
+                      concatenate_object_array, fano, cv, cv2, lv
     from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
     
 
 # =============================================================================
-# Spike count/rate computation functions
+# Spike count/rate computation and statistics functions
 # =============================================================================
 def rate(data, method='bin', **kwargs):
     """
@@ -177,6 +184,16 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
     # Are bins "standard"? : equal-width, with start of each bin = end of previous bin
     std_bins = np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1])
     
+    def _histogram_count(data, bins):
+        """ Count spikes in equal-width, disjoint bins """
+        return np.histogram(data,bins)[0]
+
+
+    def _custom_bin_count(data, bins):
+        """ Count spikes in any arbitrary custom bins """
+        return np.asarray([((start <= data) & (data < end)).sum() 
+                        for (start,end) in bins], dtype='uint16')
+                
     # For standard bins, can use histogram algorithm
     if std_bins:
         count_spikes = _histogram_count
@@ -389,6 +406,263 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 
 
 #==============================================================================
+# Rate and inter-spike interval statistics functions
+#==============================================================================
+def rate_stats(rates, stat='Fano', axis=None, **kwargs):
+    """
+    Computes given statistic on spike rates of one or more spike trains
+    
+    Input data must be spike rates, eg as computed using rate()
+    
+    Stats may be along one/more array axes (eg trials) or across entire data array
+       
+    stats = rate_stats(rates, stat='Fano', axis=None, **kwargs)
+           
+    ARGS
+    rates       (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
+    
+    stat        String. Rate statistic to compute. Options:
+                'Fano' :    Fano factor = var(rate)/mean(rate) [default]
+                'CV' :      Coefficient of Variation = SD(rate)/mean(rate)
+                    
+    axis        Int. Array axis to compute rate statistics along (usually corresponding
+                to distict trials/observations). If None [default], computes statistic
+                across entire array (analogous to np.mean/var).
+                
+    **kwargs    Any additional keyword args passed directly to statistic computation function
+          
+    RETURNS
+    stats       Float | (...,1,...) ndarray. Rate statistic(s) computed on data.
+                For vector data or axis=None, a single scalar value is returned.
+                Otherwise, it's an array w/ same shape as <rates>, but with <axis>
+                reduced to length 1.        
+    """
+    data_type = _spike_data_type(rates)
+    assert data_type not in ['timestamp','bool'], \
+        TypeError("Must input spike *rate* data for this function (eg use rate())")
+    
+    stat = stat.lower()
+    
+    if stat == 'fano':  stat_func = fano
+    elif stat == 'cv':  stat_func = cv
+    else:
+        raise ValueError("Unsupported value '%s' for <stat> (should be 'Fano'|'CV')" % stat)
+    
+    return stat_func(rates, axis=axis, **kwargs)
+
+
+def rate_fano(rates, axis=None, **kwargs):
+    """
+    Computes Fano factor (variance/mean) of rates of one or more spike trains    
+    Convenience function that calls rate_stats(stat='Fano'). See there for details.
+    """
+    return rate_stats(rates, stat='Fano', axis=axis, **kwargs)
+
+def rate_cv(rates, axis=None, **kwargs):
+    """
+    Computes Coefficient of Variation (SD/mean) of rates of one/more spike trains    
+    Convenience function that calls rate_stats(stat='CV'). See there for details.
+    """
+    return rate_stats(rates, stat='CV', axis=axis, **kwargs)
+
+
+def isi(data, axis=-1, timepts=None):
+    """
+    Computes inter-spike intervals of one or more spike trains
+    
+    Spiking data can be timestamps or binary (0/1) spike trains
+    
+    ISIs = isi(data,axis=-1,timepts=None)
+
+    ARGS
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of spike timestamps (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
+                -or-
+                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                spike times, for either a single or multiple spike trains.
+
+    axis        Int. Axis of binary data corresponding to time dimension.
+                Not used for spike timestamp data. Default: -1 (last axis of array)           
+
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
+                Not used for spike timestamp data, but MUST be input for binary data.
+                                
+    RETURNS
+    ISIs        (n_spikes-1,) array | object array of (n_spikes-1,) arrays. Time intervals
+                 between each successive pair of spikes in data (in same time units as data).
+                For boolean inputs, output is converted to timestamp-like configuration  
+                with time axis removed.                     
+                For timestamp inputs, same shape as <data> (but with 1 fewer item per array cell)
+                Array cells with <= 1 spike returned as empty arrays.
+                If only a single spike train is input, output is (n_spikes-1,) vector.
+    """
+    # Convert boolean spike train data to timestamps for easier computation    
+    data_type = _spike_data_type(data)
+    if data_type == 'bool':
+        assert timepts is not None, \
+            "For binary spike train data, a time sampling vector <timepts> MUST be given"
+        if axis < 0: axis = data.ndim + axis
+        data = bool_to_times(data,timepts,axis=axis)
+        
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(data,list) or (data.dtype != object)
+        
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: data = _enclose_in_object_array(np.asarray(data))  
+            
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    data_flat = data.flat
+    
+    ISIs = np.empty_like(data,dtype=object)
+    
+    for _ in range(data.size):
+        # Multidim coordinates into data array
+        coords = data_flat.coords
+        
+        # Compute ISIs for given data cell (unit/trial/etc.)
+        ISIs[coords] = np.diff(data[coords])
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        next(data_flat)
+        
+    # If only a single spike train was input, squeeze out singleton axis 0
+    if single_train: ISIs = ISIs.squeeze(axis=0)        
+
+    return ISIs
+
+# Alias isi() as interspike_interval()
+interspike_interval = isi
+
+
+def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
+    """
+    Computes given statistic on inter-spike intervals of one or more spike trains
+   
+    Input data must be inter-spike intervals, eg as computed using isi()
+   
+    Can request data to be pooled along one/more axes (eg trials) before stats computation
+    
+    stats = isi_stats(ISIs,stat='Fano',axis='each',**kwargs)
+
+    ARGS
+    ISIs        (n_spikes,) array-like | object array of (n_spikes,) arrays.
+                List of inter-spike intervals (in s).  Can be given for either a single
+                spike train, or for multiple spike trains (eg different trials,
+                units, etc.) within an object array of any arbitrary shape.
+                
+    stat        String. ISI statistic to compute. Options:
+                'Fano' :    Fano factor = var(ISIs)/mean(ISIs) [default]
+                'CV' :      Coefficient of Variation = SD(ISIs)/mean(ISIs)
+                'CV2' :     Local Coefficient of Variation (Holt 1996 J Neurophys)
+                'LV' :      Local Variation (Shinomoto 2009 PLoS Computational Biology)
+                'burst_fract' : Fraction of spikes that are in bursts (measure of burstiness)
+                
+                CV2 and LV and CV-like measures that reduce influence of changes in 
+                spike rate on the metric by only measuring local variation (between
+                temporally adjacent ISIs). See their specific functions for details.
+                
+    axis        Int | String. Axis of ISI data to pool ISIs along before computing stat.
+                eg, for data that is shape (n_trials,n_units), if you want to compute
+                a stat value for each unit, pooled across all trials, you'd set axis=0.
+                If axis=None, ISIs are pooled across the *entire* data array.
+                If axis='each', stats are computed separately for each spike train in the array.
+                NOTE: For locality-sensitive stats ('CV2','LV'), axis MUST = 'each'.
+                Default: 'each' (note this is the opposite of default for rate_stats) 
+
+    RETURNS
+    stats       Float | array of floats. Given ISI stat, computed on ISI data.
+                Returns as a single scalar if axis=None. Otherwise returns as array of
+                same shape as ISIs, but with <axis> reduced to singleton.
+    """
+    stat = stat.lower()
+    
+    if stat in ['cv2','lv']:
+        assert axis == 'each', \
+            ValueError("For locality-sensitive stats (CV2,LV), no pooling is allowed (axis must = 'each')")
+    
+    if stat == 'fano':          stat_func = fano
+    elif stat == 'cv':          stat_func = cv
+    elif stat == 'cv2':         stat_func = cv2
+    elif stat == 'lv':          stat_func = lv
+    elif stat == 'burst_fract': stat_func = burst_fract
+    else:
+        raise ValueError("Unsupported value '%s' for <stat>." % stat)
+    
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(ISIs,list) or (ISIs.dtype != object)
+        
+    # Enclose in object array to simplify computations; removed at end
+    if single_train:
+        ISIs = _enclose_in_object_array(np.asarray(ISIs))  
+    
+    # Pool (concatenate) along axis if requested (ie not running separately for each spike train)
+    elif axis != 'each':
+        ISIs = concatenate_object_array(ISIs,axis=axis,sort=False)
+        # KLUDGE Function above extracts item from object array. Reenclose it to simplify code.
+        if axis is None: ISIs = _enclose_in_object_array(ISIs)
+        
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    ISIs_flat = ISIs.flat
+    
+    stats = np.empty_like(ISIs,dtype=float)
+    
+    for _ in range(ISIs.size):
+        # Multidim coordinates into data array
+        coords = ISIs_flat.coords
+        
+        # Compute ISI stats for given data cell (unit/trial/etc.)
+        stats[coords] = stat_func(ISIs[coords], **kwargs)
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        next(ISIs_flat)
+        
+    # If only a single spike train was input, squeeze out singleton axis 0
+    if single_train: stats = stats.squeeze(axis=0)        
+
+    return stats
+
+
+def isi_fano(ISIs, axis=None, **kwargs):
+    """ Convenience function that calls isi_stats(stat='Fano'). See there for details. """
+    return isi_stats(ISIs, stat='Fano', axis=axis, **kwargs)
+
+def isi_cv(ISIs, axis=None, **kwargs):
+    """ Convenience function that calls isi_stats(stat='CV'). See there for details. """
+    return isi_stats(ISIs, stat='CV', axis=axis, **kwargs)
+
+def isi_cv2(ISIs, axis=None, **kwargs):
+    """ Convenience function that calls isi_stats(stat='CV2'). See there for details. """
+    return isi_stats(ISIs, stat='CV2', axis=axis, **kwargs)
+
+def isi_lv(ISIs, axis=None, **kwargs):
+    """ Convenience function that calls isi_stats(stat='LV'). See there for details. """
+    return isi_stats(ISIs, stat='LV', axis=axis, **kwargs)
+        
+def isi_burst_fract(ISIs, axis=None, **kwargs):
+    """ Convenience function that calls isi_stats(stat='LV'). See there for details. """
+    return isi_stats(ISIs, stat='burst_fract', axis=axis, **kwargs)
+        
+def burst_fract(ISIs, crit=0.020):
+    """
+    Computes measure of burstiness of ISIs of a spike train = fraction of all
+    ISIs that are within a spike burst (ISI < 20 ms by default)
+    
+    ARGS
+    ISIs    Array-like. List of inter-spike intervals for a single spike train
+    crit    Float. Criterion ISI value (s) to discriminate burst vs non-burst spikes
+            Default: 20 ms
+            
+    RETURNS
+    burst   Float. Fraction of all spikes that are within spike bursts.      
+    """
+    return (ISIs < crit).sum() / ISIs.size
+
+        
+#==============================================================================
 # Plotting functions
 #==============================================================================
 def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
@@ -414,6 +688,18 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     """
     if ax is None: ax = plt.gca()
 
+    def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
+        """ Plots single line of raster plot """
+        # Extract only spike w/in plotting time window
+        if xlim is not None:
+            spike_times = spike_times[(spike_times >= xlim[0]) &
+                                    (spike_times <= xlim[1])]
+
+        y = np.asarray([[y+height/2.0], [y-height/2.0]])
+
+        plt.plot(spike_times[np.newaxis,:]*np.ones((2,1)),
+                y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
+        
     # Plotting multiple spike train (multiple trials or neurons)
     # Plot each spike train as a separate line
     if spike_times.dtype == object:
@@ -434,19 +720,6 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     if ylabel is not None:  plt.ylabel(ylabel)
 
     plt.show()
-
-
-def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
-    """ Plots single line of raster plot """
-    # Extract only spike w/in plotting time window
-    if xlim is not None:
-        spike_times = spike_times[(spike_times >= xlim[0]) &
-                                  (spike_times <= xlim[1])]
-
-    y = np.asarray([[y+height/2.0], [y-height/2.0]])
-
-    plt.plot(spike_times[np.newaxis,:]*np.ones((2,1)),
-             y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
 
 
 def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
@@ -697,7 +970,7 @@ def cut_trials(data, trial_lims, **kwargs):
     trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
                 (in same timebase as data) to use to cut data.
                 
-    **kwargs    Any additional keyword args passed directly to cut_trials_spike_times/bool()                
+    **kwargs    Any additional keyword args passed directly to cut_trials_spike_times/bool()
                 
     RETURNS
     cut_data    (...,n_trials) object array of (n_trial_spikes) arrays | 
@@ -853,7 +1126,7 @@ def realign_data(data, align_times, **kwargs):
     align_times (n_trials,) array-like. New set of times (in old
                 reference frame) to realign spiking data to                
                 
-    **kwargs    Any additional keyword args passed directly to realign_spike_times/bool()                
+    **kwargs    Any additional keyword args passed directly to realign_spike_times/bool()     
                 
     RETURNS
     realigned   Data realigned to given within-trial times.
@@ -1277,9 +1550,6 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
         return data_mua    
 
 
-
-
-
 # =============================================================================
 # Synthetic data generation and testing functions
 # =============================================================================
@@ -1461,21 +1731,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
             trains[i_trial,idxs] = True
 
     return trains, labels
-
-
-# =============================================================================
-# Rate computation helper functions
-# =============================================================================
-def _histogram_count(data, bins):
-    """ Count spikes in equal-width, disjoint bins """
-    return np.histogram(data,bins)[0]
-
-
-def _custom_bin_count(data, bins):
-    """ Count spikes in any arbitrary custom bins """
-    return np.asarray([((start <= data) & (data < end)).sum() 
-                       for (start,end) in bins], dtype='uint16')
-                    
+            
 
 #==============================================================================
 # Other helper functions
