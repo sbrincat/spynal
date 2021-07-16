@@ -16,6 +16,7 @@ info_test_battery       Runs standard battery of tests of information computatio
 
 import os
 import time
+from warnings import warn
 from math import ceil
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,16 +27,18 @@ from .data_fixtures import simulate_dataset
 from ..info import neural_info, neural_info_2groups
 
 
-def test_neural_info(method, test='gain', test_values=None, distribution='normal', n_reps=100,
-                     seed=None, arg_type='label', plot=False, plot_dir=None, **kwargs):
+def test_neural_info(method, test='gain', test_values=None, distribution='normal',
+                     n_reps=100, seed=None, arg_type='label',
+                     do_tests=True, do_plots=False, plot_dir=None, **kwargs):
     """
     Basic testing for functions estimating neural information.
     
     Generates synthetic data, estimates information using given method,
     and compares estimated to expected values.
     
-    info,sd = test_neural_info(method,test='gain',test_values=None,distribution='normal',n_reps=100,
-                               seed=None,arg_type='label',n_reps=100,plot=False,plot_dir=None, **kwargs)
+    info,sd,passed = test_neural_info(method,test='gain',test_values=None,distribution='normal',
+                                      n_reps=100,seed=None,arg_type='label',
+                                      do_tests=True,do_plots=False,plot_dir=None, **kwargs)
                               
     ARGS
     method  String. Name of information function to test:
@@ -72,8 +75,11 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     arg_type String. Which input-argument version of info computing function to use:
             'label'     : Standard version with labels,data arguments [default]
             '2groups'   : Binary contrast version with data1,data2 arguments
-                                    
-    plot    Bool. Set=True to plot test results. Default: False
+                          
+    do_tests Bool. Set=True to evaluate test results against expected values and
+            raise an error if they fail. Default: True
+                                                
+    do_plots Bool. Set=True to plot test results. Default: False
     
     plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
         
@@ -81,11 +87,14 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     
     RETURNS
     info    (n_values,) ndarray. Estimated information for each tested value
+    
     sd      (n_values,) ndarray. Across-run SD of information for each tested value
     
+    passed  Bool. True if all tests produce expected values; otherwise False.
+    
     ACTION
-    Throws an error if any estimated information value is too far from expected value
-    If <plot> is True, also generates a plot summarizing estimated information
+    If do_tests is True, raisers an error if any estimated value is too far from expected value
+    If do_plots is True, also generates a plot summarizing expected vs estimated values    
     """
     # Note: Set random seed once here, not for every random data generation loop below
     if seed is not None: np.random.seed(seed)
@@ -173,7 +182,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     sd      = info.std(axis=1,ddof=0)
     info    = info.mean(axis=1)
     
-    if plot:
+    if do_plots:
         plt.figure()
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')        
         plt.errorbar(test_values, info, sd, marker='o')
@@ -185,30 +194,38 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     # Determine if test actually produced the expected values
     # 'gain' : Test if information increases monotonically with between-group gain
     if test == 'gain':
-        assert (np.diff(info) >= 0).all(), \
-            AssertionError("Information does not increase monotonically with between-condition mean difference")
+        evals = [((np.diff(info) >= 0).all(),
+                    "Information does not increase monotonically with between-condition mean difference")]
 
     # 'spread' : Test if information decreases monotonically with within-group spread
     elif test in ['spread','spreads','sd']:
-        assert (np.diff(info) <= 0).all(), \
-            AssertionError("Information does not decrease monotonically with within-condition spread increase")
+        evals = [((np.diff(info) <= 0).all(),
+                    "Information does not decrease monotonically with within-condition spread increase")]
                                 
     # 'n' : Test if information is ~ same for all values of n (unbiased by n)      
     elif test in ['n','n_trials']:
-        assert info.ptp() < sd.max(), \
-            AssertionError("Information has larger than expected range across n's (likely biased by n)")
+        evals = [(info.ptp() < sd.max(),
+                    "Information has larger than expected range across n's (likely biased by n)")]
         
     # 'bias': Test if information is not > baseline if gain = 0, for varying n
     elif test == 'bias':
-        print(baseline)
-        assert ((info - baseline) < sd).all(), \
-            AssertionError("Information is above baseline for no mean difference between conditions")
+        evals = [(((info - baseline) < sd).all(),
+                    "Information is above baseline for no mean difference between conditions")]
          
-    return info, sd
+    passed = True
+    for cond,message in evals:
+        if not cond:    passed = False
+        
+        # Raise an error for test fails if do_tests is True
+        if do_tests:    assert cond, AssertionError(message)
+        # Just issue a warning for test fails if do_tests is False
+        elif not cond:  warn(message)
+                 
+    return info, sd, passed
 
 
 def info_test_battery(methods=['pev','dprime','auroc','mutual_information','decode'], 
-                      tests=['gain','spread','n','bias'], **kwargs):
+                      tests=['gain','spread','n','bias'], do_tests=True, **kwargs):
     """ 
     Runs a battery of given tests on given neural information computation methods
     
@@ -224,10 +241,14 @@ def info_test_battery(methods=['pev','dprime','auroc','mutual_information','deco
                 (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
                 Default: ['gain','n','bias'] (all supported tests)
                 
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+                                
     kwargs      Any other kwargs passed directly to test_neural_info()
     
     ACTION
-    Throws an error if any estimated information value for any (method,test) is too far from expected value    
+    Raises an error or warning if any estimated value for any (method,test)
+    is too far from expected value
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -235,11 +256,16 @@ def info_test_battery(methods=['pev','dprime','auroc','mutual_information','deco
     for test in tests:
         for method in methods:
             print("Running %s test on %s" % (test,method))
-            # Skip tests expected to fail due to properties of given info measures (ie ones that are biased/affected by n)
-            if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']): continue
+            # Skip tests expected to fail due to properties of given info measures
+            # (ie ones that are biased/affected by n)
+            if (test in ['n','n_trials','bias']) and (method in ['mutual_information','mutual_info']):
+                do_tests_ = False
+            else:
+                do_tests_ = do_tests
             
-            test_neural_info(method, test=test, **kwargs)
-            print('PASSED')
+            _,_,passed = test_neural_info(method, test=test, do_tests=do_tests_, **kwargs)
+            
+            print('%s' % 'PASSED' if passed else 'FAILED')
             # If saving plots to file, let's not leave them all open
             if 'plot_dir' in kwargs: plt.close('all')
             

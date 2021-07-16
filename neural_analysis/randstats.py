@@ -26,7 +26,15 @@ one_way_permutation_test        Permutation 1-way multi-level test
 two_way_permutation_test        Permutation 2-way multi-level/multi-factor test
 
 ### Confidence intervals ###
-bootstrap_confints              Bootstrap confidence intervals for any one-sample stat
+one_sample_confints             Bootstrap confidence intervals for any one-sample stat
+paired_sample_confints          Bootstrap confidence intervals for any paired-sample stat
+two_sample_confints             Bootstrap confidence intervals for any two-sample stat
+
+### Random-sample generators ###
+permutations        Generates random permutations (resampling w/o replacement)
+bootstraps          Generates random bootstrap samples (resampling w/ replacement)
+signs               Generates random binary variables (eg for sign tests)
+jackknifes          Generates jackknife/leave-one-out samples (exclude each observation in turn)
 
 ### Functions to compute frequently-used stats ###
 one_sample_tstat                Mass univariate 1-sample t-statistic
@@ -34,12 +42,6 @@ paired_tstat                    Mass univariate paired-sample t-statistic
 two_sample_tstat                Mass univariate 2-sample t-statistic
 one_way_fstat                   Mass univariate 1-way F-statistic
 two_way_fstat                   Mass univariate 2-way (with interaction) F-statistic
-
-### Random-sample generators ###
-permutations        Generates random permutations (resampling w/o replacement)
-bootstraps          Generates random bootstrap samples (resampling w/ replacement)
-signs               Generates random binary variables (eg for sign tests)
-jackknifes          Generates jackknife/leave-one-out samples (exclude each observation in turn)
 
 Created on Tue Jul 30 16:28:12 2019
 
@@ -631,8 +633,11 @@ def two_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     Wrapper around functions for specific two-sample tests. See those for details.
     
     ARGS
-    data        (...,n,...) ndarray. Data to run test on.  Arbitrary shape.
-
+    data1       (...,n1,...) ndarray. Data from one group to compare.
+    data2       (...,n2,...) ndarray. Data from a second group to compare.
+                Need not have the same n as data1, but all other dim's must be
+                same size/shape
+                
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
                 
@@ -921,11 +926,17 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
         data1 = np.moveaxis(data1.copy(), axis, 0)
         data2 = np.moveaxis(data2.copy(), axis, 0)
     
+    assert (data1.ndim == data2.ndim), \
+        "data1 & 2 must have same shape except for observation axis (<axis>)"
+    if data1.ndim > 1:
+        assert (data1.shape[1:] == data2.shape[1:]), \
+            "data1 & 2 must have same shape except for observation axis (<axis>)"
+        
     n1 = data1.shape[0]
     n2 = data2.shape[0]
 
     # Compute statistic of interest on actual observed data
-    stat_obs = stat_func(data1,data2, **kwargs)
+    stat_obs = stat_func(data1, data2, **kwargs)
 
     # Create generators with n_resamples-1 random resamplings with replacement
     # of ints 0:n1-1 and 0:n2-1
@@ -1038,8 +1049,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     with the same n's as in the actual observed data.
 
     ARGS
-    data        (...,n,...) ndarray. Data to run test on.
-                Axis 0 should correspond to distinct observations/trials.
+    data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
 
     labels      (n,) array-like. Group labels for each observation (trial),
                 identifying which group/factor level each observation belongs to.
@@ -1176,8 +1186,7 @@ def two_way_test(data, labels, axis=0, method='permutation', **kwargs):
     Wrapper around functions for specific two-way tests. See those for details.
 
     ARGS
-    data        (...,n,...) ndarray. Data to run test on.
-                Axis 0 should correspond to distinct observations/trials.
+    data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
 
     labels      (n,n_terms=2|3) array-like. Group labels for each observation,
                 identifying which group/factor level each observation belongs to,
@@ -1227,8 +1236,7 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     with the same n's as in the actual observed data.
 
     ARGS
-    data        (...,n,...) ndarray. Data to run test on.
-                Axis 0 should correspond to distinct observations/trials.
+    data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
 
     labels      (n,n_terms=2|3) array-like. Group labels for each observation,
                 identifying which group/factor level each observation belongs to,
@@ -1361,15 +1369,14 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 # =============================================================================
 # Confidence intervals
 # =============================================================================
-def bootstrap_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000, 
-                       seed=None, return_stats=False, return_sorted=True, **kwargs):
+def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000, 
+                        seed=None, return_stats=False, return_sorted=True, **kwargs):
     """
     Mass univariate bootstrap confidence intervals of any arbitrary 1-sample stat 
     (eg mean).  Analogous to SEM/parametric confidence intervals.
         
     ARGS
-    data        (...,n,...) ndarray. Data to run test on.  Axis 0 should correspond
-                to distinct observations/trials.
+    data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
@@ -1404,16 +1411,16 @@ def bootstrap_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=1000
     
     RETURNS
     confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
-                except for axis 0 reduced to length 2 = [lower,upper] confidence interval.
+                except for <axis> reduced to length 2 = [lower,upper] confidence interval.
 
     - Following variables are only returned if return_stats is True -
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
-                Same size as data, but axis 0 has length 1.        
+                Same size as data, but <axis> reduced to length 1.        
 
     stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but axis 0 has length n_resamples.        
-    """    
+                Same size as data, but <axis> now has length n_resamples.        
+    """
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_sample_stat(stat)
     
@@ -1460,7 +1467,300 @@ def bootstrap_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=1000
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
         
+   
+def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_resamples=10000,
+                           seed=None, return_stats=False, return_sorted=True, **kwargs):
+    """
+    Mass univariate bootstrap confidence intervals of any arbitrary paired-sample stat 
+    (eg mean difference).  Analogous to SEM/parametric confidence intervals.
+        
+    ARGS
+    data1       (...,n,...) ndarray. Data from one group to compare.
+    data2       (...,n,...) ndarray. Data from a second group to compare.
+                Must have same number of observations (trials) n as data1, but 
+                otherwise arbitrary shape.
+
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+                
+    stat        String | Callable. String specifier for statistic to resample:
+                'mean'  : mean difference between paired observations [default]
+
+                -or- Custom function to generate resampled statistic of interest.
+                Should take single array argument (data) with <axis> corresponding
+                to trials/observations and return a scalar value for each independent 
+                data series.
+
+    confint     Float. Confidence interval to compute, expressed as decimal value in range 0-1.
+                Typical values are 0.68 (to approximate SEM), 0.95 (95% confint), and 0.99 (99%)
+                Default: 0.95 (95% confidence interval)
+
+    n_resamples Int. Number of random resamplings to perform for test
+                (should usually be >= 10000 if feasible). Default: 10000
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+
+    return_stats Bool. If False, only returns confidence intervals. If True, returns confints,
+                statistic computed on observed data, and full distribution of resample statistic.
+                Default: False
+    
+    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns 
+                stat_resmp unsorted (ordered by resample number), which is useful if you want 
+                to keep each resampling for all mass-univariate data series's together.
+                
+    - Any additional kwargs passed directly to stat function -
+    
+    RETURNS
+    confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
+                except for <axis> reduced to length 2 = [lower,upper] confidence interval.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as data, but <axis> reduced to length 1.        
+
+    stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data, but <axis> now has length n_resamples.        
+    """ 
+    return one_sample_confints(data1 - data2, axis=axis, stat=stat, confint=confint,
+                               n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                               return_sorted=return_sorted, **kwargs)    
+     
+
+def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_resamples=10000, 
+                        seed=None, return_stats=False, return_sorted=True, **kwargs):
+    """
+    Mass univariate bootstrap confidence intervals of any arbitrary 2-sample stat 
+    (eg difference in group means).  Analogous to SEM/parametric confidence intervals.
+        
+    ARGS
+    data1       (...,n1,...) ndarray. Data from one group to compare.
+    data2       (...,n2,...) ndarray. Data from a second group to compare.
+                Need not have the same n as data1, but all other dim's must be
+                same size/shape
+                
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+                
+    stat        String | Callable. String specifier for statistic to resample:
+                'meandiff'  : difference between group means [default]
+
+                -or- Custom function to generate resampled statistic of interest.
+                Should take single array argument (data) with <axis> corresponding
+                to trials/observations and return a scalar value for each independent 
+                data series.
+
+    confint     Float. Confidence interval to compute, expressed as decimal value in range 0-1.
+                Typical values are 0.68 (to approximate SEM), 0.95 (95% confint), and 0.99 (99%)
+                Default: 0.95 (95% confidence interval)
+
+    n_resamples Int. Number of random resamplings to perform for test
+                (should usually be >= 10000 if feasible). Default: 10000
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+
+    return_stats Bool. If False, only returns confidence intervals. If True, returns confints,
+                statistic computed on observed data, and full distribution of resample statistic.
+                Default: False
+    
+    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns 
+                stat_resmp unsorted (ordered by resample number), which is useful if you want 
+                to keep each resampling for all mass-univariate data series's together.
+                
+    - Any additional kwargs passed directly to stat function -
+    
+    RETURNS
+    confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
+                except for <axis> reduced to length 2 = [lower,upper] confidence interval.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as data, but <axis> reduced to length 1.        
+
+    stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data, but <axis> now has length n_resamples.        
+    """
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_two_sample_stat(stat)
+    
+    # Indexes into set of bootstrap resamples corresponding to given confint
+    conf_indexes = confint_to_indexes(confint, n_resamples)
+
+    # Reshape data so axis 0 is observations
+    if axis != 0:
+        data1 = np.moveaxis(data1, axis, 0)
+        data2 = np.moveaxis(data2, axis, 0)
+
+    assert (data1.ndim == data2.ndim), \
+        "data1 & 2 must have same shape except for observation axis (<axis>)"
+    if data1.ndim > 1:
+        assert (data1.shape[1:] == data2.shape[1:]), \
+            "data1 & 2 must have same shape except for observation axis (<axis>)"
+
+    n1 = data1.shape[0]
+    n2 = data2.shape[0]
+        
+    # Compute statistic of interest on actual observed data
+    if return_stats: stat_obs = stat_func(data1, data2, **kwargs)    
+
+    # Create generators with n_resamples-1 random resamplings with replacement
+    # of ints 0:n1-1 and 0:n2-1
+    # Note: Seed random number generator only *once* before generating both random samples
+    if seed is not None: set_random_seed(seed)    
+    resamples1 = bootstraps(n1,n_resamples-1)
+    resamples2 = bootstraps(n2,n_resamples-1)
+
+    # Compute statistic under <n_resamples> random resamplings
+    stat_resmp = np.empty((n_resamples,*data1.shape[1:]))
+    for i_resmp,(resample1,resample2) in enumerate(zip(resamples1,resamples2)):
+        # Compute statistic on resampled data
+        stat_resmp[i_resmp,...] = stat_func(data1[resample1,...], data2[resample2,...], **kwargs)
+       
+    if return_stats and not return_sorted:
+        # Sort copy of stat_resmp, to return original unsorted version
+        stat_resmp_sorted = stat_resmp.sort(axis=0)
+        # Extract lower,upper confints from resampled and sorted stats
+        confints = stat_resmp_sorted[conf_indexes,...]
+        
+    else:
+        stat_resmp.sort(axis=0)     # Sort resample stats in place
+        # Extract lower,upper confints from resampled and sorted stats
+        confints = stat_resmp[conf_indexes,...]
+        
+    # Reshape output so observation axis is in appropriate location
+    if axis != 0:
+        confints = np.moveaxis(confints, 0, axis)
+        if return_stats:
+            stat_obs    = np.moveaxis(stat_obs, 0, axis)
+            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
+        
+    # For vector-valued data, extract value from scalar array -> float for output
+    if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
+                
+    if return_stats:    return confints, stat_obs, stat_resmp
+    else:               return confints
+        
                                                   
+# =============================================================================
+# Random sample generators
+# =============================================================================
+def permutations(n, n_resamples=9999, seed=None):
+    """
+    Yields generator with a set of <n_resamples> random permutations of integers
+    0:n-1, as would be needed for permutation/randomization tests
+
+    resamples = permutations(n,n_resamples=9999,seed=None)
+    
+    ARGS
+    n           Int. Number of items to randomly resample from.
+                Will usually correspond to number of observations/trials
+
+    n_resamples Int. Number of independent resamples to generate.
+                Default: 9999 (appropriate number for test w/ 10,000 samples)
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+                
+    YIELDS
+    resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
+                contains a distinct random permutation of integers 0:n-1
+    """
+    if seed is not None: set_random_seed(seed)
+    
+    for _ in range(n_resamples):
+        yield np.random.permutation(n)
+
+
+def bootstraps(n, n_resamples=9999, seed=None):
+    """
+    Yields generator with a set of <n_resamples> random resamplings with
+    replacement of integers 0:n-1, as would be needed for bootstrap tests or
+    confidence intervals
+
+    resamples = bootstraps(n,n_resamples=9999,seed=None)
+    
+    ARGS
+    n           Int. Number of items to randomly resample from.
+                Will usually correspond to number of observations/trials
+
+    n_resamples Int. Number of independent resamples to generate.
+                Default: 9999 (appropriate number for test w/ 10,000 samples)
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+                
+    YIELDS
+    resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
+                contains a distinct random resampling with replacemnt from
+                integers 0:n-1
+    """
+    if seed is not None: set_random_seed(seed)
+    
+    for _ in range(n_resamples):
+        yield np.random.randint(n, size=(n,))
+
+
+def signs(n, n_resamples=9999, seed=None):
+    """
+    Yields generator with a set of <n_resamples> random Bernoulli(p=0.5)
+    variables (ie binary 0/1 w/ probability of 0.5), each of length <n>,
+    as would be needed to set the signs of stats in a sign test.
+
+    resamples = signs(n,n_resamples=9999,seed=None)
+    
+    ARGS
+    n           Int. Number of items to randomly resample from.
+                Will usually correspond to number of observations/trials
+
+    n_resamples Int. Number of independent resamples to generate.
+                Default: 9999 (appropriate number for test w/ 10,000 samples)
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+                
+    YIELDS
+    resamples   (n_resamples,) generator of (n,) vector of bool. Each iteration
+                contains a distinct random resampling of n Bernoulli binary RVs
+    """
+    if seed is not None: set_random_seed(seed)
+    
+    for _ in range(n_resamples):
+        yield np.random.binomial(1,0.5, size=(n,)).astype(bool)
+
+
+def jackknifes(n, n_resamples=None, seed=None):
+    """
+    Yields generator with a set of n_resamples = n boolean variables, 
+    each of length n, and each of which excludes one observation/trial in turn, 
+    as would be needed for a jackknife or leave-one-out test.
+
+    resamples = jackknifes(n,n_resamples=n,seed=None)
+    
+    ARGS
+    n           Int. Number of items to randomly resample from.
+                Should equal number of observations/trials
+
+    n_resamples Automatically set=n here. Only included for consistent interface.
+    seed        Not used. Only included for consistent interface with other functions.
+                
+    YIELDS
+    resamples   (n,) generator of (n,) vector of bool. Each iteration is all 1's
+                except for a single 0, the observation (trial) excluded in that
+                iteration. For the ith resample, the ith trial is excluded.
+    """
+    assert (n_resamples is None) or (n_resamples == n), \
+        ValueError("For jackknife/leave-one-out, n_resamples MUST = n")
+        
+    if seed is not None: set_random_seed(seed)
+    
+    trials = np.arange(n)    
+    for trial in range(n):
+        yield trials != trial
+         
+ 
 #==============================================================================
 # Functions to compute statistics
 #==============================================================================
@@ -1743,123 +2043,6 @@ def two_way_fstat(data, labels, axis=0, groups=None):
 
     return  (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
 
-
-# =============================================================================
-# Random sample generators
-# =============================================================================
-def permutations(n, n_resamples=9999, seed=None):
-    """
-    Yields generator with a set of <n_resamples> random permutations of integers
-    0:n-1, as would be needed for permutation/randomization tests
-
-    resamples = permutations(n,n_resamples=9999,seed=None)
-    
-    ARGS
-    n           Int. Number of items to randomly resample from.
-                Will usually correspond to number of observations/trials
-
-    n_resamples Int. Number of independent resamples to generate.
-                Default: 9999 (appropriate number for test w/ 10,000 samples)
-
-    seed        Int. Random generator seed for repeatable results.
-                Set=None [default] for unseeded random numbers.
-                
-    YIELDS
-    resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
-                contains a distinct random permutation of integers 0:n-1
-    """
-    if seed is not None: set_random_seed(seed)
-    
-    for _ in range(n_resamples):
-        yield np.random.permutation(n)
-
-
-def bootstraps(n, n_resamples=9999, seed=None):
-    """
-    Yields generator with a set of <n_resamples> random resamplings with
-    replacement of integers 0:n-1, as would be needed for bootstrap tests or
-    confidence intervals
-
-    resamples = bootstraps(n,n_resamples=9999,seed=None)
-    
-    ARGS
-    n           Int. Number of items to randomly resample from.
-                Will usually correspond to number of observations/trials
-
-    n_resamples Int. Number of independent resamples to generate.
-                Default: 9999 (appropriate number for test w/ 10,000 samples)
-
-    seed        Int. Random generator seed for repeatable results.
-                Set=None [default] for unseeded random numbers.
-                
-    YIELDS
-    resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
-                contains a distinct random resampling with replacemnt from
-                integers 0:n-1
-    """
-    if seed is not None: set_random_seed(seed)
-    
-    for _ in range(n_resamples):
-        yield np.random.randint(n, size=(n,))
-
-
-def signs(n, n_resamples=9999, seed=None):
-    """
-    Yields generator with a set of <n_resamples> random Bernoulli(p=0.5)
-    variables (ie binary 0/1 w/ probability of 0.5), each of length <n>,
-    as would be needed to set the signs of stats in a sign test.
-
-    resamples = signs(n,n_resamples=9999,seed=None)
-    
-    ARGS
-    n           Int. Number of items to randomly resample from.
-                Will usually correspond to number of observations/trials
-
-    n_resamples Int. Number of independent resamples to generate.
-                Default: 9999 (appropriate number for test w/ 10,000 samples)
-
-    seed        Int. Random generator seed for repeatable results.
-                Set=None [default] for unseeded random numbers.
-                
-    YIELDS
-    resamples   (n_resamples,) generator of (n,) vector of bool. Each iteration
-                contains a distinct random resampling of n Bernoulli binary RVs
-    """
-    if seed is not None: set_random_seed(seed)
-    
-    for _ in range(n_resamples):
-        yield np.random.binomial(1,0.5, size=(n,)).astype(bool)
-
-
-def jackknifes(n, n_resamples=None, seed=None):
-    """
-    Yields generator with a set of n_resamples = n boolean variables, 
-    each of length n, and each of which excludes one observation/trial in turn, 
-    as would be needed for a jackknife or leave-one-out test.
-
-    resamples = jackknifes(n,n_resamples=n,seed=None)
-    
-    ARGS
-    n           Int. Number of items to randomly resample from.
-                Should equal number of observations/trials
-
-    n_resamples Automatically set=n here. Only included for consistent interface.
-    seed        Not used. Only included for consistent interface with other functions.
-                
-    YIELDS
-    resamples   (n,) generator of (n,) vector of bool. Each iteration is all 1's
-                except for a single 0, the observation (trial) excluded in that
-                iteration. For the ith resample, the ith trial is excluded.
-    """
-    assert (n_resamples is None) or (n_resamples == n), \
-        ValueError("For jackknife/leave-one-out, n_resamples MUST = n")
-        
-    if seed is not None: set_random_seed(seed)
-    
-    trials = np.arange(n)    
-    for trial in range(n):
-        yield trials != trial
-         
  
 #==============================================================================
 # Utility functions
@@ -1963,7 +2146,7 @@ def _str_to_two_sample_stat(stat):
 
     if callable(stat):                  return stat
     elif stat in ['t','tstat','t1']:    return two_sample_tstat
-    elif stat == ['meandiff','mean']:
+    elif stat in ['meandiff','mean']:
         return lambda data1,data2: data1.mean(axis=0,keepdims=True) - data2.mean(axis=0,keepdims=True)
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)

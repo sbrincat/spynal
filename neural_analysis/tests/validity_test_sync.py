@@ -225,7 +225,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
                 
     freqs_transformed   = np.asarray([freq_transform(f) for f in freqs])
                              
-    # For frequency test, find frequency with maximal power for each test
+    # For frequency test, find frequency with maximal synchrony for each test
     if test in ['frequency','freq']:
         idxs = np.argmax(marginal_syncs,axis=0)
         peak_freqs = freqs[idxs] if spec_method != 'bandfilter' else idxs
@@ -347,7 +347,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
         evals = [((np.diff(test_freq_syncs) > 0).all(),
                     "Estimated synchrony strength does not increase monotonically with simulated synchrony")]
         
-    # 'frequency' : check if frequency of peak power matches simulated target frequency
+    # 'frequency' : check if frequency of peak synchrony matches simulated target frequency
     elif test in ['frequency','freq']:
         evals = [((np.diff(peak_freqs) > 0).all(),
                     "Estimated peak frequency does not increase monotonically with expected frequency")]
@@ -367,7 +367,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
                  ((circ_diff(test_freq_phases) > 0).all(),
                     "Estimated synchrony phase does not increase monotonically with simulated reslative phase")]
 
-    # 'n' : Test if power is ~ same for all values of n (unbiased by n)      
+    # 'n' : Test if synchrony is ~ same for all values of n (unbiased by n)      
     elif test in ['n','n_trials']:
         evals = [(test_freq_syncs.ptp() < 0.1,
                     "Estimated synchrony has larger than expected range across n's (likely biased by n)")]
