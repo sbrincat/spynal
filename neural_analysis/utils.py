@@ -739,8 +739,12 @@ def iarange(start=0, stop=0, step=1):
     
     Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)    
     """
-    if isinstance(step,int):    return np.arange(start,stop+1,step)
-    else:                       return np.arange(start,stop+1e-12,step)
+    # Offset to get final value in sequence is 1 for int-valued step, small float otherwise
+    offset = 1 if isinstance(step,int) else 1e-12
+    # Make offset negative for a negative step
+    if step < 0: offset = -offset
+    
+    return np.arange(start,stop+offset,step)
 
 
 def unsorted_unique(x, **kwargs):
@@ -808,9 +812,16 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
     #  but not for continuous wins
     if exclude_end is None:  exclude_end = True if force_int else False
 
+    if exclude_end:
+        # Determine if window params (and thus windows) are integer or float-valued
+        params = np.concatenate((lims,width,step))
+        is_int = np.allclose(np.round(params), params)
+        # Set window-end offset appropriately--1 for int, otherwise small float value
+        offset = 1 if is_int else 1e-12
+        
     # Standard sliding window generation
     if reference is None:
-        if exclude_end: win_starts = iarange(lims[0], lims[-1]-width+1, step)
+        if exclude_end: win_starts = iarange(lims[0], lims[-1]-width+offset, step)
         else:           win_starts = iarange(lims[0], lims[-1]-width, step)
 
     # Origin-anchored sliding window generation
@@ -820,15 +831,15 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
         if exclude_end:
             # Series of windows going backwards from ref point (flipped to proper order),
             # followed by Series of windows going forwards from ref point
-            win_starts = np.concatenate(np.flip(iarange(reference, lims[0], -step)),
-                                        iarange(reference+step, lims[-1]-width+1, step))
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -step)),
+                                         iarange(reference+step, lims[-1]-width+offset, step)))
 
         else:
-            win_starts = np.concatenate(np.flip(iarange(reference, lims[0], -step)),
-                                        iarange(reference+step, lims[-1]-width, step))
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -step)),
+                                         iarange(reference+step, lims[-1]-width, step)))
 
     # Set end of each window
-    if exclude_end: win_ends = win_starts + width - 1
+    if exclude_end: win_ends = win_starts + width - offset
     else:           win_ends = win_starts + width
 
     # Round window starts,ends to nearest integer
