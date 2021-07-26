@@ -312,15 +312,9 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     stat_func    = _str_to_one_sample_stat(stat)    # Statistic (includes default)
     compare_func = _tail_to_compare(tail)           # Tail-specific comparator
 
-    # Copy data variable to avoid changing values in caller
-    if (axis != 0) or (mu != 0): data = data.copy()
-
     # Reshape data so axis 0 is observations
     if axis != 0: data = np.moveaxis(data, axis, 0)
     n = data.shape[0]
-
-    # Subtract hypothetical mean(s) 'mu' from data to center them there
-    if mu != 0: data -= mu
 
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data, **kwargs)
@@ -335,12 +329,14 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
             # Compute statistic on resampled data
             stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)                      
 
-        # Subtract observed statistic from distribution of resampled statistics
+        # Center each resampled statistic on their mean to approximate null disttribution
+        # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
+        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)        
         
         # p value = proportion of bootstrap-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs - mu, stat_resmp, 0, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
@@ -355,7 +351,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
             stat_resmp -= stat_obs
                         
             # Compute statistic on resampled data and tally values passing criterion
-            count += compare_func(stat_obs, stat_resmp, **kwargs)
+            count += compare_func(stat_obs - mu, stat_resmp, **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
@@ -366,6 +362,8 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
         if return_stats:
             stat_obs    = np.moveaxis(stat_obs, 0, axis)
             stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
+        # TODO Is it really necessary to reshape data to avoid changing in caller???
+        data = np.moveaxis(data, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -923,14 +921,14 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     # Reshape data so axis 0 is observations
     if axis != 0: 
-        data1 = np.moveaxis(data1.copy(), axis, 0)
-        data2 = np.moveaxis(data2.copy(), axis, 0)
+        data1 = np.moveaxis(data1, axis, 0)
+        data2 = np.moveaxis(data2, axis, 0)
     
     assert (data1.ndim == data2.ndim), \
-        "data1 & 2 must have same shape except for observation axis (<axis>)"
+        "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
     if data1.ndim > 1:
         assert (data1.shape[1:] == data2.shape[1:]), \
-            "data1 & 2 must have same shape except for observation axis (<axis>)"
+            "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
         
     n1 = data1.shape[0]
     n2 = data2.shape[0]
@@ -953,9 +951,11 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
             stat_resmp[i_resmp,...] = stat_func(data1[resample1,...],
                                                 data2[resample2,...], **kwargs)
 
-        # Subtract observed statistic from distribution of resampled statistics
+        # Center each resampled statistic on their mean to approximate null disttribution
+        # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
-
+        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)
+        
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
@@ -984,6 +984,10 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
         if return_stats:
             stat_obs    = np.moveaxis(stat_obs, 0, axis)
             stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
+
+        # TODO Is it really necessary to reshape data to avoid changing in caller???
+        data1 = np.moveaxis(data1, 0, axis)
+        data2 = np.moveaxis(data2, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -1331,7 +1335,6 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        # DEL stat_resmp = np.empty((n_resamples-1,*data.shape[1:],n_terms))
         stat_resmp = np.empty((n_terms, *data.shape[1:],n_resamples-1))
         for i_resmp,resample in enumerate(resamples):
             # Compute statistic on data and resampled label rows
@@ -1942,13 +1945,6 @@ def one_way_fstat(data, labels, axis=0, groups=None):
     df_error    = n-1 - df_groups   # Error degrees of freedom
 
     return  (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
-
-    # DELETE
-    # Reformat data for scipy function -- list with each group data,
-    # observation axis=0
-    # return f_oneway(*[(data.compress(labels == group,axis=axis)
-    #                        .swapaxes(0,axis))
-    #                   for group in groups])[0].swapaxes(0,axis)
 
 
 def two_way_fstat(data, labels, axis=0, groups=None):

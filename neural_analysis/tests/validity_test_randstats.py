@@ -18,7 +18,6 @@ confint_test_battery Runs standard battery of tests of confidence interval funct
 
 import os
 import time
-from warnings import warn
 from math import ceil
 import numpy as np
 import matplotlib.pyplot as plt
@@ -93,7 +92,8 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     means   {'variable' : (n_values,) ndarray}. Mean results (across independent test runs)
             of variables output from randomization tests for each tested value. Keys:
             'signif'        Binary signficance decision (at criterion <alpha>)
-            'p'             p values (negative log-transformed -log10(p) to increase with effect size)
+            'p'             p values
+            'log_p'         p values negative log-transformed -log10(p) to increase with effect size
             'stat_obs'      Observed evaluatation statistic values
             'stat_resmp'    Mean resampled statistic values (across all resamples)
             
@@ -159,6 +159,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     n_terms = 3 if stat == 'two_way' else 1
     results = dict(signif = np.empty((n_terms,len(test_values),n_reps),dtype=bool),
                    p = np.empty((n_terms,len(test_values),n_reps)),
+                   log_p = np.empty((n_terms,len(test_values),n_reps)),
                    stat_obs = np.empty((n_terms,len(test_values),n_reps)),
                    stat_resmp = np.empty((n_terms,len(test_values),n_reps)))
         
@@ -187,18 +188,19 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
                 
                                                
             # Determine which values are significant (p < alpha criterion)
-            results['signif'][:,i_value,i_rep] = p < alpha
+            results['signif'][:,i_value,i_rep]      = p < alpha
+            results['p'][:,i_value,i_rep]           = p
             # Negative log-transform p values so increasing = "better" and less compressed
-            results['p'][:,i_value,i_rep] = -np.log10(p)
-            results['stat_obs'][:,i_value,i_rep] = stat_obs
+            results['log_p'][:,i_value,i_rep]       = -np.log10(p)
+            results['stat_obs'][:,i_value,i_rep]    = stat_obs
             # Compute mean resampled stat value across all resamples
-            results['stat_resmp'][:,i_value,i_rep] = stat_resmp.mean(axis=resmp_axis)
+            results['stat_resmp'][:,i_value,i_rep]  = stat_resmp.mean(axis=resmp_axis)
                                  
                                       
     # Compute mean and std dev across different reps of simulation            
     means   = {variable : values.mean(axis=-1) for variable,values in results.items()}
     sds     = {variable : values.std(axis=-1,ddof=0) for variable,values in results.items()}
-    variables = list(means.keys())
+    variables = ['signif','log_p','stat_obs','stat_resmp']
         
     if do_plots:
         plt.figure()
@@ -213,7 +215,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
                 plt.errorbar(test_values, mean, sd, marker='o')
                 if i_term == n_terms-1:
                     plt.xlabel('n' if test == 'bias' else test)
-                    plt.ylabel('-log10(p)' if variable == 'p' else variable)
+                    plt.ylabel('-log10(p)' if variable == 'log_p' else variable)
                 if i_term == 0: plt.title(variable)
                 if stat == 'two_way': plt.ylabel("Term %d" % i_term)
             
@@ -227,7 +229,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     if test == 'gain':
         evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
                     "Significance does not increase monotonically with between-condition mean difference"),
-                 ((np.diff(means['p'][term,:]) >= 0).all(),
+                 ((np.diff(means['log_p'][term,:]) >= 0).all(),
                     "p values do not decrease monotonically with between-condition mean difference"),
                  ((np.diff(means['stat_obs'][term,:]) > 0).all(),
                     "Statistic does not increase monotonically with between-condition mean difference"),
@@ -238,7 +240,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     elif test in ['spread','spreads','sd']:
         evals = [((np.diff(means['signif'][term,:]) > 0).all(),
                     "Significance does not decrease monotonically with within-condition spread increase"),
-                 ((np.diff(means['p'][term,:]) > 0).all(),
+                 ((np.diff(means['log_p'][term,:]) >= 0).all(),
                     "p values do not increase monotonically with within-condition spread increase"),
                  ((np.diff(means['stat_obs'][term,:]) < 0).all(),
                     "Statistic does not decrease monotonically with within-condition spread increase"),
@@ -249,7 +251,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     elif test in ['n','n_trials']:
         evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
                     "Significance does not increase monotonically with n"),
-                 ((np.diff(means['p'][term,:]) <= 0).all(),
+                 ((np.diff(means['log_p'][term,:]) >= 0).all(),
                     "p values do not decrease monotonically with n"),
                  ((np.diff(means['stat_obs'][term,:]) >= 0).all(),
                     "Statistic does not decrease monotonically with n"),
@@ -258,21 +260,22 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         
     # 'bias': Test that statistic is not > 0 and p value ~ alpha if gain = 0, for varying n
     elif test == 'bias':
-        evals = [(alpha/2 < 10**(-means['p'][term,:].mean())< 2*alpha,
-                    "Significance is different from expected pct when no mean difference between conditions"),
+        evals = [(((np.abs(means['signif'][term,:].mean()) - alpha) < sds['signif'][term,:]).all(),
+                    "Significance different from expected pct (%.1f) when no mean diff between conds" % alpha),
+                 (((np.abs(means['p'][term,:].mean()) - 0.5) < sds['p'][term,:]).all(),
+                    "p values are different from expected value (0.5) when no mean difference between conditions"),
                  ((np.abs(means['stat_obs'][term,:]) < sds['stat_obs'][term,:]).all(),
                     "Statistic is above 0 when no mean difference between conditions")]
-         
+
     passed = True
     for cond,message in evals:
         if not cond:    passed = False
-        if not cond: print(stat, test, method, "FAIL") # TEMP
         
         # Raise an error for test fails if do_tests is True
         if do_tests:    assert cond, AssertionError(message)
         # Just issue a warning for test fails if do_tests is False
-        elif not cond:  warn(message)
-            
+        elif not cond:  print("Warning: " + message)
+                
     return means, sds, passed
     
 
@@ -578,7 +581,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
         # Raise an error for test fails if do_tests is True
         if do_tests:    assert cond, AssertionError(message)
         # Just issue a warning for test fails if do_tests is False
-        elif not cond:  warn(message)
+        elif not cond:  print("Warning: " + message)
                  
     return means, sds, passed
 

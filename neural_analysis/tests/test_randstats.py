@@ -14,7 +14,7 @@ from ..randstats import one_sample_tstat, one_sample_test, \
 # =============================================================================
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('randomization', 0.05, 6.91, 0.49),
-                          ('bootstrap', 0.05, 6.91, 0.27)])                        
+                          ('bootstrap', 0.05, 6.91, 0.27)])
 def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_resmp):    
     """ Unit tests for one_sample_test function for 1-sample randomization stats """    
     data = one_sample_data
@@ -27,6 +27,7 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     # Only test values for 1st simulated channel for simplicity    
     p, stat_obs, stat_resmp = one_sample_test(data, axis=0, method=method, seed=1,
                                               n_resamples=n_resamples, return_stats=True)
+    print(p[0,0], stat_obs[0,0], stat_resmp[:,0].mean())
     assert p.shape == (1,n_chnls)
     assert stat_obs.shape == (1,n_chnls)
     assert stat_resmp.shape == (n_resamples-1,n_chnls)    

@@ -94,8 +94,8 @@ def rate(data, method='bin', **kwargs):
     return rate_func(data, **kwargs)
     
     
-def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
-             axis=-1, timepts=None):
+def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
+             axis=-1, timepts=None, count=None):
     """
     Computes spike rate/count within given sequence of hard-edged time bins
     
@@ -124,20 +124,25 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
     step        Scalar. Spacing between successive time bins (s). 
                 Default: <width> (each bin starts at end of previous bin)
                 
+    output      String. Which spike measure to return: 
+                'rate' :    spike rate in each bin in spk/s. Float valued. [default]
+                'count' :   spike count in each bin. Integer valued.
+                'bool' :    binary presence/absence of any spikes in each bin. Boolean valued.
+                
     *** Alternatively, any custom time bins may be explicitly input using <bins> arg ***
     
     bins        (n_bins,2) array-like. [start,end] of each custom time bin (in s).
                 Bins can have any arbitrary width and spacing.
                 Default: bins with given <width,step>, ranging from lims[0] to lims[1]
-                
-    count       Bool. If True, returns integer-valued spike counts, rather than rates.
-                Default: False (computes rates)         
-                
+                                
     axis        Int. Axis of binary data corresponding to time dimension.
                 Not used for spike timestamp data. Default: -1 (last axis of array)           
 
     timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
                 Not used for spike timestamp data, but MUST be input for binary data.
+                
+    count       DEPRECATED.  Please use output='rate' to return spike rates or 
+                output='count' to return spike counts, respectively
                                 
     RETURNS
     rates       (...,n_bins) ndarray | (...,n_bins,...) ndarray. Spike rates (in spk/s) 
@@ -145,7 +150,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
                 For timestamp inputs, same shape as <data>, with time-bin axis appended to end.
                 If only a single spike train is input, output is (n_bins,) vector.
                 For boolean inputs, rates has same shape as data with time axis length = n_bins.
-                dtype is uint16 if <count> is True, float otherwise.
+                dtype is float for output='rate', int for output='count', bool for output='bool'.
                 
     bins        (n_bins,2) ndarray. [start,end] of each time bin (in s).
     
@@ -153,6 +158,11 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
     Spikes are counted within each bin including the start, but *excluding* the end
     of the bin. That is each bin is defined as [start,end).
     """
+    if count is not None:
+        print("<count> argument is DEPRECATED and will be removed in a later release.\n\
+                Please use <output> = 'count', 'rate', or 'bool'")
+        output = 'count' if count else 'rate'
+        
     # Convert boolean spike train data to timestamps for easier computation    
     data_type = _spike_data_type(data)
     if data_type == 'bool':
@@ -210,7 +220,12 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
     
     # Create array to hold counts/rates. Same shape as data, with bin axis appended.
     # dtype is int if computing counts, float if computing rates
-    dtype = 'uint16' if count else float
+    if output == 'rate':    dtype = float
+    elif output == 'count': dtype = 'uint16'
+    elif output == 'bool':  dtype = bool
+    else:
+        raise ValueError("Unsupported value '%s' input for <output>")
+    
     rates = np.empty((*data.shape,n_bins),dtype=dtype)
     
     for _ in range(data.size):
@@ -224,7 +239,8 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, count=False,
         next(data_flat)        
                     
     # Normalize all spike counts by bin widths to get spike rates
-    if not count: rates = rates / widths         
+    # Note: For output='bool', values are auto-converted to bool when <rates> is set
+    if output == 'rate': rates = rates / widths         
         
     # If only a single spike train was input, squeeze out singleton axis 0
     if single_train: rates = rates.squeeze(axis=0)
@@ -942,8 +958,7 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     
     # For each spike train in <spike_times> compute count w/in each hist bin
     # Note: Setting dtype=bool implies any spike counts > 0 will be True
-    spike_bool,bins = bin_rate(spike_times,bins=bins)
-    spike_bool = spike_bool.astype(bool)
+    spike_bool,bins = bin_rate(spike_times,bins=bins,output='bool')
 
     return spike_bool, timepts
 
