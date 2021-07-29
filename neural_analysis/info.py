@@ -42,9 +42,7 @@ Created on Mon Sep 17 00:05:25 2018
 
 @author: sbrincat
 """
-import os
 import numpy as np
-import matplotlib.pyplot as plt
 
 from scipy.stats import f as Ftest
 from sklearn.linear_model import LinearRegression
@@ -55,11 +53,11 @@ from patsy import DesignMatrix
 
 try:
     from .utils import unsorted_unique, standardize_array, undo_standardize_array
-# TEMP    
+# TEMP
 except ImportError:
     from utils import unsorted_unique, standardize_array, undo_standardize_array
-    
-    
+
+
 # =============================================================================
 # High-level neural information wrapper functions
 # =============================================================================
@@ -81,7 +79,7 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
 
     axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
-                
+
     method  String. Method to use to compute information. Options:
             'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
             Default: 'pev'
@@ -93,22 +91,22 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
             Shape is same as data, with observation axis reduced to length = n_terms.
     """
     method = method.lower()
-    
+
     if method == 'pev':
         return pev(labels,data,axis=axis,**kwargs)
-    
+
     elif method in ['dprime','d','cohensd']:
         return dprime(labels,data,axis=axis,**kwargs)
-    
+
     elif method in ['auroc','roc','aucroc','auc']:
         return auroc(labels,data,axis=axis,**kwargs)
-    
+
     elif method in ['mutual_information','mutual_info']:
         return mutual_information(labels,data,axis=axis,**kwargs)
 
     elif method in ['decode','decoder','decoding']:
         return decode(labels,data,axis=axis,**kwargs)
-    
+
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
@@ -121,12 +119,12 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     info = neural_info_2groups(data1,data2,axis=0,method='pev',**kwargs)
 
     ARGS
-    data1/2 (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
-            Sets of values for each of two distributions to be compared. 
+    data1/2 (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
+            Sets of values for each of two distributions to be compared.
 
     axis    Int. Axis of data array to perform analysis on, corresponding
             to trials/observations. Default: 0 (first axis)
-                
+
     method  String. Method to use to compute information. Options:
             'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
             Default: 'pev'
@@ -138,22 +136,22 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
             Shape is same as data, with observation axis reduced to length = n_terms.
     """
     method = method.lower()
-    
+
     if method == 'pev':
         return pev_2groups(data1,data2,axis=axis,**kwargs)
-    
+
     elif method in ['dprime','d','cohensd']:
         return dprime_2groups(data1,data2,axis=axis,**kwargs)
-    
+
     elif method in ['auroc','roc','aucroc','auc']:
         return auroc_2groups(data1,data2,axis=axis,**kwargs)
-    
+
     elif method in ['mutual_information','mutual_info']:
         return mutual_information_2groups(data1,data2,axis=axis,**kwargs)
-    
+
     elif method in ['decode','decoder','decoding']:
         return decode_2groups(data1,data2,axis=axis,**kwargs)
-     
+
     else:
         raise ValueError("Information method '%s' is not yet supported" % method)
 
@@ -169,24 +167,26 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
     INPUTS
     labels  (n_obs,) ndarray. Labels/target values for each trial to predict
 
-    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from. 
-            Arbitrary shape, but <axis> should correspond to observations (trials) and 
+    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from.
+            Arbitrary shape, but <axis> should correspond to observations (trials) and
             <feature_axis> should correspond to decoder features (eg neural channels),
-            while rest of axis(s) can be any independent data series (time points, 
-            frequencies, etc.) that are analyzed separately (ie separate decoder fit 
+            while rest of axis(s) can be any independent data series (time points,
+            frequencies, etc.) that are analyzed separately (ie separate decoder fit
             and evaluated at each time point, frequency, etc.).
-            
+
     axis    Int. Axis of data corresponding to distinct observations/trials. Default: 0 (1st axis)
-    
+
     feature_axis Int. Axis of data corresponding to decoder features (usually distinct neural
             channels/electrodes/units). Default: 1 (2nd axis)
 
     decoder String | sklearn classifier object. Decoding classifier method to use.
             Can input either as a string specifier or as a scikit-learn classifier object instance.
-            'lda' :     Linear discriminant analysis w/ sklearn.discriminant_analysis.LinearDiscriminantAnalysis
-                        Unlike scikit's empirical prior, sets a uniform prior unless specified otherwise 
-                        (bc any imbalance in emprical probabilities of task conditions is usually
-                        happenstance/random, not predictive and not something we typically want to use)
+            'lda' :     Linear discriminant analysis w/
+                        sklearn.discriminant_analysis.LinearDiscriminantAnalysis
+                        Unlike scikit's empirical prior, sets a uniform prior unless specified
+                        otherwise (bc any imbalance in emprical probabilities of task conditions is
+                        usually happenstance, not predictive and not something we typically
+                        want to use)
             'logistic': Logistic regression using sklearn.linear_model.LogisticRegression
                         Sets penalty='none' unless specified otherwise in kwargs, unlike scikit's
                         default 'l2' (L2 regularization) bc seems safer to make users opt-in.
@@ -197,60 +197,60 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
-               
-    groups  Array-like. Which group labels from <labels> to use. Useful for computing information 
+
+    groups  Array-like. Which group labels from <labels> to use. Useful for computing information
             on subset of groups/classes in labels.
             Default: unique(labels) (all distinct values in <labels>)
-                                
+
     as_pct  Bool. Set=True to return decoding accuracy as a percent (range ~ 0-100).
             Set=False [default] to return accuracy as a proportion (range ~ 0-1)
-            
+
     return_stats Bool. Set=True to return additional classifier stats. Default: False
-    
+
     stats   String | List of strings. List of additional classifier stats to return:
             'predict' : Predicted class for each trial/observation
             'prob' :    Posterior probability for each class, for each trial/observation
             Default: If return_stats=True, stats defaults to ['predict','prob']
-                
+
     **kwargs All other kwargs passed directly to decoding object constructor
 
     OUTPUTS
     accuracy ndarray. Decoding accuracy. Shape is same as input data, but with <axis> and
-            <feature_axis> reduced to length 1. Accuracy given as proportion or percent 
+            <feature_axis> reduced to length 1. Accuracy given as proportion or percent
             correct, depending on value of <as_pct>. Chance = [100 *] 1/n_classes.
 
-    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in 
+    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in
             input argument <stats>. May include the following:
-            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation (trial).
+            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation/trial.
                         Same shape as accuracy, but <axis> has length n_obs.
             'prob' :    (...,_n_obs,...,n_classes,...) ndarray. Posterior probabilty for each class
-                        and each observation (trial). Same shape as accuracy, but <axis> has length 
+                        and each observation (trial). Same shape as accuracy, but <axis> has length
                         n_obs and <feature_axis> has length n_classes.
-    
+
     REFERENCE
     https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
-    https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html    
+    https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
     """
-    labels = np.asarray(labels)    
+    labels = np.asarray(labels)
     data = np.asarray(data)
 
     if axis < 0:            axis = data.ndim + axis
     if feature_axis < 0:    feature_axis = data.ndim + feature_axis
-    
-    # Move/swap array axes so trials/observations axis is 1st and features 2nd (n_obs,n_features,...)
+
+    # Swap array axes so trials/observations axis is 1st and features 2nd (n_obs,n_features,...)
     if (axis == 1) and (feature_axis == 0):
         data = np.swapaxes(data,feature_axis,axis)
     else:
-        if axis != 0:           data = np.moveaxis(data,axis,0)    
+        if axis != 0:           data = np.moveaxis(data,axis,0)
         if feature_axis != 1:   data = np.moveaxis(data,feature_axis,1)
     data_ndim = data.ndim
     data_shape = data.shape
-        
+
     # Standardize data array to shape (n_obs,n_features,n_data_series)
     if data_ndim > 3:       data = data.reshape((data.shape[0],data.shape[1],-1))
-    elif data_ndim == 2:    data = data[:,:,np.newaxis]   
+    elif data_ndim == 2:    data = data[:,:,np.newaxis]
     elif data_ndim == 1:    data = data[:,np.newaxis,np.newaxis] # Weird usage, but ok
-    
+
     # Find set of unique group/class labels in <labels> if not explicitly set
     if groups is None:
         groups = np.unique(labels)
@@ -260,22 +260,22 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
         idxs = np.in1d(labels,groups)
         if idxs.sum() != data.shape[0]:
             labels  = labels[idxs]
-            data    = data[idxs,...]  
-            
-    n_obs,n_features,n_series = data.shape              
+            data    = data[idxs,...]
+
+    n_obs,n_features,n_series = data.shape
     n_classes = len(groups)
-        
+
     if stats is not None: return_stats = True   # If requested stats list input, return stats
     if return_stats:
         if stats is None:  stats = ['predict','prob']
         elif isinstance(stats,str): stats = [stats]
     else:
         stats = range(0)    # Kludge -- set this to shunt off and skip "for stats" loops below
-        
+
     # Convert string specifier to sklearn classifier object
     if isinstance(decoder,str):
         decoder = decoder.lower()
-    
+
         if decoder in ['lda','lineardiscriminant']:
             # If not specified otherwise, set uniform prior
             if 'priors' not in kwargs: kwargs['priors'] = (1/n_classes)*np.ones((n_classes,))
@@ -283,18 +283,18 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 
         elif decoder in ['logistic','logisticregression']:
             # If not specified otherwise, set uniform prior
-            if 'penalty' not in kwargs: kwargs['penalty'] = 'none'            
+            if 'penalty' not in kwargs: kwargs['penalty'] = 'none'
             decoder = LogisticRegression(**kwargs)
-        
+
         else:
-            raise ValueError("Unsupported option '%s' given for decoding method" % decoder)    
-    
+            raise ValueError("Unsupported option '%s' given for decoding method" % decoder)
+
     else:
-        # TODO  Need better test that we actually have an sklearn(-like) object        
+        # TODO  Need better test that we actually have an sklearn(-like) object
         assert callable(decoder), \
-            TypeError("Unsupported type (%s) given for method. Should be string | scikit classifier object"
+            TypeError("Unsupported type (%s) for method. Use string | scikit classifier object"
                       % type(decoder))
-    
+
     # Convert string specifier to scikit cross-validation object, including default
     if isinstance(cv,str):
         cv = cv.lower()
@@ -302,24 +302,24 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
         if cv in ['default','auto','stratifiedkfold']:
             cv = StratifiedKFold(n_splits=5,shuffle=True,random_state=seed)
         elif cv == 'none':
-            cv = None 
+            cv = None
         else:
-            raise ValueError("Unsupported value '%s' given for cv" % cv)        
-                              
+            raise ValueError("Unsupported value '%s' given for cv" % cv)
+
     else:
-        # TODO  Need better test that we actually have an sklearn(-like) object         
+        # TODO  Need better test that we actually have an sklearn(-like) object
         assert callable(cv) or (cv is None), \
-            TypeError("Unsupported type (%s) given for cv. Should be string | scikit model_selection object"
-                        % type(cv))    
-        
-    if return_stats: 
+            TypeError("Unsupported type (%s) for cv. Use string | scikit model_selection object"
+                        % type(cv))
+
+    if return_stats:
         stats = {stat:None for stat in stats}
         for stat in stats:
             if stat == 'predict':   stats[stat] = np.empty((n_obs,1,n_series),dtype=labels.dtype)
             elif stat == 'prob':    stats[stat] = np.empty((n_obs,n_classes,n_series))
             else:
                 raise ValueError("Unsupported stat '%s' requested" % stat)
-                    
+
     # Iterate analysis over all cross-validation train/test data splits
     if cv is not None:
         acc_folds = np.empty((n_series,cv.n_splits))
@@ -335,11 +335,12 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 
                 for stat in stats:
                     if stat == 'predict':
-                        stats[stat][test_idxs,0,i_series] = decoder.predict(data[test_idxs,:,i_series])
+                        stats[stat][test_idxs,0,i_series] = \
+                            decoder.predict(data[test_idxs,:,i_series])
                     elif stat == 'prob':
                         tmp = decoder.predict_proba(data[test_idxs,:,i_series])
                         stats[stat][test_idxs,:,i_series] = tmp
-                                    
+
         # Take the mean across all cross-validation folds
         accuracy = np.mean(acc_folds, axis=1)
 
@@ -353,7 +354,7 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
             accuracy[i_series] = decoder.score(data[:,:,i_series], labels)
 
     if as_pct: accuracy = 100.0*accuracy
-    
+
     # Insert 2 singleton axis as 1st axes of array to replace trial,channel axes
     accuracy = accuracy[np.newaxis,np.newaxis,...]
 
@@ -361,15 +362,17 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
     if data_ndim > 3:
         accuracy = accuracy.reshape((1,1,*data_shape[2:]))
         for stat in stats:
-            if stat == 'predict':   stats[stat] = stats[stat].reshape((n_obs,*data_shape[2:]))
-            elif stat == 'prob':    stats[stat] = stats[stat].reshape((n_obs,n_classes,*data_shape[2:]))
-        
+            if stat == 'predict':
+                stats[stat] = stats[stat].reshape((n_obs,*data_shape[2:]))
+            elif stat == 'prob':
+                stats[stat] = stats[stat].reshape((n_obs,n_classes,*data_shape[2:]))
+
     # Move/swap array axes to original locations
     if (axis == 1) and (feature_axis == 0):
         data = np.swapaxes(data,axis,feature_axis)
         for stat in stats:
             if stat == 'predict':   stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
-            elif stat == 'prob':    stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)        
+            elif stat == 'prob':    stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
     else:
         if axis != 0:
             data = np.moveaxis(data,0,axis)
@@ -381,35 +384,35 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
             for stat in stats:
                 if stat == 'predict':   stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
                 elif stat == 'prob':    stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
-    
+
     if data_ndim <= 2:
         accuracy = accuracy.item()
         for stat in stats:  stats[stat] = stats[stat].squeeze()
-    
-    if return_stats:    return accuracy, stats    
-    else:               return accuracy    
-    
-    
+
+    if return_stats:    return accuracy, stats
+    else:               return accuracy
+
+
 def decode_2groups(data1, data2, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=None,
                    as_pct=False, return_stats=False, stats=None, **kwargs):
     """
     Mass-multivariate population decoding analysis classifying between two data distributions
     using given classifier method
-    
+
     Wrapper around decode() for (data1,data2) argument format
 
     INPUTS
     labels  (n_obs,) ndarray. Labels/target values for each trial to predict
 
-    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from. 
-            Arbitrary shape, but <axis> should correspond to observations (trials) and 
+    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from.
+            Arbitrary shape, but <axis> should correspond to observations (trials) and
             <feature_axis> should correspond to decoder features (eg neural channels),
-            while rest of axis(s) can be any independent data series (time points, 
-            frequencies, etc.) that are analyzed separately (ie separate decoder fit 
+            while rest of axis(s) can be any independent data series (time points,
+            frequencies, etc.) that are analyzed separately (ie separate decoder fit
             and evaluated at each time point, frequency, etc.).
-            
+
     axis    Int. Axis of data corresponding to distinct observations/trials. Default: 0 (1st axis)
-    
+
     feature_axis Int. Axis of data corresponding to decoder features (usually distinct neural
             channels/electrodes/units). Default: 1 (2nd axis)
 
@@ -424,30 +427,30 @@ def decode_2groups(data1, data2, axis=0, feature_axis=1, decoder='lda', cv='auto
 
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
-               
+
     as_pct  Bool. Set=True to return decoding accuracy as a percent (range ~ 0-100).
             Set=False [default] to return accuracy as a proportion (range ~ 0-1)
-            
+
     return_stats Bool. Set=True to return additional classifier stats. Default: False
-    
+
     stats   String | List of strings. List of additional classifier stats to return:
             'predict' : Predicted class for each trial/observation
             'prob' :    Posterior probability for each class, for each trial/observation
             Default: If return_stats=True, stats defaults to ['predict','prob']
-                
+
     **kwargs All other kwargs passed directly to decoding object constructor
 
     OUTPUTS
     accuracy ndarray. Decoding accuracy. Shape is same as input data, but with <axis> and
-            <feature_axis> reduced to length 1. Accuracy given as proportion or percent 
+            <feature_axis> reduced to length 1. Accuracy given as proportion or percent
             correct, depending on value of <as_pct>. Chance = [100 *] 1/n_classes.
 
-    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in 
+    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in
             input argument <stats>. May include the following:
-            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation (trial).
+            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation/trial.
                         Same shape as accuracy, but <axis> has length n_obs.
             'prob' :    (...,_n_obs,...,n_classes,...) ndarray. Posterior probabilty for each class
-                        and each observation (trial). Same shape as accuracy, but <axis> has length 
+                        and each observation (trial). Same shape as accuracy, but <axis> has length
                         n_obs and <feature_axis> has length n_classes.
     """
     n1 = data1.shape[axis]
@@ -458,21 +461,21 @@ def decode_2groups(data1, data2, axis=0, feature_axis=1, decoder='lda', cv='auto
     labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
 
     return decode(labels, np.concatenate((data1,data2), axis=axis), axis=axis,
-                  feature_axis=feature_axis, decoder=decoder, cv=cv, seed=seed, 
+                  feature_axis=feature_axis, decoder=decoder, cv=cv, seed=seed,
                   as_pct=as_pct, return_stats=return_stats, stats=stats, **kwargs)
-        
-        
+
+
 # =============================================================================
 # Mutual information analysis
 # =============================================================================
 def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, groups=None):
     """
-    Mass-univariate mutual information between set of responses 
+    Mass-univariate mutual information between set of responses
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
-    
+
     info = mutual_information(labels,data,axis=0,bins='fd',resp_entropy=None,groups=None)
 
-    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
+    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7):
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
 
     where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
@@ -480,42 +483,42 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
 
     info = 0 indicates no mutual information between responses and experimental conditions
     info = 1 indicates maximum possible information btwn responses and conditions
-    
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
 
     Note: This is a wrapper around mutual_information_2groups(), which accepts
     two data distributions as arguments, and is faster.
 
     ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from 
-                each group. Should be only two groups represented, unless sub-selecting 
+    labels      (n_obs,) array-like. List of group labels labelling observations from
+                each group. Should be only two groups represented, unless sub-selecting
                 two groups using <groups> argument.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
     bins        (n_bins,2) array-like | string. Non-integer data must be binned for
                 mutual information computation. Bins can be given either explicitly, as an
-                array of bin [left,right] edges, or as a string indicating the type of 
+                array of bin [left,right] edges, or as a string indicating the type of
                 binning rule to use in np.histogram_bin_edges() (see there for details).
                 Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
                 Data is binned only if it is non-integer-valued or if a value is input for bins.
-                
+
     resp_entropy   (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
 
-    groups      (2,) array-like. Which group labels from <labels> to use. 
+    groups      (2,) array-like. Which group labels from <labels> to use.
                 Useful for computing info btwn pairs of groups in data with > 2 groups,
                 Default: unique(labels) (all distinct values in <labels>)
 
     RETURNS
-    info        (...,1,...) ndarray. Mutual information between responses 
-                and experimental conditions (in bits). 
-                
+    info        (...,1,...) ndarray. Mutual information between responses
+                and experimental conditions (in bits).
+
     REFERENCE   Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
     (binning)   https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
     (binning)   https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
@@ -529,7 +532,7 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
         resp_entropy,_ = standardize_array(resp_entropy, axis=axis, target_axis=0)
 
     n_series = data.shape[1] if data.ndim > 1 else 1
-    
+
     # Find set of unique group labels in <labels> if not explicitly set
     if groups is None:
         groups = np.unique(labels)
@@ -542,29 +545,29 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
             data    = data[idxs,...]
 
     assert len(groups) == 2, \
-        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)    
+        "mutual_information: computation only supported for 2 groups (%d given)" % len(groups)
 
     # Bin-discretize data if it is not already integer-valued OR if value is input for bins
     do_bins = (bins is not None) or \
               (np.issubdtype(data.dtype,np.float) and not np.allclose(np.round(data), data))
-    
+
     if do_bins:
         # If bins are given explicitly, reshape them as needed
         if isinstance(bins, (list, tuple, np.ndarray)):
             bins = np.asarray(bins)
             assert (bins.ndim == 2) and (bins.shape[1] == 2), \
-                ValueError("bins must be given as (n_bins,2) array of [left,right] edges (or as string)")
-            
+                ValueError("bins must be given as (n_bins,2) array of [left,right] edges")
+
             # Convert bins to format expected by np.digitize = edges of all bins in 1 series
             bins_ = np.hstack((bins[:,0],bins[-1,-1]))
-        
+
         # Otherwise, use some heuristic rule to set bins based on data
-        else:            
-           if bins is None: bins = 'fd'
-           bins_ = np.histogram_bin_edges(data.flatten(), bins=bins)
-        
-        # Bin the data. Note: this actually returns bin numbers for each datapoint, 
-        # but MI treats values categorically, so doesn't matter    
+        else:
+            if bins is None: bins = 'fd'
+            bins_ = np.histogram_bin_edges(data.flatten(), bins=bins)
+
+        # Bin the data. Note: this actually returns bin numbers for each datapoint,
+        # but MI treats values categorically, so doesn't matter
         data = np.digitize(data, bins_)
 
     idxs1 = labels == groups[0]
@@ -579,14 +582,14 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
     # Stimulus probabilities
     Ps1 = n1/N                  # P(stimulus==s1)
     Ps2 = n2/N                  # P(stimulus==s2)
-            
+
     info = np.empty((n_series,))
-  
+
     for i_series in range(n_series):
         data_series = data[:,i_series] if n_series > 1 else data.squeeze()
 
         # Compute total response entropy H (if not input)
-        if resp_entropy is None:            
+        if resp_entropy is None:
             # Response probability distributions
             _,counts    = np.unique(data_series, return_counts=True)
             Pr          = counts / N            # P(response==r)
@@ -596,18 +599,18 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
 
         else:
             H   = resp_entropy[i_series]
-        
+
         # Conditional response|stimulus probability distributions (eg, Prs1 is p(rateR|stim1))
         # Note: conditional probs of 0 are automatically eliminated, since by convention 0*log0=0
         _,counts    = np.unique(data_series[idxs1], return_counts=True)
         Prs1        = counts / counts.sum()                 # P(response==r | stimulus1)
         _,counts    = np.unique(data_series[idxs2], return_counts=True)
         Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
-        
+
         # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
         Hs1     = entropy(Prs1)
         Hs2     = entropy(Prs2)
-    
+
         # Noise entropy (Dayan & Abbott, eqn. 4.6)
         Hnoise  = Ps1*Hs1 + Ps2*Hs2
 
@@ -616,18 +619,18 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
 
     # Pre-pend singleton axis to make info expected (1,n_series) shape
     info = undo_standardize_array(info[np.newaxis,:], data_shape, axis=axis, target_axis=0)
-        
+
     return info
 
 
 def mutual_information_2groups(data1, data2, axis=0, bins=None, resp_entropy=None):
     """
-    Mass-univariate mutual information between set of responses 
+    Mass-univariate mutual information between set of responses
     and binary "stimulus" (ie, 2 contrasted experimental conditions)
-        
+
     info = mutual_information_2groups(data1,data2,axis=0,bins='fd',resp_entropy=None)
 
-    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7): 
+    Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7):
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
 
     where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
@@ -635,35 +638,35 @@ def mutual_information_2groups(data1, data2, axis=0, bins=None, resp_entropy=Non
 
     info = 0 indicates no mutual information between responses and experimental conditions
     info = 1 indicates maximum possible information btwn responses and conditions
-    
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
-    
+
     Note: This is a wrapper around mutual_information(), which accepts standard
     data,label arguments
-        
+
     ARGS
-    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
-                Sets of values for each of two distributions to be compared.  
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
+                Sets of values for each of two distributions to be compared.
 
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
     bins        (n_bins,2) array-like | string. Non-integer data must be binned for
                 mutual information computation. Bins can be given either explicitly, as an
-                array of bin [left,right] edges, or as a string indicating the type of 
+                array of bin [left,right] edges, or as a string indicating the type of
                 binning rule to use in np.histogram_bin_edges() (see there for details).
                 Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
                 Data is binned only if it is non-integer-valued or if a value is input for bins.
-                
+
     resp_entropy  (...,1,...). Total response entropy. Can optionally compute and input
                 this to save repeated calculations (eg for distinct contrasts on same data)
 
     RETURNS
-    info        (...,1,...) ndarray. Mutual information between responses 
-                and experimental conditions (in bits). 
-                
+    info        (...,1,...) ndarray. Mutual information between responses
+                and experimental conditions (in bits).
+
     REFERENCE     Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
     """
     n1 = data1.shape[axis]
@@ -672,12 +675,12 @@ def mutual_information_2groups(data1, data2, axis=0, bins=None, resp_entropy=Non
         "mutual_information: Data contains no observations (trials) for one or more groups"
 
     labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
-    
+
     return mutual_information(labels, np.concatenate((data1,data2), axis=axis),
                               axis=axis, bins=bins, resp_entropy=resp_entropy, groups=[0,1])
-    
-    
-  
+
+
+
 # =============================================================================
 # Area under ROC curve (AUROC) analysis
 # =============================================================================
@@ -685,50 +688,50 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     """
     Mass-univariate area-under-ROC-curve metric of discriminability
     between two data distributions
-    
+
     roc = auroc(labels,data,axis=0,signed=True,groups=None)
 
     Calculates area under receiver operating characteristic curve (AUROC)
     relating hits to false alarms in a binary classification/discrimination
 
-    AUROC = 0.5 indicates no difference between distributions, and 
+    AUROC = 0.5 indicates no difference between distributions, and
     AUROC = 1 indicates data distributions are completely discriminable.
 
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
 
     Note: This is a wrapper around auroc_2groups(), which accepts
     two data distributions as arguments, and is faster.
 
     ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from 
-                each group. Should be only two groups represented, unless sub-selecting 
+    labels      (n_obs,) array-like. List of group labels labelling observations from
+                each group. Should be only two groups represented, unless sub-selecting
                 two groups using <groups> argument.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
     signed      Bool. If True [default], returns signed AUROC. If False, returns absolute
                 value of AUROC, corresponding to finding "preferred" distribution for each
-                data series (non-trial dims). 
-                
-                NOTE: absolute AUROC is a biased metric--its expected value is > 0 even 
+                data series (non-trial dims).
+
+                NOTE: absolute AUROC is a biased metric--its expected value is > 0 even
                 for identical data distributions. You might want to use resampling
                 methods estimate the bias and correct for it.
 
-    groups      (2,) array-like. Which group labels from <labels> to use. 
-                Useful for enforcing a given order to groups (eg sign to signed AUROC), 
+    groups      (2,) array-like. Which group labels from <labels> to use.
+                Useful for enforcing a given order to groups (eg sign to signed AUROC),
                 or for computing info btwn pairs of groups in data with > 2 groups,
                 Default: unique(labels) (all distinct values in <labels>)
 
     RETURNS
-    roc         (...,1,...) ndarray.  AUROC btwn. groups along given axis. 
+    roc         (...,1,...) ndarray.  AUROC btwn. groups along given axis.
     """
     labels = np.asarray(labels)
-    
+
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
 
@@ -737,7 +740,7 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
 
     # Split data into 2 groups and use auroc_2groups() to actually do computation
     return auroc_2groups(data.compress(labels == groups[0], axis=axis),
-                         data.compress(labels == groups[1], axis=axis), 
+                         data.compress(labels == groups[1], axis=axis),
                          axis=axis, signed=signed)
 
 
@@ -745,70 +748,70 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     """
     Mass-univariate area-under-ROC-curve metric of discriminability
     between two data distributions
-        
+
     roc_area = auroc_2groups(data1,data2,axis=0,signed=True)
 
     Calculates area under receiver operating characteristic curve (AUROC)
     relating hits to false alarms in a binary classification/discrimination
 
-    AUROC = 0.5 indicates no difference between distributions, and 
+    AUROC = 0.5 indicates no difference between distributions, and
     AUROC = 1 indicates data distributions are completely discriminable.
-    
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
-    
+
     Note: For convenience, auroc() is also provided as a wrapper around this
     function that accepts standard data,label arguments.
-    
+
     ARGS
-    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
-                Sets of values for each of two distributions to be compared.  
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
+                Sets of values for each of two distributions to be compared.
 
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
     OPTIONAL INPUT  Additional optional parameters, given as name/value pairs in varargin:
     signed      Bool. If True [default], returns signed AUROC using given order of data1/2,
-                giving a measure which can be < 0.5 if data2 is "preferred". 
+                giving a measure which can be < 0.5 if data2 is "preferred".
                 If false, rectifies AUROC around 0.5: ROCunsigned = abs(ROC-0.5)+0.5,
-                essentially giving an unsigned/absolute measure of neural information 
+                essentially giving an unsigned/absolute measure of neural information
                 (ie, returning the same value whether data1 > data2 or vice versa).
-        
-                NOTE: unsigned AUROC is a biased metric--its expected value is > 0 even 
+
+                NOTE: unsigned AUROC is a biased metric--its expected value is > 0 even
                 for identical data distributions. You might want to use resampling
                 methods estimate the bias and correct for it.
 
     RETURNS
-    roc_area    (...,1,...) ndarray.  AUROC btwn. data1 and data2 along given axis. 
+    roc_area    (...,1,...) ndarray.  AUROC btwn. data1 and data2 along given axis.
 
     """
     n1 = data1.shape[axis]
     n2 = data2.shape[axis]
-    
+
     assert (n1 != 0) and (n2 != 0), \
         "auroc: Data contains no observations (trials) for one or more groups"
 
     # Reshape data arrays -> (n_observations,n_data_series) matrix
     data1, data1_shape = standardize_array(data1, axis=axis, target_axis=0)
-    data2, data2_shape = standardize_array(data2, axis=axis, target_axis=0)    
+    data2, data2_shape = standardize_array(data2, axis=axis, target_axis=0)
 
 
     n1 = data1.shape[0]
     n2 = data2.shape[0]
-    
+
     if data1.ndim > 1:
         n_series = data1.shape[1]
-                    
+
         assert data1.shape[1] == data2.shape[1], \
-            "auroc: Data distributions to compare must have same number of data series (timepts,freqs,channels,etc.) \
+            "auroc: data1,2 must have same number of data series (timepts,freqs,channels,etc.) \
              (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
     else:
         n_series = 1
-        
-    roc_area = np.empty((n_series,))        
-  
-    for i_series in range(n_series):    
+
+    roc_area = np.empty((n_series,))
+
+    for i_series in range(n_series):
         data1_series = data1[:,i_series] if n_series > 1 else data1.squeeze()
         data2_series = data2[:,i_series] if n_series > 1 else data2.squeeze()
 
@@ -825,21 +828,21 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
         for i_crit,crit in enumerate(criteria):
             fa_rate[i_crit]     = (data2_series > crit).sum()
             hit_rate[i_crit]    = (data1_series > crit).sum()
-        
+
         fa_rate[0:-1]   = fa_rate[0:-1] / n2
         hit_rate[0:-1]  = hit_rate[0:-1] / n1
 
         # Calculate area under ROC curve (FA rate x hit_rate) by discrete integration
         roc_area[i_series] = (np.diff(fa_rate) * (hit_rate[:-1] + hit_rate[1:])/2).sum()
-  
+
     # If desired, calculate absolute/unsigned area under ROC metric
     if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
-  
+
     # Pre-pend singleton axis to make info expected (1,n_series) shape
     roc_area = undo_standardize_array(roc_area[np.newaxis,:], data1_shape, axis=axis, target_axis=0)
-        
+
     return roc_area
-  
+
 
 # =============================================================================
 # d-prime (Cohen's d) analysis
@@ -850,7 +853,7 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
 
     d = dprime(labels,data,axis=0,signed=True,groups=None)
 
-    Calculates d' (aka Cohen's d) metric of difference btwn two distributions, 
+    Calculates d' (aka Cohen's d) metric of difference btwn two distributions,
     under (weak-ish) assumption they are IID normal, using formula:
     d' = (mu1 - mu2) / sd_pooled
 
@@ -858,43 +861,43 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     increases monotonically with the difference btwn group means and inversely with
     the pooled std deviation.
 
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
 
     Note: This is a wrapper around dprime_2groups(), which accepts
     two data distributions as arguments, and is faster.
 
     ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from 
-                each group. Should be only two groups represented, unless sub-selecting 
+    labels      (n_obs,) array-like. List of group labels labelling observations from
+                each group. Should be only two groups represented, unless sub-selecting
                 two groups using <groups> argument.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.  
+    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
 
     signed      Bool. If True [default], returns signed d'. If False, returns absolute
                 value of d', corresponding to finding "preferred" distribution for each
-                data series (non-trial dims). 
-                
-                NOTE: absolute d' is a biased metric--its expected value is > 0 even 
+                data series (non-trial dims).
+
+                NOTE: absolute d' is a biased metric--its expected value is > 0 even
                 for identical data distributions. You might want to use resampling
                 methods estimate the bias and correct for it.
 
-    groups      (2,) array-like. Which group labels from <labels> to use. 
-                Useful for enforcing a given order to groups (sign to results d'), 
+    groups      (2,) array-like. Which group labels from <labels> to use.
+                Useful for enforcing a given order to groups (sign to results d'),
                 or for computing d' btwn pairs of groups in data with > 2 groups,
                 Default: unique(labels) (all distinct values in <labels>)
 
     RETURNS
-    d           (...,1,...) ndarray.  d' btwn. groups along given axis. 
+    d           (...,1,...) ndarray.  d' btwn. groups along given axis.
 
     REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
     """
     labels = np.asarray(labels)
-    
+
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
 
@@ -903,34 +906,34 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
 
     # Split data into 2 groups and use dprime_2groups() to actually do computation
     return dprime_2groups(data.compress(labels == groups[0], axis=axis),
-                          data.compress(labels == groups[1], axis=axis), 
+                          data.compress(labels == groups[1], axis=axis),
                           axis=axis, signed=signed)
 
 
 def dprime_2groups(data1, data2, axis=0, signed=True):
     """
     Mass-univariate d' metric of difference between two data distributions
-    
+
     d = dprime_2groups(data1,data2,axis=0,signed=True)
 
-    Calculates d' (aka Cohen's d) metric of difference btwn two distributions, 
+    Calculates d' (aka Cohen's d) metric of difference btwn two distributions,
     under (weak-ish) assumption they are IID normal, using formula:
     d' = (mu1 - mu2) / sd_pooled
-    
+
     d' = 0 indicates no difference between distribution means. d' is unbounded, and
     increases monotonically with the difference btwn group means and inversely with
     the pooled std deviation.
-    
-    Computation is performed over trial/observation <axis>, in mass-univariate 
-    fashion across data series in all other data dimensions (channels, time points, 
+
+    Computation is performed over trial/observation <axis>, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
-    
+
     Note: For convenience, dprime() is also provided as a wrapper around this
     function that accepts standard data,label arguments.
-    
+
     ARGS
-    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
-                Sets of values for each of two distributions to be compared.  
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
+                Sets of values for each of two distributions to be compared.
 
     axis        Scalar. Dimension of data1,2 arrays to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
@@ -940,18 +943,18 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
                 value of d', corresponding to finding "preferred" distribution for each
                 data series (non-trial dims).
 
-                NOTE: absolute d' is a biased metric--its expected value is > 0 even 
+                NOTE: absolute d' is a biased metric--its expected value is > 0 even
                 for identical data distributions. You might want to use resampling
                 methods estimate the bias and correct for it.
 
     RETURNS
-    d           (...,1,...) ndarray.  d' btwn. data1 and data2 along given axis. 
+    d           (...,1,...) ndarray.  d' btwn. data1 and data2 along given axis.
 
     REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
     """
     n1 = data1.shape[axis]
     n2 = data2.shape[axis]
-    
+
     assert (n1 != 0) and (n2 != 0), \
         "dprime: Data contains no observations (trials) for one or more groups"
 
@@ -966,7 +969,7 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
 
     d = d / sdPooled
 
-    # Deal w/ special case of mu1-mu2 = 0 and both SD's = 0 
+    # Deal w/ special case of mu1-mu2 = 0 and both SD's = 0
     # (identical distributions for 2 cond's) -> d' = 0
     d[np.isnan(d)] = 0
 
@@ -977,8 +980,8 @@ def dprime_2groups(data1, data2, axis=0, signed=True):
     if d.size == 1: d = d.item()
 
     return d
-  
-  
+
+
 # =============================================================================
 # Percent explained variance (PEV) and specific linear model functions for PEV analysis
 # =============================================================================
@@ -991,14 +994,14 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
 
     exp_var = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
                   return_stats=False,**kwargs)
-                  
+
     exp_var,stats = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
                         return_stats=False,**kwargs)
 
     ARGS
-    labels  (n_obs,n_terms) array-like | patsy DesignMatrix object. Design matrix 
-            (group labels for ANOVA models, or regressors for regression model) for 
-            each observation (trial). labels.shape[0] must be same length as observation 
+    labels  (n_obs,n_terms) array-like | patsy DesignMatrix object. Design matrix
+            (group labels for ANOVA models, or regressors for regression model) for
+            each observation (trial). labels.shape[0] must be same length as observation
             <axis> of data.
 
     data    (...,n_obs,...) ndarray. Data to fit with linear model. Axis <axis> should
@@ -1018,7 +1021,7 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
     omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
             otherwise uses eta-squared/R-squared formula, which is positively biased.
             Default: True
-            
+
     as_pct  Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
             Otherwise PEV returned as a proportion (range ~ 0-1)
 
@@ -1049,11 +1052,11 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
         else:
             raise ValueError("Could not determine appropriate linear model.\n" \
                              "Please set explicitly using <model> argument.")
-                
+
         print("Assuming '%s' linear model based on given <labels> labels/design matrix" % model)
-        
+
     model = model.lower()
-    
+
     # Compute PEV based on 1-way ANOVA model
     if model == 'anova1':
         return anova1(labels,data,axis=axis,omega=omega,as_pct=as_pct,
@@ -1083,8 +1086,8 @@ def pev_2groups(data1, data2, axis=0, model='anova1', as_pct=True, return_stats=
     exp_var,stats = pev_2groups(data1,data2,axis=0,model=None,as_pct=True,return_stats=False,**kwargs)
 
     ARGS
-    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>. 
-                Sets of values for each of two distributions to be compared.  
+    data1/2     (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
+                Sets of values for each of two distributions to be compared.
 
     axis    Int. Data axis corresponding to distinct observations. Default: 0
 
@@ -1110,14 +1113,14 @@ def pev_2groups(data1, data2, axis=0, model='anova1', as_pct=True, return_stats=
     model = model.lower()
     assert model in ['anova1','regress'], \
         ValueError("model must be 'anova1' or 'regress' for '2groups' version of function")
-        
+
     n1 = data1.shape[axis]
     n2 = data2.shape[axis]
     labels = np.hstack((np.zeros((n1,)),np.ones((n2,))))
-    
+
     return pev(labels, np.concatenate((data1,data2),axis=axis),
                axis=axis, model=model, as_pct=as_pct, return_stats=return_stats, **kwargs)
-    
+
 
 def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs',
            as_pct=True, return_stats=False):
@@ -1147,8 +1150,8 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
             True  : Bias-corrected omega-squared PEV formula [default]
             False : Standard eta-squared formula. Positively biased for small N.
 
-    groups  (n_groups,) array-like. Which group labels from <labels> to use. 
-            Useful for enforcing a given order to groups (reflected in mu's), 
+    groups  (n_groups,) array-like. Which group labels from <labels> to use.
+            Useful for enforcing a given order to groups (reflected in mu's),
             or for computing PEV btwn subsets of groups in data.
             Default: unique(labels) (all distinct values in <labels>)
 
@@ -1177,28 +1180,28 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     assert (labels.ndim == 1) or (labels.shape[1] == 1), \
             "labels should have only a single column for anova1 model (it has %d)" \
             % labels.shape[1]
-    
+
     # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
-    
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
+
     # Find set of unique group labels in list of labels
     if groups is None:
         groups = np.unique(labels)
-        
+
     # Remove any observations not represented in <groups>
     else:
         idxs = np.in1d(labels,groups)
         if idxs.sum() != data.shape[0]:
             labels  = labels[idxs]
             data    = data[idxs,:]
-        
-    n_groups = len(groups)        
+
+    n_groups = len(groups)
     n_obs,n_series = data.shape
 
     assert labels.shape[0] == n_obs, \
             "labels and data array should have same number of rows (%d != %d)" \
             % (labels.shape[0], n_obs)
-        
+
     # Compute mean for each group (and for each data series)
     n = np.empty((n_groups,))
     mu = np.empty((n_groups,n_series))
@@ -1335,7 +1338,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
     """
     # TODO Add <groups> arg with list of group labels to use?
     # Reshape data array data -> (n_observation,n_data_series) matrix
-    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
     n_obs,n_series= data.shape
 
     # If interaction term is given in labels, its an interaction model
@@ -1358,7 +1361,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
             # Find and label all observations (trials) with given pair of groups/levels
             idxs = np.all(labels[:,0:2] == pair, axis=1)
             labels[idxs,2] = i_pair
-        
+
     groups = [np.unique(labels[:,i_term]) for i_term in range(n_terms)]
     n_groups = np.asarray([len(term_groups) for term_groups in groups])
 
@@ -1446,7 +1449,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
         F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
         p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
-        mu  = [undo_standardize_array(mu[term], data_shape, axis=axis, target_axis=0) 
+        mu  = [undo_standardize_array(mu[term], data_shape, axis=axis, target_axis=0)
                for term in range(n_terms)]
 
         stats   = {'p':p, 'F':F, 'mu':mu, 'n':n}
@@ -1466,8 +1469,8 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
                             partial=False,total=False,as_pct=True,return_stats=False)
 
     ARGS
-    labels  (n_obs,n_params) array-like | patsy DesignMatrix object. 
-            Regression design matrix. Each row corresponds to a distinct 
+    labels  (n_obs,n_params) array-like | patsy DesignMatrix object.
+            Regression design matrix. Each row corresponds to a distinct
             observation (trial), and each column to a distinct predictor
             (coefficient to fit). If <constant> == True, a constant
             (intercept) column will be appended to end of labels, if not already present.
@@ -1526,7 +1529,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
                       wikipedia.org/wiki/Effect_size
     """
     # Reshape data array data -> (n_observations,n_data_series) matrix
-    data, data_shape = standardize_array(data, axis=axis, target_axis=0)    
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
     n_obs,n_series = data.shape
 
     assert labels.shape[0] == n_obs, \
@@ -1534,7 +1537,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
             % (labels.shape[0], n_obs)
 
     # If col_terms not set, obtain from DesignMatrix or assume each column is a distinct term
-    if col_terms is None: 
+    if col_terms is None:
         if isinstance(labels,DesignMatrix): col_terms = patsy_terms_to_columns(labels)
         else:                               col_terms = np.arange(labels.shape[1])
     col_terms = np.asarray(col_terms)
@@ -1677,7 +1680,7 @@ def patsy_terms_to_columns(labels):
 # =============================================================================
 def entropy(P):
     """ Computes entropy from probabilty density P """
-    return -(P * np.log2(P)).sum()  
+    return -(P * np.log2(P)).sum()
 
 
 def R_squared(SS_model, SS_total):

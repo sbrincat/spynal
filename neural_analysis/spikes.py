@@ -35,28 +35,26 @@ Created on Mon Aug 13 14:38:34 2018
 
 @author: sbrincat
 """
-import os
 from math import isclose, ceil
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
-from scipy.stats import poisson, bernoulli, norm, expon
+from scipy.stats import poisson, expon
 
 try:
-    from .utils import set_random_seed, iarange, unsorted_unique, index_axis, \
+    from .utils import set_random_seed, unsorted_unique, index_axis, \
                        standardize_array, undo_standardize_array, setup_sliding_windows, \
                        concatenate_object_array, fano, cv, cv2, lv
     from .helpers import _check_window_lengths, _enclose_in_object_array
-# TEMP    
+# TEMP
 except ImportError:
-    from neural_analysis.utils import set_random_seed, iarange, unsorted_unique, index_axis, \
+    from neural_analysis.utils import set_random_seed, unsorted_unique, index_axis, \
                       standardize_array, undo_standardize_array, setup_sliding_windows, \
                       concatenate_object_array, fano, cv, cv2, lv
     from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
-    
+
 
 # =============================================================================
 # Spike count/rate computation and statistics functions
@@ -64,43 +62,43 @@ except ImportError:
 def rate(data, method='bin', **kwargs):
     """
     Wrapper function for computing spike rates using given method
-    
+
     ARGS
     data        (n_spikes,) array-like | object array of (n_spikes,) arrays.
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
                 -or-
-                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                (...,n_timepts,...) array of bool. Binary/boolean representation of
                 spike times, for either a single or multiple spike trains.
-    
+
     method      String. Spike rate estimation method.
                 'bin'       Traditional rectangular-binned rate (aka PSTH) [default]
                 'density'   Kernel density estimator for smoothed spike rate
-                
+
     **kwargs    Any further arguments passed as-is to rate computation function.
                 See there for details.
-                
+
     RETURNS
     rates       (...,n_timepts) ndarray | (...,n_timepts,...) ndarray.
                 Estimated spike rates (in spk/s) using given method.
-                    
+
     timepts     For bin: (n_timepts,) ndarray. Time sampling vector (in s).
-                For density: (n_bins,2) ndarray. [start,end] of each time bin (in s).                               
+                For density: (n_bins,2) ndarray. [start,end] of each time bin (in s).
     """
     if method in ['bin','bins','bin_rate','psth']:      rate_func = bin_rate
     elif method in ['density','spike_density','sdf']:   rate_func = density
-    
+
     return rate_func(data, **kwargs)
-    
-    
+
+
 def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
              axis=-1, timepts=None, count=None):
     """
     Computes spike rate/count within given sequence of hard-edged time bins
-    
+
     Spiking data can be timestamps or binary (0/1) spike trains
-    
+
     Use <lims,width,step> to set standard-width sliding window bins or
     use <bins> to set any arbitrary custom time bins
 
@@ -113,47 +111,47 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
                 -or-
-                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                (...,n_timepts,...) array of bool. Binary/boolean representation of
                 spike times, for either a single or multiple spike trains.
 
     lims        (2,) array-like. Full time range of analysis ([start,end] in s).
                 Must input a value (unless explicitly setting custom <bins>)
-                
+
     width       Scalar. Full width of each time bin (s). Default: 50 ms
-    
-    step        Scalar. Spacing between successive time bins (s). 
+
+    step        Scalar. Spacing between successive time bins (s).
                 Default: <width> (each bin starts at end of previous bin)
-                
-    output      String. Which spike measure to return: 
+
+    output      String. Which spike measure to return:
                 'rate' :    spike rate in each bin in spk/s. Float valued. [default]
                 'count' :   spike count in each bin. Integer valued.
                 'bool' :    binary presence/absence of any spikes in each bin. Boolean valued.
-                
+
     *** Alternatively, any custom time bins may be explicitly input using <bins> arg ***
-    
+
     bins        (n_bins,2) array-like. [start,end] of each custom time bin (in s).
                 Bins can have any arbitrary width and spacing.
                 Default: bins with given <width,step>, ranging from lims[0] to lims[1]
-                                
+
     axis        Int. Axis of binary data corresponding to time dimension.
-                Not used for spike timestamp data. Default: -1 (last axis of array)           
+                Not used for spike timestamp data. Default: -1 (last axis of array)
 
     timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
                 Not used for spike timestamp data, but MUST be input for binary data.
-                
-    count       DEPRECATED.  Please use output='rate' to return spike rates or 
+
+    count       DEPRECATED.  Please use output='rate' to return spike rates or
                 output='count' to return spike counts, respectively
-                                
+
     RETURNS
-    rates       (...,n_bins) ndarray | (...,n_bins,...) ndarray. Spike rates (in spk/s) 
-                or spike counts in each time bin (and for each trial/unit/etc. in <data>). 
+    rates       (...,n_bins) ndarray | (...,n_bins,...) ndarray. Spike rates (in spk/s)
+                or spike counts in each time bin (and for each trial/unit/etc. in <data>).
                 For timestamp inputs, same shape as <data>, with time-bin axis appended to end.
                 If only a single spike train is input, output is (n_bins,) vector.
                 For boolean inputs, rates has same shape as data with time axis length = n_bins.
                 dtype is float for output='rate', int for output='count', bool for output='bool'.
-                
+
     bins        (n_bins,2) ndarray. [start,end] of each time bin (in s).
-    
+
     NOTES
     Spikes are counted within each bin including the start, but *excluding* the end
     of the bin. That is each bin is defined as [start,end).
@@ -162,38 +160,38 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
         print("<count> argument is DEPRECATED and will be removed in a later release.\n\
                 Please use <output> = 'count', 'rate', or 'bool'")
         output = 'count' if count else 'rate'
-        
-    # Convert boolean spike train data to timestamps for easier computation    
+
+    # Convert boolean spike train data to timestamps for easier computation
     data_type = _spike_data_type(data)
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
         if axis < 0: axis = data.ndim + axis
         data = bool_to_times(data,timepts,axis=axis)
-        
+
     # If data is not an object array, its assumed to be a single spike train
     single_train = isinstance(data,list) or (data.dtype != object)
-        
+
     # Enclose in object array to simplify computations; removed at end
-    if single_train: data = _enclose_in_object_array(np.asarray(data))  
-                    
+    if single_train: data = _enclose_in_object_array(np.asarray(data))
+
     # If bins not explicitly input, set them based on limits,width,step
     if bins is None:
         assert lims is not None, \
-            ValueError("Must input <lims> = full time range of analysis (or set custom <bins>)")            
+            ValueError("Must input <lims> = full time range of analysis (or set custom <bins>)")
         bins = setup_sliding_windows(width,lims,step=step)
-    else:    
+    else:
         bins = np.asarray(bins)
-    
+
     assert (bins.ndim == 2) and (bins.shape[1] == 2), \
         ValueError("bins must be given as (n_bins,2) array of bin [start,end] times")
-        
+
     n_bins  = bins.shape[0]
     widths  = np.diff(bins,axis=1).squeeze()
-    
+
     # Are bins "standard"? : equal-width, with start of each bin = end of previous bin
     std_bins = np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1])
-    
+
     def _histogram_count(data, bins):
         """ Count spikes in equal-width, disjoint bins """
         return np.histogram(data,bins)[0]
@@ -201,23 +199,23 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
 
     def _custom_bin_count(data, bins):
         """ Count spikes in any arbitrary custom bins """
-        return np.asarray([((start <= data) & (data < end)).sum() 
+        return np.asarray([((start <= data) & (data < end)).sum()
                         for (start,end) in bins], dtype='uint16')
-                
+
     # For standard bins, can use histogram algorithm
     if std_bins:
         count_spikes = _histogram_count
         # Convert bins to format expected by np.histogram = edges of all bins in 1 series
         bins_ = np.hstack((bins[:,0],bins[-1,-1]))
     # Otherwise, need algorithm to enumerate and count spikes in each bin
-    else:        
+    else:
         count_spikes = _custom_bin_count
         bins_ = bins
-        
+
     # Create 1D flat iterator to iterate over arbitrary-shape data array
     # Note: This always iterates in row-major/C-order regardless of data order, so all good
     data_flat = data.flat
-    
+
     # Create array to hold counts/rates. Same shape as data, with bin axis appended.
     # dtype is int if computing counts, float if computing rates
     if output == 'rate':    dtype = float
@@ -225,37 +223,37 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     elif output == 'bool':  dtype = bool
     else:
         raise ValueError("Unsupported value '%s' input for <output>")
-    
+
     rates = np.empty((*data.shape,n_bins),dtype=dtype)
-    
+
     for _ in range(data.size):
         # Multidim coordinates into data array
         coords = data_flat.coords
-        
+
         # Count spikes within each bin
         rates[(*coords,slice(None))] = count_spikes(data[coords],bins_)
 
-        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
-        next(data_flat)        
-                    
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(data_flat)
+
     # Normalize all spike counts by bin widths to get spike rates
     # Note: For output='bool', values are auto-converted to bool when <rates> is set
-    if output == 'rate': rates = rates / widths         
-        
+    if output == 'rate': rates = rates / widths
+
     # If only a single spike train was input, squeeze out singleton axis 0
     if single_train: rates = rates.squeeze(axis=0)
-    
+
     # For boolean input data, shift time axis back to its original location in array
     if (data_type == 'bool') and (axis != rates.ndim): rates = np.moveaxis(rates,-1,axis)
-    
+
     return rates, bins
-    
-      
+
+
 psth = bin_rate
 """ Aliases function bin_rate as psth """
 
 
-def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000, 
+def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
             buffer=None, downsmp=1, axis=-1, timepts=None, **kwargs):
     """
     Computes spike density function via convolution with given kernel/width
@@ -272,9 +270,9 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
                 -or-
-                (...,n_timepts,...) ndarray of bool. Binary/boolean representation of 
-                spike times, for either a single or multiple spike trains.                
-                
+                (...,n_timepts,...) ndarray of bool. Binary/boolean representation of
+                spike times, for either a single or multiple spike trains.
+
     kernel      String. Name of convolution kernel to use:
                 'gaussian' [default] | 'hanning'
                 Also includes (not well tested) functionality to input the
@@ -294,55 +292,56 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
                 of time dimension (and trim off before returning) to avoid edge
                 effects. Default: (kernel-dependent, approximates length of
                 edge effects induced by kernel)
-                
+
     downsmp     Int. Factor to downsample time sampling by (after spike density computation).
                 eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
                 Default: 1 (no downsampling)
-                
-    axis        Int. Axis of binary data corresponding to time dimension.
-                Not used for spike timestamp data. Default: -1 (last axis of array)           
 
-    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary input data 
+    axis        Int. Axis of binary data corresponding to time dimension.
+                Not used for spike timestamp data. Default: -1 (last axis of array)
+
+    timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary input data
                 and/or computed rates. MUST be input for binary data. For timestamp data,
                 defaults to np.arange(lims[0], lims[1]+1/smp_rate, 1/smp_rate) (ranging btwn
                 lims, in increments of 1/smp_rate)
-                                
+
     **kwargs    All other kwargs passed directly to kernel function
 
     (any additional kwargs passed directly to kernel function)
 
     RETURNS
     rates       (...,n_timepts) ndarray | (...,n_timepts,...) ndarray.
-                Spike density function -- smoothed spike rates (in spk/s) estimated at each 
-                timepoint (and for each trial/unit/etc. in <data>). 
+                Spike density function -- smoothed spike rates (in spk/s) estimated at each
+                timepoint (and for each trial/unit/etc. in <data>).
                 For timestamp inputs, rates has same shape as data with time axis appended to end.
                 If only a single spike train is input, output is (n_timepts,) vector.
                 For boolean inputs, rates has same shape as data.
-                    
+
     timepts     (n_timepts,) ndarray. Time sampling vector (in s) for rates
     """
     data_type = _spike_data_type(data)
     if axis < 0: axis = data.ndim + axis
-    
+
     if data_type == 'bool':
-        assert timepts is not None, "For binary spike train data, a time sampling vector <timepts> MUST be given"
-                
+        assert timepts is not None, \
+            "For binary spike train data, a time sampling vector <timepts> must be given"
+
     # Set default buffer based on overlap of kernel used
     if buffer is None:
         if kernel in ['hann','hanning']:        buffer = width
         elif kernel in ['gaussian','normal']:   buffer = 3*width
         else:                                   buffer = 0
-    
+
     # Set time sampling from smp_rate,lims
     if timepts is None: timepts = np.arange(lims[0], lims[1]+1e-12, 1/smp_rate)
-        
+
     # Compute sampling rate from input time sampling vector
     dt = np.diff(timepts).mean()
     smp_rate = round(1/dt)
 
-    if smp_rate < 500: 
-        print('Warning: Sampling of %d Hz will likely lead to multiple spikes in bin binarized to 0/1' % round(smp_rate))
-        
+    if smp_rate < 500:
+        print('Warning: Sampling of %d Hz will binarize >1 spike/bin to 1' % round(smp_rate))
+
     # Add buffer to time sampling vector and data to mitigate edge effects
     if buffer != 0:
         n_buffer = int(round(buffer*smp_rate))    # Convert buffer from time units -> samples
@@ -353,18 +352,18 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         # For bool data, reflectively resample edges of data to create buffer
         if data_type == 'bool':
             n_samples = data.shape[axis]
-            idxs = np.concatenate((np.flip(np.arange(n_buffer)+1), np.arange(n_samples), 
+            idxs = np.concatenate((np.flip(np.arange(n_buffer)+1), np.arange(n_samples),
                                    np.arange(n_samples-2, n_samples-2-n_buffer, -1)))
-            data = data.take(idxs,axis=axis)           
-                        
-    # Convert kernel specifier to actual kernel (window) function 
-    width_smps = width*smp_rate # convert width to samples    
+            data = data.take(idxs,axis=axis)
+
+    # Convert kernel specifier to actual kernel (window) function
+    width_smps = width*smp_rate # convert width to samples
     # Kernel is already a (custom) array of values
     if isinstance(kernel,np.ndarray):       kernel_ = kernel
-    
+
     # Kernel is a function/callable -- call it with width in samples
     elif callable(kernel):                  kernel_ = kernel(width_smps,**kwargs)
-    
+
     # Kernel is a string specifier -- call appropriate kernel-generating function
     elif isinstance(kernel,str):
         kernel = kernel.lower()
@@ -376,10 +375,10 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         else:
             raise ValueError("Unsupported value '%s' given for kernel. \
                             Should be 'hanning'|'gaussian'" % kernel)
-    
+
     # Normalize kernel to integrate to 1
     kernel_ = kernel_ / (kernel_.sum()/smp_rate)
-        
+
     # Convert spike times to binary spike trains -> (...,n_timepts)
     if data_type == 'timestamp':
         bins = np.stack((timepts-dt/2, timepts+dt/2), axis=1)
@@ -391,7 +390,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 
     # Ensure kernel broadcasts against data
     slicer = tuple([np.newaxis]*(data.ndim-1) + [slice(None)])
-    
+
     # Compute density as convolution of spike trains with kernel
     # Note: 1d kernel implies 1d convolution across multi-d array data
     rates = convolve(data,kernel_[slicer],mode='same')
@@ -402,8 +401,8 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         data        = _remove_buffer(data,n_buffer,axis=-1)
         rates       = _remove_buffer(rates,n_buffer,axis=-1)
         timepts     = _remove_buffer(timepts,n_buffer,axis=-1)
-        
-    # Implement any temporal downsampling of rates    
+
+    # Implement any temporal downsampling of rates
     if downsmp != 1:
         rates       = rates[...,0::downsmp]
         timepts     = timepts[0::downsmp]
@@ -411,13 +410,13 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     # KLUDGE Sometime trials/neurons/etc. w/ 0 spikes end up with tiny non-0 values
     # due to floating point error in fft routines. Fix by setting = 0.
     no_spike_idxs   = ~data.any(axis=-1,keepdims=True)
-    shape           = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])    
-    rates[np.tile(no_spike_idxs,shape)] = 0    
-    
+    shape           = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])
+    rates[np.tile(no_spike_idxs,shape)] = 0
+
     # Reshape rates so that time axis is in original location
     if (data_type == 'bool') and (axis != data.ndim):
         rates = np.moveaxis(rates,-1,axis)
-        
+
     return rates, timepts
 
 
@@ -427,56 +426,56 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 def rate_stats(rates, stat='Fano', axis=None, **kwargs):
     """
     Computes given statistic on spike rates of one or more spike trains
-    
+
     Input data must be spike rates, eg as computed using rate()
-    
+
     Stats may be along one/more array axes (eg trials) or across entire data array
-       
+
     stats = rate_stats(rates, stat='Fano', axis=None, **kwargs)
-           
+
     ARGS
     rates       (...,n_obs,...) ndarray. Spike rate data. Shape arbitrary.
-    
+
     stat        String. Rate statistic to compute. Options:
                 'Fano' :    Fano factor = var(rate)/mean(rate) [default]
                 'CV' :      Coefficient of Variation = SD(rate)/mean(rate)
-                    
+
     axis        Int. Array axis to compute rate statistics along (usually corresponding
                 to distict trials/observations). If None [default], computes statistic
                 across entire array (analogous to np.mean/var).
-                
+
     **kwargs    Any additional keyword args passed directly to statistic computation function
-          
+
     RETURNS
     stats       Float | (...,1,...) ndarray. Rate statistic(s) computed on data.
                 For vector data or axis=None, a single scalar value is returned.
                 Otherwise, it's an array w/ same shape as <rates>, but with <axis>
-                reduced to length 1.        
+                reduced to length 1.
     """
     data_type = _spike_data_type(rates)
     assert data_type not in ['timestamp','bool'], \
         TypeError("Must input spike *rate* data for this function (eg use rate())")
-    
+
     stat = stat.lower()
-    
+
     if stat == 'fano':  stat_func = fano
     elif stat == 'cv':  stat_func = cv
     else:
         raise ValueError("Unsupported value '%s' for <stat> (should be 'Fano'|'CV')" % stat)
-    
+
     return stat_func(rates, axis=axis, **kwargs)
 
 
 def rate_fano(rates, axis=None, **kwargs):
     """
-    Computes Fano factor (variance/mean) of rates of one or more spike trains    
+    Computes Fano factor (variance/mean) of rates of one or more spike trains
     Convenience function that calls rate_stats(stat='Fano'). See there for details.
     """
     return rate_stats(rates, stat='Fano', axis=axis, **kwargs)
 
 def rate_cv(rates, axis=None, **kwargs):
     """
-    Computes Coefficient of Variation (SD/mean) of rates of one/more spike trains    
+    Computes Coefficient of Variation (SD/mean) of rates of one/more spike trains
     Convenience function that calls rate_stats(stat='CV'). See there for details.
     """
     return rate_stats(rates, stat='CV', axis=axis, **kwargs)
@@ -485,9 +484,9 @@ def rate_cv(rates, axis=None, **kwargs):
 def isi(data, axis=-1, timepts=None):
     """
     Computes inter-spike intervals of one or more spike trains
-    
+
     Spiking data can be timestamps or binary (0/1) spike trains
-    
+
     ISIs = isi(data,axis=-1,timepts=None)
 
     ARGS
@@ -496,56 +495,56 @@ def isi(data, axis=-1, timepts=None):
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
                 -or-
-                (...,n_timepts,...) array of bool. Binary/boolean representation of 
+                (...,n_timepts,...) array of bool. Binary/boolean representation of
                 spike times, for either a single or multiple spike trains.
 
     axis        Int. Axis of binary data corresponding to time dimension.
-                Not used for spike timestamp data. Default: -1 (last axis of array)           
+                Not used for spike timestamp data. Default: -1 (last axis of array)
 
     timepts     (n_timepts,) ndarray. Time sampling vector (in s) for binary data.
                 Not used for spike timestamp data, but MUST be input for binary data.
-                                
+
     RETURNS
     ISIs        (n_spikes-1,) array | object array of (n_spikes-1,) arrays. Time intervals
                  between each successive pair of spikes in data (in same time units as data).
-                For boolean inputs, output is converted to timestamp-like configuration  
-                with time axis removed.                     
+                For boolean inputs, output is converted to timestamp-like configuration
+                with time axis removed.
                 For timestamp inputs, same shape as <data> (but with 1 fewer item per array cell)
                 Array cells with <= 1 spike returned as empty arrays.
                 If only a single spike train is input, output is (n_spikes-1,) vector.
     """
-    # Convert boolean spike train data to timestamps for easier computation    
+    # Convert boolean spike train data to timestamps for easier computation
     data_type = _spike_data_type(data)
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
         if axis < 0: axis = data.ndim + axis
         data = bool_to_times(data,timepts,axis=axis)
-        
+
     # If data is not an object array, its assumed to be a single spike train
     single_train = isinstance(data,list) or (data.dtype != object)
-        
+
     # Enclose in object array to simplify computations; removed at end
-    if single_train: data = _enclose_in_object_array(np.asarray(data))  
-            
+    if single_train: data = _enclose_in_object_array(np.asarray(data))
+
     # Create 1D flat iterator to iterate over arbitrary-shape data array
     # Note: This always iterates in row-major/C-order regardless of data order, so all good
     data_flat = data.flat
-    
+
     ISIs = np.empty_like(data,dtype=object)
-    
+
     for _ in range(data.size):
         # Multidim coordinates into data array
         coords = data_flat.coords
-        
+
         # Compute ISIs for given data cell (unit/trial/etc.)
         ISIs[coords] = np.diff(data[coords])
 
-        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
         next(data_flat)
-        
+
     # If only a single spike train was input, squeeze out singleton axis 0
-    if single_train: ISIs = ISIs.squeeze(axis=0)        
+    if single_train: ISIs = ISIs.squeeze(axis=0)
 
     return ISIs
 
@@ -556,11 +555,11 @@ interspike_interval = isi
 def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
     """
     Computes given statistic on inter-spike intervals of one or more spike trains
-   
+
     Input data must be inter-spike intervals, eg as computed using isi()
-   
+
     Can request data to be pooled along one/more axes (eg trials) before stats computation
-    
+
     stats = isi_stats(ISIs,stat='Fano',axis='each',**kwargs)
 
     ARGS
@@ -568,25 +567,25 @@ def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
                 List of inter-spike intervals (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
-                
+
     stat        String. ISI statistic to compute. Options:
                 'Fano' :    Fano factor = var(ISIs)/mean(ISIs) [default]
                 'CV' :      Coefficient of Variation = SD(ISIs)/mean(ISIs)
                 'CV2' :     Local Coefficient of Variation (Holt 1996 J Neurophys)
                 'LV' :      Local Variation (Shinomoto 2009 PLoS Computational Biology)
                 'burst_fract' : Fraction of spikes that are in bursts (measure of burstiness)
-                
-                CV2 and LV and CV-like measures that reduce influence of changes in 
+
+                CV2 and LV and CV-like measures that reduce influence of changes in
                 spike rate on the metric by only measuring local variation (between
                 temporally adjacent ISIs). See their specific functions for details.
-                
+
     axis        Int | String. Axis of ISI data to pool ISIs along before computing stat.
                 eg, for data that is shape (n_trials,n_units), if you want to compute
                 a stat value for each unit, pooled across all trials, you'd set axis=0.
                 If axis=None, ISIs are pooled across the *entire* data array.
                 If axis='each', stats are computed separately for each spike train in the array.
                 NOTE: For locality-sensitive stats ('CV2','LV'), axis MUST = 'each'.
-                Default: 'each' (note this is the opposite of default for rate_stats) 
+                Default: 'each' (note this is the opposite of default for rate_stats)
 
     RETURNS
     stats       Float | array of floats. Given ISI stat, computed on ISI data.
@@ -594,11 +593,11 @@ def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
                 same shape as ISIs, but with <axis> reduced to singleton.
     """
     stat = stat.lower()
-    
+
     if stat in ['cv2','lv']:
         assert axis == 'each', \
-            ValueError("For locality-sensitive stats (CV2,LV), no pooling is allowed (axis must = 'each')")
-    
+            ValueError("No pooling allowed for locality-sensitive stats (CV2,LV). Use axis='each'")
+
     if stat == 'fano':          stat_func = fano
     elif stat == 'cv':          stat_func = cv
     elif stat == 'cv2':         stat_func = cv2
@@ -606,38 +605,38 @@ def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
     elif stat == 'burst_fract': stat_func = burst_fract
     else:
         raise ValueError("Unsupported value '%s' for <stat>." % stat)
-    
+
     # If data is not an object array, its assumed to be a single spike train
     single_train = isinstance(ISIs,list) or (ISIs.dtype != object)
-        
+
     # Enclose in object array to simplify computations; removed at end
     if single_train:
-        ISIs = _enclose_in_object_array(np.asarray(ISIs))  
-    
+        ISIs = _enclose_in_object_array(np.asarray(ISIs))
+
     # Pool (concatenate) along axis if requested (ie not running separately for each spike train)
     elif axis != 'each':
         ISIs = concatenate_object_array(ISIs,axis=axis,sort=False)
         # KLUDGE Function above extracts item from object array. Reenclose it to simplify code.
         if axis is None: ISIs = _enclose_in_object_array(ISIs)
-        
+
     # Create 1D flat iterator to iterate over arbitrary-shape data array
     # Note: This always iterates in row-major/C-order regardless of data order, so all good
     ISIs_flat = ISIs.flat
-    
+
     stats = np.empty_like(ISIs,dtype=float)
-    
+
     for _ in range(ISIs.size):
         # Multidim coordinates into data array
         coords = ISIs_flat.coords
-        
+
         # Compute ISI stats for given data cell (unit/trial/etc.)
         stats[coords] = stat_func(ISIs[coords], **kwargs)
 
-        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
         next(ISIs_flat)
-        
+
     # If only a single spike train was input, squeeze out singleton axis 0
-    if single_train: stats = stats.squeeze(axis=0)        
+    if single_train: stats = stats.squeeze(axis=0)
 
     return stats
 
@@ -657,27 +656,27 @@ def isi_cv2(ISIs, axis=None, **kwargs):
 def isi_lv(ISIs, axis=None, **kwargs):
     """ Convenience function that calls isi_stats(stat='LV'). See there for details. """
     return isi_stats(ISIs, stat='LV', axis=axis, **kwargs)
-        
+
 def isi_burst_fract(ISIs, axis=None, **kwargs):
     """ Convenience function that calls isi_stats(stat='LV'). See there for details. """
     return isi_stats(ISIs, stat='burst_fract', axis=axis, **kwargs)
-        
+
 def burst_fract(ISIs, crit=0.020):
     """
     Computes measure of burstiness of ISIs of a spike train = fraction of all
     ISIs that are within a spike burst (ISI < 20 ms by default)
-    
+
     ARGS
     ISIs    Array-like. List of inter-spike intervals for a single spike train
     crit    Float. Criterion ISI value (s) to discriminate burst vs non-burst spikes
             Default: 20 ms
-            
+
     RETURNS
-    burst   Float. Fraction of all spikes that are within spike bursts.      
+    burst   Float. Fraction of all spikes that are within spike bursts.
     """
     return (ISIs < crit).sum() / ISIs.size
 
-        
+
 #==============================================================================
 # Plotting functions
 #==============================================================================
@@ -685,21 +684,21 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
                 xlabel=None, ylabel=None):
     """
     Generates raster plot of spike times
-    
+
     ARGS
     spike_times (n_spikes,) array-like | (n_trains,) object array of (n_spikes,) arrays.
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array. Unlike other functions,
-                here object array must be 1d.                
-    
+                here object array must be 1d.
+
     ax          Axes object. Axis to plot into. Default: plt.gca()
     xlim        (2,) array-like. x-axis limits of plot. Default: (auto-set)
     color       Color specifier. Color to plot all spikes in. Default: '0.25' (dark gray)
     height      Float. Height of each plotted spike (in fraction of distance btwn spike trains)
                 Default: 1.0 (each spike height is full range for its row in raster)
     x/ylabel    String. x/y-axis labels for plot. Default: (no label)
-    
+
     ACTION      Plots raster plot from spike time data
     """
     if ax is None: ax = plt.gca()
@@ -709,13 +708,13 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
         # Extract only spike w/in plotting time window
         if xlim is not None:
             spike_times = spike_times[(spike_times >= xlim[0]) &
-                                    (spike_times <= xlim[1])]
+                                      (spike_times <= xlim[1])]
 
         y = np.asarray([[y+height/2.0], [y-height/2.0]])
 
         plt.plot(spike_times[np.newaxis,:]*np.ones((2,1)),
-                y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
-        
+                 y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
+
     # Plotting multiple spike train (multiple trials or neurons)
     # Plot each spike train as a separate line
     if spike_times.dtype == object:
@@ -869,10 +868,10 @@ def bool_to_times(spike_bool, timepts, axis=-1):
     spike_bool  (...,n_timepts,...) ndarray of bools. Binary spike trains,
                 where 1 indicates >= 1 spike in time bin, 0 indicates no spikes.
 
-    timepts     (n_timepts,) ndarray. Time sampling vector for data 
+    timepts     (n_timepts,) ndarray. Time sampling vector for data
                 (center of each time bin used to compute binary representation).
-                
-    axis        Int. Axis of data corresponding to time dimension. Default: -1 (last axis)              
+
+    axis        Int. Axis of data corresponding to time dimension. Default: -1 (last axis)
 
     RETURNS
     spike_times Object ndarray of (n_spikes[cell],) ndarrays | (n_spikes,) ndarray
@@ -883,18 +882,18 @@ def bool_to_times(spike_bool, timepts, axis=-1):
     spike_bool = np.asarray(spike_bool)
     timepts = np.asarray(timepts)
     if axis < 0: axis = spike_bool.ndim + axis
-    
-    # For single-spike-train data, temporarily prepend singleton axis 
+
+    # For single-spike-train data, temporarily prepend singleton axis
     single_train = spike_bool.ndim == 1
     if single_train:
         spike_bool = spike_bool[np.newaxis,:]
         axis = 1
-        
+
     # Reshape input data -> 2d array (n_spike_trains,n_timepts)
     # (where spike trains = trials,units,etc.)
-    spike_bool,spike_bool_shape = standardize_array(spike_bool, axis=axis, target_axis=-1)    
+    spike_bool,spike_bool_shape = standardize_array(spike_bool, axis=axis, target_axis=-1)
     n_spike_trains,n_timepts = spike_bool.shape
-    
+
     spike_times = np.empty((n_spike_trains,), dtype=object)
 
     # For each spike train, find spikes and convert to timestamps
@@ -907,7 +906,7 @@ def bool_to_times(spike_bool, timepts, axis=-1):
 
     # Extract single spike train from nesting array -> (n_spikes,) array
     if single_train: spike_times = spike_times[0]
-            
+
     return spike_times
 
 
@@ -922,16 +921,16 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     spike_times (n_spikes,) array-like | object array of (n_spikes,) arrays.
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
-                units, etc.) within an object array of any arbitrary shape.  
-    
+                units, etc.) within an object array of any arbitrary shape.
+
     lims        (2,) array-like. Full time range of analysis ([start,end] in s).
                 Must input a value (unless explicitly setting custom <bins>)
 
-    width       Float. Width of bin used to discretize spike times (s). 
+    width       Float. Width of bin used to discretize spike times (s).
                 Usually 1 ms [default]
 
     *** Alternatively, time bins may be explicitly input using <bins> arg ***
-    
+
     bins        (n_bins,2) array-like. [start,end] of each custom time bin (in s).
                 Bins can have any arbitrary width and spacing, but really you would
                 always want width = spacing, so each bin starts at end of last bin
@@ -940,7 +939,7 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     RETURNS
     spike_bool  (...,n_bins) ndarray of bools. Binary spike trains, where
                  1/True indicates >= 1 spike in time bin, 0/False indicates no spikes.
-                    
+
     timepts     (n_bins,) ndarray. Time sampling vector (in s). Center of each time bin
                 used to compute binary spike data.
     """
@@ -955,7 +954,7 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
         bins = setup_sliding_windows(width,lims=lims,step=width)
 
     timepts = bins.mean(axis=1)
-    
+
     # For each spike train in <spike_times> compute count w/in each hist bin
     # Note: Setting dtype=bool implies any spike counts > 0 will be True
     spike_bool,bins = bin_rate(spike_times,bins=bins,output='bool')
@@ -966,89 +965,89 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
 def cut_trials(data, trial_lims, **kwargs):
     """
     Cuts spiking data into trials, for either spike timestamps or binary spike trains
-    
-    Wrapper around cut_trials_spike_times/cut_trials_spike_bool.  See those for 
+
+    Wrapper around cut_trials_spike_times/cut_trials_spike_bool.  See those for
     details on data-specific arguments.
-    
+
     cut_data = cut_trials(data, trial_lims, **kwargs)
-    
+
     ARGS
-    data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape) | 
+    data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape) |
                 (...,n_timepts,...) ndarray.
                 Spiking data, given either as spike timestamps or binary (1/0) spike trains.
-                Can be given for either a single spike train, or for multiple spike trains 
+                Can be given for either a single spike train, or for multiple spike trains
                 (eg different trials, units, etc.) within an object array.
-                
-                For binary spike data, additional <smp_rate> and <axis> keyword arguments must be 
+
+                For binary spike data, additional <smp_rate> and <axis> keyword arguments must be
                 input to indicate the sampling rate (in Hz) and the array time axis.
-                
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
+
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial
                 (in same timebase as data) to use to cut data.
-                
+
     **kwargs    Any additional keyword args passed directly to cut_trials_spike_times/bool()
-                
+
     RETURNS
-    cut_data    (...,n_trials) object array of (n_trial_spikes) arrays | 
+    cut_data    (...,n_trials) object array of (n_trial_spikes) arrays |
                 (...,n_trial_timepts,...,n_trials) array.
                 Data segmented into trials.
-                Trial axis is appended to end of all axes in input data.  
+                Trial axis is appended to end of all axes in input data.
     """
     data_type = _spike_data_type(data)
-    
+
     if data_type == 'timestamp':    cut_func = cut_trials_spike_times
     elif data_type == 'bool':       cut_func = cut_trials_spike_bool
     else:
-        raise ValueError("Unsupported data format input. Must be spike timestamps or binary (0/1) spike train")
-    
+        raise ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
+
     return cut_func(data, trial_lims, **kwargs)
-        
-        
+
+
 def cut_trials_spike_times(data, trial_lims, trial_refs=None):
     """
     Cuts spike timestamp data into trials
-    
+
     cut_data = cut_trials_spike_times(data, trial_lims, trial_refs=None)
-    
+
     ARGS
     data        (n_spikes,) array-like | object array of (n_spikes,) arrays (arbitrary shape).
                 List of spike timestamps (in s).  Can be given for either a single
                 spike train, or for multiple spike trains (eg different trials,
                 units, etc.) within an object array of any arbitrary shape.
-                
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial 
+
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial
                 (in same timebase as data) to use to cut data.
-                
-    trial_refs  (n_trials,) array-like. List of event time in each trial to re-reference 
+
+    trial_refs  (n_trials,) array-like. List of event time in each trial to re-reference
                 trial's spike timestamps to (ie this sets t=0 for each trial), if desired.
-                Default: None (just leave timestamps in original timebase)              
-                
+                Default: None (just leave timestamps in original timebase)
+
     RETURNS
     cut_data    (...,n_trials) object array of (n_trial_spikes) arrays.
                 Spike timestamp data segmented into trials.
-                Trial axis is appended to end of all axes in input data.          
+                Trial axis is appended to end of all axes in input data.
     """
-    trial_lims = np.asarray(trial_lims)    
+    trial_lims = np.asarray(trial_lims)
     assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
         "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
     n_trials = trial_lims.shape[0]
-    
+
     do_ref = trial_refs is not None
-    
+
     # If data is not an object array, its assumed to be a single spike train
     single_train = isinstance(data,list) or (data.dtype != object)
-        
-    # Enclose in object array to simplify computations; removed at end
-    if single_train: data = _enclose_in_object_array(np.asarray(data))  
 
-    
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: data = _enclose_in_object_array(np.asarray(data))
+
+
     # Create 1D flat iterator to iterate over arbitrary-shape data array
     # Note: This always iterates in row-major/C-order regardless of data order, so all good
     data_flat = data.flat
-        
+
     # Create array to hold trial-cut data. Same shape as data, with trial axis appended.
     cut_data = np.empty((*data.shape,n_trials),dtype=object)
-    
-    for _ in range(data.size):        
+
+    for _ in range(data.size):
         coords = data_flat.coords   # Multidim coordinates into data array
         data_cell = data[coords]    # Timestamps for current array cell (unit,etc.)
 
@@ -1056,118 +1055,119 @@ def cut_trials_spike_times(data, trial_lims, trial_refs=None):
         for trial,lim in enumerate(trial_lims):
             trial_bool = (lim[0] <= data_cell) & (data_cell < lim[1])
             # Note: Returns empty array if no spikes
-            trial_spikes = data_cell[trial_bool]            
+            trial_spikes = data_cell[trial_bool]
             # Re-reference spike times to within-trial reference time (if requested)
             if do_ref: trial_spikes -= trial_refs[trial]
             cut_data[(*coords,trial)] = trial_spikes
-            
-        # Iterate to next element (list of spike times for trial/unit/etc.) in data 
-        next(data_flat)    
-        
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(data_flat)
+
     return cut_data
-    
-    
+
+
 def cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
     """
     Cuts binary spike train data into trials
-    
+
     cut_data = cut_trials_spike_bool(data, trial_lims, smp_rate, axis=0)
-    
+
     ARGS
     data        (...,n_timepts,...) ndarray. Continuous spike train data unsegmented into trials.
                 Arbitrary dimensionality, could include multiple channels, etc.
-                
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s) 
+
+    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s)
                 to use to cut data.
-                
+
     smp_rate    Scalar. Sampling rate of data (Hz). Must input a value for this.
-    
-    axis        Int. Axis of data array corresponding to time samples. Default: 0                
-                
+
+    axis        Int. Axis of data array corresponding to time samples. Default: 0
+
     RETURNS
     cut_data    (...,n_trial_timepts,...,n_trials) array.
                 Data segmented into trials.
-                Trial axis is appended to end of all axes in input data.          
+                Trial axis is appended to end of all axes in input data.
     """
-    assert smp_rate is not None, "For binary spike train data, you must smp_rate = sampling rate in Hz"
-        
-    trial_lims = np.asarray(trial_lims)    
+    assert smp_rate is not None, "For binary spike train data, must input value for <smp_rate>"
+
+    trial_lims = np.asarray(trial_lims)
     assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
         "trial_lims argument should be a (n_trials,2) array of trial [start,end] times"
     n_trials = trial_lims.shape[0]
-        
+
     # Convert trial_lims in s -> indices into continuous data samples
     trial_idxs = np.round(smp_rate*trial_lims).astype(int)
     assert trial_idxs.min() >= 0, \
-        ValueError("trial_lims are attempting to index (%d) before start of data (0)" % trial_idxs.min())
+        ValueError("trial_lims are attempting to index (%d) before start of data (0)" %
+                   trial_idxs.min())
     assert trial_idxs.max() < data.shape[axis], \
-        ValueError("trial_lims are attempting to index (%d) beyond end of data (%d)" % 
+        ValueError("trial_lims are attempting to index (%d) beyond end of data (%d)" %
                    (trial_idxs.max(),data.shape[axis]))
     # Ensure all windows have same length
     trial_idxs = _check_window_lengths(trial_idxs,tol=1)
-                        
-    # Samples per trial = end - start + 1        
+
+    # Samples per trial = end - start + 1
     n_smp_per_trial = trial_idxs[0,1] - trial_idxs[0,0] + 1
-        
+
     # Create array to hold trial-cut data. Same shape as data, with time sample axis
     # reduced to n_samples_per_trial and trial axis appended.
     cut_shape = [*data.shape,n_trials]
     cut_shape[axis] = n_smp_per_trial
     cut_data = np.empty(tuple(cut_shape),dtype=data.dtype)
-    
+
     # Extract segment of continuous data for each trial
     for trial,lim in enumerate(trial_idxs):
         cut_data[...,trial] = index_axis(data, axis, slice(lim[0],lim[1]+1))
-                        
+
     return cut_data
-    
-    
+
+
 def realign_data(data, align_times, **kwargs):
     """
-    Realigns trial-cut spiking data on new within-trial event times, 
+    Realigns trial-cut spiking data on new within-trial event times,
     for either spike timestamps or binary spike trains
-    
+
     Wrapper around realign_spike_times/realign_spike_bool.  See those for details
     on data-specific arguments.
-    
+
     realigned = realign_data(data, align_times, **kwargs)
-    
+
     ARGS
-    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays | 
+    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays |
                 (...,n_timepts,...) ndarray.
                 Spiking data, given either as spike timestamps or binary (1/0) spike trains.
                 Arbitrary shape, but must give <trial_axis> (and <time_axis> for binary data).
 
     align_times (n_trials,) array-like. New set of times (in old
-                reference frame) to realign spiking data to                
-                
-    **kwargs    Any additional keyword args passed directly to realign_spike_times/bool()     
-                
+                reference frame) to realign spiking data to
+
+    **kwargs    Any additional keyword args passed directly to realign_spike_times/bool()
+
     RETURNS
     realigned   Data realigned to given within-trial times.
                 For timestamp data, this has same shape as input data.
-                For binary data, time axis is reduced to length implied by time_range, but 
-                otherwise array has same shape as input data.   
+                For binary data, time axis is reduced to length implied by time_range, but
+                otherwise array has same shape as input data.
     """
     data_type = _spike_data_type(data)
-    
+
     if data_type == 'timestamp':    realign_func = realign_spike_times
     elif data_type == 'bool':       realign_func = realign_spike_bool
     else:
-        raise ValueError("Unsupported data format input. Must be spike timestamps or binary (0/1) spike train")
-    
+        raise ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
+
     return realign_func(data, align_times, **kwargs)
-          
+
 
 def realign_data_on_event(data, event_data, event, **kwargs):
-    """     
+    """
     Convenience wrapper around realign_data() for relaligning to a given
     named event within a per-trial dataframe or dict variable.
 
     realigned = realign_spike_times_on_event(spike_times, event_data, event, **kwargs)
 
     ARGS
-    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays | 
+    data        (...,n_trials,...) object ndarray of (n_spikes[trial],) ndarrays |
                 (...,n_timepts,...) ndarray.
                 Spiking data, given either as spike timestamps or binary (1/0) spike trains.
                 Arbitrary shape, but must give <trial_axis> (and <time_axis> for binary data).
@@ -1186,11 +1186,11 @@ def realign_data_on_event(data, event_data, event, **kwargs):
     # Compute the realignment and return
     return realign_data(data, align_times, **kwargs)
 
-                    
+
 def realign_spike_times(spike_times, align_times, trial_axis=0):
     """
-    Realigns trial-cut spike timestamps to new set of within-trial times 
-    (eg new trial event) so that t=0 on each trial at given event. 
+    Realigns trial-cut spike timestamps to new set of within-trial times
+    (eg new trial event) so that t=0 on each trial at given event.
     For example, timestamps aligned to a start-of-trial event might
     need to be relaligned to the behavioral response.
 
@@ -1205,30 +1205,31 @@ def realign_spike_times(spike_times, align_times, trial_axis=0):
 
     align_times (n_trials,) array-like. New set of times (in old
                 reference frame) to realign spike timestamps to
-                
+
     trial_axis  Int. Axis of spike_times corresponding to trials.
-                Default: 0 (1st axis of array)       
+                Default: 0 (1st axis of array)
 
     RETURNS
     realigned   Same data struture, but with each timestamp realigned to times
-    """    
+    """
     # Move trial axis to first axis of array
     if trial_axis != 0: spike_times = np.moveaxis(spike_times, trial_axis, 0)
-    
+
     # Subtract new reference time from all spike times for each trial
     for trial,align_time in enumerate(align_times):
         spike_times[trial,...] = spike_times[trial,...] - align_time
-        
+
     # Move trial axis to original location
     if trial_axis != 0: spike_times = np.moveaxis(spike_times, 0, trial_axis)
 
     return spike_times
 
 
-def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_axis=0, trial_axis=-1):
+def realign_spike_bool(data, align_times, time_range=None, timepts=None,
+                       time_axis=0, trial_axis=-1):
     """
-    Realigns trial-cut binary (1/0) spiking data to new set of within-trial times 
-    (eg new trial event) so that t=0 on each trial at given event. 
+    Realigns trial-cut binary (1/0) spiking data to new set of within-trial times
+    (eg new trial event) so that t=0 on each trial at given event.
     For example, data aligned to a start-of-trial event might
     need to be relaligned to the behavioral response.
 
@@ -1237,24 +1238,24 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
     ARGS
     data        ndarray. Binary (1/0) spiking data segmented into trials.
                 Arbitrary dimensionality, could include multiple units, etc.
-    
+
     align_times (n_trials,) array-like. New set of times (in old
                 reference frame) to realign data to (in s)
-                
+
     time_range  (2,) array-like. Time range to extract from each trial around
                 new align time ([start,end] in s relative to align_times).
                 eg, time_range=(-1,1) -> extract 1 s on either side of align event.
                 Must set value for this.
-                        
+
     timepts     (n_timepts) array-like. Time sampling vector for data (in s).
                 Must set value for this.
-                                
+
     time_axis   Int. Axis of data corresponding to time samples.
-                Default: 0 (1st axis of array)       
+                Default: 0 (1st axis of array)
 
     trial_axis  Int. Axis of data corresponding to distinct trials.
-                Default: -1 (last axis of array)       
-                
+                Default: -1 (last axis of array)
+
     RETURNS
     realigned   Data realigned to given within-trial times.
                 Time axis is reduced to length implied by time_range, but otherwise
@@ -1263,49 +1264,49 @@ def realign_spike_bool(data, align_times, time_range=None, timepts=None, time_ax
     assert time_range is not None, \
         "Desired time range to extract from each trial must be given in  <time_range>"
     assert timepts is not None, "Data time sampling vector must be given in <timepts>"
-    
+
     timepts     = np.asarray(timepts)
-    align_times = np.asarray(align_times)    
+    align_times = np.asarray(align_times)
     time_range  = np.asarray(time_range)
-    
+
     if time_axis < 0:   time_axis = data.ndim + time_axis
     if trial_axis < 0:  trial_axis = data.ndim + trial_axis
-    
+
     # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
     if (time_axis == data.ndim-1) and (trial_axis == 0):
         data = np.swapaxes(data,time_axis,trial_axis)
     else:
         if time_axis != 0:              data = np.moveaxis(data,time_axis,0)
         if trial_axis != data.ndim-1:   data = np.moveaxis(data,trial_axis,-1)
-    
+
     # Convert align times and time epochs to nearest integer sample indexes
     dt = np.mean(np.diff(timepts))
     align_smps = np.round((align_times - timepts[0])/dt).astype(int)
     range_smps = np.round(time_range/dt).astype(int)
     # Compute [start,end] sample indexes for each trial epoch = align time +/- time range
     trial_range_smps = align_smps[:,np.newaxis] + range_smps[np.newaxis,:]
-        
+
     assert (trial_range_smps[:,0] >= 0).all(), \
-        "Some requested time epochs extend before start of data"    
+        "Some requested time epochs extend before start of data"
     assert (trial_range_smps[:,1] < len(timepts)).all(), \
         "Some requested time epochs extend beyond end of data"
-            
-    n_timepts_out   = range_smps[1] - range_smps[0] + 1    
-    return_shape    = (n_timepts_out, *(data.shape[1:]))    
+
+    n_timepts_out   = range_smps[1] - range_smps[0] + 1
+    return_shape    = (n_timepts_out, *(data.shape[1:]))
     realigned       = np.empty(return_shape,dtype=data.dtype)
 
-    # Extract timepoints corresponding to realigned time epoch from each trial in data     
+    # Extract timepoints corresponding to realigned time epoch from each trial in data
     for trial,t in enumerate(trial_range_smps):
         # Note: '+1' below makes the selection inclusive of the right endpoint in each trial
-        realigned[...,trial] = data[t[0]:t[1]+1,...,trial]    
-    
+        realigned[...,trial] = data[t[0]:t[1]+1,...,trial]
+
     # Move array axes back to original locations
     if (time_axis == data.ndim-1) and (trial_axis == 0):
         realigned = np.swapaxes(realigned,trial_axis,time_axis)
     else:
         if time_axis != 0:              realigned = np.moveaxis(realigned,0,time_axis)
         if trial_axis != data.ndim-1:   realigned = np.moveaxis(realigned,-1,trial_axis)
-                
+
     return realigned
 
 
@@ -1323,19 +1324,19 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
 
     ARGS
     data_sua    (...,n_units,...) object ndarray of (n_spikes[unit],) ndarrays.
-                Lists of single-unit spike timestamps for different units and 
+                Lists of single-unit spike timestamps for different units and
                 trials/conditions/etc. within an object array of any arbitrary shape.
                 -or-
                 (...,n_units,...) ndarray of bools. Any arbitary shape.
                 Binary (0/1) spike trains for different units and trials/conditions/etc.
                 -or-
                 (...,n_units,...) ndarray. Any arbitary shape.
-                Set of spike rates/counts for different units and trials/conditions/etc.                
+                Set of spike rates/counts for different units and trials/conditions/etc.
 
     electrodes  (n_units,) array-like. List of electrode numbers of each unit
                 in <data_sua>
 
-    axis        Int. Axis of <data_sua> corresponding to different units. 
+    axis        Int. Axis of <data_sua> corresponding to different units.
                 Default: -1 (last axis)
 
     elec_set    (n_elecs,) array-like. Set of unique electrodes in <electrodes>.
@@ -1346,28 +1347,28 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
 
     RETURNS
     data_mua    (...,n_elecs,...) object ndarray of (n_spikes[elecs],) ndarrays.
-                Lists of multi-unit spike timestamps pooled across all units 
+                Lists of multi-unit spike timestamps pooled across all units
                 on each electrode. Same shape as input, with unit axis reduced
                 to len(elec_set).
                 -or-
                 (...,n_elecs,...) ndarray of bools.
-                Binary spike trains pooled across all units on each electrode. 
-                Same shape as input, with unit axis reduced to len(elec_set).                
+                Binary spike trains pooled across all units on each electrode.
+                Same shape as input, with unit axis reduced to len(elec_set).
                 -or-
                 (...,n_elecs,...) ndarray. Spike rates/counts pooled (summed) across
-                all units on each electrode. Same shape as input, with unit axis 
-                reduced to len(elec_set).                
+                all units on each electrode. Same shape as input, with unit axis
+                reduced to len(elec_set).
 
     elec_idxs   (n_elecs,) ndarray of ints. Indexes of 1st occurrence of each
                 electrode in <elec_set> within <electrodes>. Can be used to
                 transform any corresponding metadata appropriately.
     """
     data_type = _spike_data_type(data_sua)
-    
+
     if data_type == 'timestamp':    pooler_func = pool_electrode_units_spike_times
     elif data_type == 'bool':       pooler_func = pool_electrode_units_spike_bool
     else:                           pooler_func = pool_electrode_units_spike_rate
-    
+
     return pooler_func(data_sua,electrodes,axis=axis,
                        elec_set=elec_set,return_idxs=return_idxs)
 
@@ -1375,21 +1376,21 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
 def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=None,
                                      return_idxs=False, sort=True):
     """
-    Concatenates spike timestamps across all single units on each electrode, 
+    Concatenates spike timestamps across all single units on each electrode,
     pooling into single "threshold-crossing multi-units" per electrode
-    
+
     data_mua = pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=None,
                                                 return_idxs=False, sort=True)
-                                     
+
     ARGS
     data_sua    (...,n_units,...) object ndarray of (n_spikes[unit],) ndarrays.
-                Lists of single-unit spike timestamps for different units and 
+                Lists of single-unit spike timestamps for different units and
                 trials/conditions/etc. within an object array of any arbitrary shape.
 
     electrodes  (n_units,) array-like. List of electrode numbers of each unit in <data_sua>.
 
     axis        Int. Axis of <data_sua> corresponding to different units. Default: -1 (last axis)
-    
+
     elec_set    (n_elecs,) array-like. Set of unique electrodes in <electrodes>.
                 Default: unsorted np.unique(electrodes) (in original order in <electrodes>)
 
@@ -1398,7 +1399,7 @@ def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=Non
 
     RETURNS
     data_mua    (...,n_elecs,...) object ndarray of (n_spikes[elecs],) ndarrays.
-                Lists of multi-unit spike timestamps pooled across all units 
+                Lists of multi-unit spike timestamps pooled across all units
                 on each electrode. Same shape as input, with unit axis reduced
                 to len(elec_set).
 
@@ -1409,17 +1410,17 @@ def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=Non
     # Find set of electrodes in data, if not explicitly input
     if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
-    
+
     # Reshape spike data array -> 2D matrix (n_dataseries,n_units)
     data_sua,data_shape = standardize_array(data_sua, axis=axis, target_axis=-1)
     n_series,_ = data_sua.shape
-    
+
     data_mua = np.empty((n_series,n_elecs),dtype=object)
 
     for i_elec,elec in enumerate(elec_set):
         # Find all units on given electrode
         elec_idxs   = electrodes == elec
-        
+
         for i_series in range(n_series):
             # Concatenate spike_times across all units for current data series
             # -> (n_spikes_total,) ndarray
@@ -1431,7 +1432,7 @@ def pool_electrode_units_spike_times(data_sua, electrodes, axis=-1, elec_set=Non
 
     # Reshape output data array to original shape (now with len(data[axis] = n_elecs)
     data_mua = undo_standardize_array(data_mua, data_shape, axis=axis, target_axis=-1)
-    
+
     # Generate list of indexes of 1st occurrence of each electrode, if requested
     if return_idxs:
         elec_idxs = [np.nonzero(electrodes == elec)[0][0] for elec in elec_set]
@@ -1446,12 +1447,12 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
     """
     Pools boolean spike train data across all units on each electrode into
     a single "threshold-crossing multi-units" per electrode.
-    A multi-unit spike is registered if there is a spike in any of its 
+    A multi-unit spike is registered if there is a spike in any of its
     constituent single units (logical OR) at each timepoint.
-    
+
     pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None,
                                     return_idxs=False)
-                                    
+
     ARGS
     data_sua    (...,n_units,...) ndarray of bools. Any arbitary shape.
                 Binary (0/1) spike trains for different units and trials/conditions/etc.
@@ -1459,7 +1460,7 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
     electrodes  (n_units,) array-like. List of electrode numbers of each unit in <data_sua>.
 
     axis        Int. Axis of <data_sua> corresponding to different units. Default: -1 (last axis)
-    
+
     elec_set    (n_elecs,) array-like. Set of unique electrodes in <electrodes>.
                 Default: unsorted np.unique(electrodes) (in original order in <electrodes>)
 
@@ -1468,24 +1469,24 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
 
     RETURNS
     data_mua    (...,n_elecs,...) ndarray of bools.
-                Binary spike trains pooled across all units on each electrode. 
+                Binary spike trains pooled across all units on each electrode.
                 Same shape as input, with unit axis reduced to len(elec_set).
 
     elec_idxs   (n_elecs,) ndarray of ints. Indexes of 1st occurrence of each
                 electrode in <elec_set> within <electrodes>. Can be used to
-                transform any corresponding metadata appropriately.                                      
+                transform any corresponding metadata appropriately.
     """
     if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
 
     data_shape = list(data_sua.shape)
     data_shape[axis] = n_elecs
-    
+
     data_mua = np.empty(tuple(data_shape),dtype=bool)
-    
+
     slicer_sua  = [slice(None)]*data_sua.ndim
     slicer_mua  = [slice(None)]*data_sua.ndim
-    
+
     for i_elec,elec in enumerate(elec_set):
         # Find all units on given electrode
         elec_idxs   = electrodes == elec
@@ -1495,14 +1496,14 @@ def pool_electrode_units_spike_bool(data_sua, electrodes, axis=-1, elec_set=None
         data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].any(axis=axis,keepdims=False)
         # DEL This didn't work for reasons I don't understand
         # data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].any(axis=axis,keepdims=True)
-    
+
     # Generate list of indexes of 1st occurrence of each electrode, if requested
     if return_idxs:
         elec_idxs = [np.nonzero(electrodes == elec)[0][0] for elec in elec_set]
         elec_idxs = np.asarray(elec_idxs,dtype=int)
         return data_mua, elec_idxs
     else:
-        return data_mua    
+        return data_mua
 
 
 def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None,
@@ -1510,10 +1511,10 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
     """
     Pools (sums) spike rate/count data across all units on each electrode into
     a single "threshold-crossing multi-units" per electrode.
-    
+
     pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None,
                                     return_idxs=False)
-                                    
+
     ARGS
     data_sua    (...,n_units,...) ndarray. Any arbitary shape.
                 Set of spike rates/counts for different units and trials/conditions/etc.
@@ -1521,7 +1522,7 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
     electrodes  (n_units,) array-like. List of electrode numbers of each unit in <data_sua>.
 
     axis        Int. Axis of <data_sua> corresponding to different units. Default: -1 (last axis)
-    
+
     elec_set    (n_elecs,) array-like. Set of unique electrodes in <electrodes>.
                 Default: unsorted np.unique(electrodes) (in original order in <electrodes>)
 
@@ -1530,39 +1531,39 @@ def pool_electrode_units_spike_rate(data_sua, electrodes, axis=-1, elec_set=None
 
     RETURNS
     data_mua    (...,n_elecs,...) ndarray. Spike rates/counts pooled (summed) across
-                all units on each electrode. Same shape as input, with unit axis 
+                all units on each electrode. Same shape as input, with unit axis
                 reduced to len(elec_set).
 
     elec_idxs   (n_elecs,) ndarray of ints. Indexes of 1st occurrence of each
                 electrode in <elec_set> within <electrodes>. Can be used to
-                transform any corresponding metadata appropriately.                                    
+                transform any corresponding metadata appropriately.
     """
     if elec_set is None: elec_set = unsorted_unique(electrodes)
     n_elecs = len(elec_set)
 
     data_shape = list(data_sua.shape)
     data_shape[axis] = n_elecs
-    
+
     data_mua = np.empty(tuple(data_shape),dtype=data_sua.dtype)
-    
+
     slicer_sua  = [slice(None)]*data_sua.ndim
     slicer_mua  = [slice(None)]*data_sua.ndim
-    
+
     for i_elec,elec in enumerate(elec_set):
         # Find all units on given electrode
         elec_idxs   = electrodes == elec
         slicer_sua[axis] = elec_idxs    # Extract current electrode units from sua
         slicer_mua[axis] = i_elec       # Save pooled data to current electrode in mua
-        
+
         data_mua[tuple(slicer_mua)] = data_sua[tuple(slicer_sua)].sum(axis=axis,keepdims=True)
-    
+
     # Generate list of indexes of 1st occurrence of each electrode, if requested
     if return_idxs:
         elec_idxs = [np.nonzero(electrodes == elec)[0][0] for elec in elec_set]
         elec_idxs = np.asarray(elec_idxs,dtype=int)
         return data_mua, elec_idxs
     else:
-        return data_mua    
+        return data_mua
 
 
 # =============================================================================
@@ -1595,8 +1596,8 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
             if you want spike *counts*, rather than rates. Default: 1.0 s
 
     count   Bool. If True, returns integer-valued spike counts, rather than rates.
-            Default: False (computes rates)      
-                
+            Default: False (computes rates)
+
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
 
@@ -1633,7 +1634,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     # Generates Poisson random variables in a way that reproducibly matches output of Matlab
     rates = poisson.ppf(np.random.rand(n_trials), mu=lambdas) / window
     if not count: rates = rates.astype(float) / window
-    
+
     return rates, labels
 
 
@@ -1665,7 +1666,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
 
     refractory  Scalar. Absolute refractory period in which a second spike cannot
             occur after another. Set=0 for Poisson with no refractory [default].
-            
+
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
 
@@ -1720,15 +1721,15 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
         if lam == 0:
             if data_type == 'timestamp': trains[i_trial] = np.asarray([],dtype=object)
             continue
-        
+
         # Simulate inter-spike intervals. Poisson process has exponential ISIs,
-        # and this is best way to simulate one. 
+        # and this is best way to simulate one.
         # HACK Generate 2x expected number of spikes, truncate below
         n_spikes_exp = lam*time_range
         # Generates exponential random variables in a way that reproducibly matches output of Matlab
         ISIs = expon.ppf(np.random.rand(int(round(2*n_spikes_exp))), loc=0, scale=1/lam)
         # ALT ISIs = np.random.exponential(1/lam, (int(round(2*n_spikes_exp)),))
-        
+
         # HACK Implement absolute refractory period by deleting ISIs < refractory
         # TODO More principled way of doing this that doesn't affect rates
         if refractory != 0: ISIs = ISIs[ISIs >= refractory]
@@ -1746,7 +1747,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
             trains[i_trial,idxs] = True
 
     return trains, labels
-            
+
 
 #==============================================================================
 # Other helper functions
@@ -1801,7 +1802,7 @@ def _remove_buffer(data, buffer, axis=-1):
             (typically shape (n_trials,n_units,n_timepts))
     """
     if axis < 0: axis = data.ndim + axis
-    
+
     if axis == data.ndim-1:
         return data[...,buffer:-buffer]
     else:

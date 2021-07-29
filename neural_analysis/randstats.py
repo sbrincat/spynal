@@ -49,7 +49,7 @@ Created on Tue Jul 30 16:28:12 2019
 """
 # TODO  Parallelize resampling loops! (using joblib?)
 # TODO  Add option to return resamples as actual sequences (not iterators)?
-# TODO  How to pass custom function to paired_sample tests, when they're actually evaluated as 1-samples?
+# TODO  How to pass custom function to paired_sample tests (eval'd as 1-samples)?
 # TODO  How to enforce dimensionality of custom functions (esp re: keepdims)?
 
 from math import sqrt
@@ -58,7 +58,7 @@ import numpy as np
 
 try:
     from .utils import set_random_seed
-# TEMP    
+# TEMP
 except ImportError:
     from utils import set_random_seed
 
@@ -70,24 +70,24 @@ def one_sample_test(data, axis=0, method='randomization', **kwargs):
     """
     Mass univariate 1-sample test of whether any arbitrary 1-sample stat (eg mean)
     is different from a given value <mu>, often 0 (analogous to 1-sample t-test).
-    
+
     Wrapper around functions for specific 1-sample tests. See those for details.
-    
+
     ARGS
     data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
-    
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
 
     method      String. Resampling paradigm to use for test:
                 'randomization' : Randomization sign test in one_sample_randomization_test [default]
                 'bootstrap'     : Bootstrap test in one_sample_bootstrap_test
-            
+
     See specific test functions for further arguments.
-    
+
     RETURNS
     p           (...,1,...) ndarray. p values from randomization test. Same size as data,
-                except for <axis> reduced to a singleton. 
+                except for <axis> reduced to a singleton.
                 For vector data, returns as a single float.
 
     - Following variables are only returned if return_stats is True -
@@ -96,18 +96,20 @@ def one_sample_test(data, axis=0, method='randomization', **kwargs):
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> has length n_resamples-1.    
+                Same size as data, but <axis> has length n_resamples-1.
     """
     method = method.lower()
-    
-    if method in ['randomization','permutation','sign']:    test_func = one_sample_randomization_test
-    elif method == 'bootstrap':                             test_func = one_sample_bootstrap_test
+
+    if method in ['randomization','permutation','sign']:
+        test_func = one_sample_randomization_test
+    elif method == 'bootstrap':
+        test_func = one_sample_bootstrap_test
     else:
-        raise ValueError("Unsupported test type '%s'. Should be 'randomization' or 'bootstrap'" % method)
-    
+        raise ValueError("Unsupported test type '%s'. Use 'randomization' or 'bootstrap'" % method)
+
     return test_func(data, axis=axis, **kwargs)
 
-    
+
 def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
                                   n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
@@ -125,7 +127,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     mu          Scalar. Theoretical value under the null hypothesis, to compare
                 distibution of data to. Default: 0
 
@@ -135,7 +137,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (data) with <axis> corresponding
-                to trials/observations, and return a scalar value (for each independent 
+                to trials/observations, and return a scalar value (for each independent
                 data series if multiple given).
 
     tail        String. Specifies tail of test to perform:
@@ -149,7 +151,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
     seed        Int. Random generator seed for repeatable results.
                 Set=None [default] for unseeded random numbers.
-            
+
     return_stats Bool. If False, only returns p values. If True, returns p values,
                 observed stats, and resampled stats. Default: False
 
@@ -157,12 +159,12 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
     RETURNS
     p           Float | (...,1,...) ndarray. p values from randomization test. Same size as data,
-                except for (...,n_resamples,...) reduced to a singleton. 
+                except for (...,n_resamples,...) reduced to a singleton.
                 For vector data, returns as a single float.
 
     - Following variables are only returned if return_stats is True -
     stat_obs    Float | (...,1,...) ndarray. Statistic values for actual observed data.
-                Same size as <p>. 
+                Same size as <p>.
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
@@ -177,7 +179,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
     # Copy data variable to avoid changing values in caller
     data = data.copy()
-    
+
     # Reshape data so axis 0 is observations
     if axis != 0: data = np.moveaxis(data, axis, 0)
     n = data.shape[0]
@@ -230,7 +232,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
     if p.size == 1:
         p = p.item()
         if return_stats: stat_obs = stat_obs.item()
-        
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
@@ -256,13 +258,13 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     p,stat_obs,stat_resmp = one_sample_bootstrap_test(data,mu=0,stat='t',tail='both',
                                                       n_resamples=10000,return_stats=True,
                                                       **kwargs)
-                              
+
     ARGS
     data        (...,n,...) ndarray. Data to run test on.  Arbitrary shape.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     mu          Scalar. Theoretical value under the null hypothesis, to compare
                 distibution of data to. Default: 0
 
@@ -272,7 +274,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (data) with <axis> corresponding
-                to trials/observations, and return a scalar value (for each independent 
+                to trials/observations, and return a scalar value (for each independent
                 data series if multiple given).
 
     tail        String. Specifies tail of test to perform:
@@ -307,7 +309,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch. 3.10
-    """    
+    """
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_sample_stat(stat)    # Statistic (includes default)
     compare_func = _tail_to_compare(tail)           # Tail-specific comparator
@@ -327,13 +329,13 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
         stat_resmp = np.empty((n_resamples-1,*data.shape[1:]))
         for i_resmp,resample in enumerate(resamples):
             # Compute statistic on resampled data
-            stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)                      
+            stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)
 
         # Center each resampled statistic on their mean to approximate null disttribution
         # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
-        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)        
-        
+        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)
+
         # p value = proportion of bootstrap-resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs - mu, stat_resmp, 0, compare_func)
@@ -346,16 +348,16 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
         for resample in resamples:
             # Compute statistic on resampled data
             stat_resmp = stat_func(data[resample,...])
-                                   
+
             # Subtract observed statistic from distribution of resampled statistics
             stat_resmp -= stat_obs
-                        
+
             # Compute statistic on resampled data and tally values passing criterion
             count += compare_func(stat_obs - mu, stat_resmp, **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-    
+
     # Reshape output so observation axis is in appropriate location
     if axis != 0:
         p = np.moveaxis(p, 0, axis)
@@ -369,11 +371,11 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     if p.size == 1:
         p = p.item()
         if return_stats: stat_obs = stat_obs.item()
-        
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
-    
-    
+
+
 # =============================================================================
 # Paired-sample randomization tests
 # =============================================================================
@@ -381,24 +383,24 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     """
     Mass univariate paired-sample test of whether any arbitrary statistic
     differs between paired samples (analogous to paired-sample t-test)
-    
+
     Wrapper around functions for specific paired-sample tests. See those for details.
-    
+
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but 
+                Must have same number of observations (trials) n as data1, but
                 otherwise arbitrary shape.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     method      String. Resampling paradigm to use for test:
                 'permutation'   : Permutation test in paired_sample_permutation_test [default]
                 'bootstrap'     : Bootstrap test in paired_sample_bootstrap_test
-                
+
     See specific test functions for further arguments.
-    
+
     RETURNS
     p           (...,1,...) ndarray. p values from randomization test. Same size as data,
                 except for (...,n_resamples,...) reduced to a singleton.
@@ -410,15 +412,17 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> has length n_resamples-1.    
+                Same size as data, but <axis> has length n_resamples-1.
     """
     method = method.lower()
-    
-    if method in ['randomization','permutation','sign']:    test_func = paired_sample_permutation_test
-    elif method == 'bootstrap':                             test_func = paired_sample_bootstrap_test
+
+    if method in ['randomization','permutation','sign']:
+        test_func = paired_sample_permutation_test
+    elif method == 'bootstrap':
+        test_func = paired_sample_bootstrap_test
     else:
         raise ValueError("Unsupported test type '%s'. Should be 'permutation' or 'bootstrap'" % method)
-    
+
     return test_func(data1, data2, axis=axis, **kwargs)
 
 
@@ -426,31 +430,31 @@ def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups
     """
     Mass univariate paired-sample test of whether any arbitrary statistic
     differs between paired samples (analogous to paired-sample t-test)
-    
+
     Wrapper around functions for specific paired-sample tests. See those for details.
-    
-    This version is an alternative interface to paired_sample_test() with (data,labels) 
+
+    This version is an alternative interface to paired_sample_test() with (data,labels)
     arguments instead of (data1,data2)
-    
+
     ARGS
-    data        (...,N,...) ndarray. Data from both groups to run test on. 
+    data        (...,N,...) ndarray. Data from both groups to run test on.
                 Arbitrary shape, but both groups must have the same n (n1 = n2 = N/2).
-    
+
     labels      (N,) array-like. Group labels for each observation (trial),
                 identifying which group/condition each observation belongs to.
-    
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     method      String. Resampling paradigm to use for test:
                 'permutation'   : Permutation test in paired_sample_permutation_test [default]
                 'bootstrap'     : Bootstrap test in paired_sample_bootstrap_test
-                
+
     groups      (n_groups,) array-like. List of labels for each group (condition).
                 Default: set of unique values in <labels> (np.unique(labels))
-                                
+
     See specific test functions for further arguments.
-    
+
     RETURNS
     p           (...,1,...) ndarray. p values from randomization test. Same size as data,
                 except for (...,n_resamples,...) reduced to a singleton.
@@ -462,23 +466,23 @@ def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> has length n_resamples-1.    
+                Same size as data, but <axis> has length n_resamples-1.
     """
     labels = np.asarray(labels)
     if groups is None: groups = np.unique(labels)
-    
+
     n1 = (labels == groups[0]).sum()
     n2 = (labels == groups[1]).sum()
-    
+
     assert len(groups) == 2, "Must have only 2 groups (conditions) in labels"
     assert n1 == n2, \
         "Two groups must have same number of observations/trials (%d != %d)" % (n1,n2)
-    
+
     return paired_sample_test(data.compress(labels == groups[0], axis=axis),
                               data.compress(labels == groups[1], axis=axis),
                               axis=axis, method=method, **kwargs)
-    
-    
+
+
 def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='both',
                                    n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
@@ -494,12 +498,12 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but 
+                Must have same number of observations (trials) n as data1, but
                 otherwise arbitrary shape.
-    
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     d           Float. Hypothetical difference in means for null distribution.
                 Default: 0
 
@@ -509,7 +513,7 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (equal to differences between
-                paired samples, with <axis> corresponding to trials/observations) 
+                paired samples, with <axis> corresponding to trials/observations)
                 and return a scalar value for each independent data series.
 
     tail        String. Specifies tail of test to perform:
@@ -560,7 +564,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
     Computes stat on each bootstrap resample, and subtracts off stat computed on
     observed data to center resamples at 0 (mu) to estimate null distribution.
     p value is proportion of centered resampled values exceeding observed value.
-    
+
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
@@ -568,7 +572,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     d           Float. Hypothetical difference in means for null distribution.
                 Default: 0
 
@@ -578,7 +582,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (equal to differences between
-                paired samples with <axis> corresponding to trials/observations) 
+                paired samples with <axis> corresponding to trials/observations)
                 and return a scalar value for each independent data series.
 
     tail        String. Specifies tail of test to perform:
@@ -627,44 +631,44 @@ def two_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     """
     Mass univariate two-sample test of whether any arbitrary statistic
     differs between two non-paired samples (analogous to 2-sample t-test)
-    
+
     Wrapper around functions for specific two-sample tests. See those for details.
-    
+
     ARGS
     data1       (...,n1,...) ndarray. Data from one group to compare.
     data2       (...,n2,...) ndarray. Data from a second group to compare.
                 Need not have the same n as data1, but all other dim's must be
                 same size/shape
-                
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     method      String. Resampling paradigm to use for test:
                 'permutation'   : Permutation test in two_sample_permutation_test [default]
                 'bootstrap'     : Bootstrap test in two_sample_bootstrap_test
-                
+
     See specific test functions for further arguments.
-    
+
     RETURNS
     p           (...,1,...) ndarray. p values from randomization test. Same size as data,
                 except for <axis> reduced to a singleton.
                 For vector data, returns as a single float.
-                
+
     - Following variables are only returned if return_stats is True -
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> has length n_resamples-1.    
+                Same size as data, but <axis> has length n_resamples-1.
     """
     method = method.lower()
-    
+
     if method in ['randomization','permutation']:   test_func = two_sample_permutation_test
     elif method == 'bootstrap':                     test_func = two_sample_bootstrap_test
     else:
-        raise ValueError("Unsupported test type '%s'. Should be 'permutation' or 'bootstrap'" % method)
-    
+        raise ValueError("Unsupported test type '%s'. Use 'permutation' or 'bootstrap'" % method)
+
     return test_func(data1, data2, axis=axis, **kwargs)
 
 
@@ -672,30 +676,30 @@ def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=No
     """
     Mass univariate two-sample test of whether any arbitrary statistic
     differs between two non-paired samples (analogous to 2-sample t-test)
-    
+
     Wrapper around functions for specific two-sample tests. See those for details.
-    
-    This version is an alternative interface to two_sample_test() with (data,labels) 
+
+    This version is an alternative interface to two_sample_test() with (data,labels)
     arguments instead of (data1,data2)
-    
+
     ARGS
     data        (...,N,...) ndarray. Data from both groups to run test on. Arbitrary shape.
-    
+
     labels      (N,) array-like. Group labels for each observation (trial),
                 identifying which group/condition each observation belongs to.
-    
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     method      String. Resampling paradigm to use for test:
                 'permutation'   : Permutation test in paired_sample_permutation_test [default]
                 'bootstrap'     : Bootstrap test in paired_sample_bootstrap_test
-                
+
     groups      (n_groups,) array-like. List of labels for each group (condition).
                 Default: set of unique values in <labels> (np.unique(labels))
-                                
+
     See specific test functions for further arguments.
-    
+
     RETURNS
     p           (...,1,...) ndarray. p values from randomization test. Same size as data,
                 except for (...,n_resamples,...) reduced to a singleton.
@@ -707,24 +711,24 @@ def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=No
 
     stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> has length n_resamples-1.    
+                Same size as data, but <axis> has length n_resamples-1.
     """
     labels = np.asarray(labels)
     if groups is None: groups = np.unique(labels)
 
     assert len(groups) == 2, "Must have only 2 groups (conditions) in labels"
-    
+
     return two_sample_test(data.compress(labels == groups[0], axis=axis),
                            data.compress(labels == groups[1], axis=axis),
                            axis=axis, method=method, **kwargs)
-    
-    
+
+
 def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
                                 n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
     Mass univariate permutation test of whether any arbitrary statistic
     differs between two non-paired samples (analogous to 2-sample t-test)
-    
+
     Observations are permuted across the two samples (data1 vs data2).
     The data is pooled across data1 and and data2, and for each random resample,
     n1 and n2 observations are extracted from the pooled and form the resampled
@@ -740,14 +744,14 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 't'         : 2-sample t-statistic [default]
                 'meandiff'  : group difference in across-observation means
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take two array arguments (data1,data2) with <axis> corresponding
-                to trials/observations and return a scalar value for each independent 
+                to trials/observations and return a scalar value for each independent
                 data series.
 
     tail        String. Specifies tail of test to perform:
@@ -782,16 +786,16 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
 
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.6.3
-    """    
+    """
     # Convert string specifiers to callable functions
     stat_func    = _str_to_two_sample_stat(stat)    # Statistic (includes default)
     compare_func = _tail_to_compare(tail)           # Tail-specific comparator
 
     # Reshape data so axis 0 is observations
-    if axis != 0: 
+    if axis != 0:
         data1 = np.moveaxis(data1.copy(), axis, 0)
         data2 = np.moveaxis(data2.copy(), axis, 0)
-    
+
     n1 = data1.shape[0]
     n2 = data2.shape[0]
     N  = n1+n2
@@ -849,7 +853,7 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
     if p.size == 1:
         p = p.item()
         if return_stats: stat_obs = stat_obs.item()
-        
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
@@ -863,7 +867,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     Computes stat on each pair of bootstrap resamples, and subtracts off stat computed
     on observed data to center resamples at 0 (mu) to estimate null distribution.
     p value is proportion of centered resampled values exceeding observed value.
-    
+
     ARGS
     data1       (...,n1,...) ndarray. Data from one group to compare.
     data2       (...,n2,...) ndarray. Data from a second group to compare.
@@ -872,14 +876,14 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 't'         : 2-sample t-statistic [default]
                 'meandiff'  : group difference in across-observation means
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take two array arguments (data1,data2) with <axis> corresponding
-                to trials/observations and return a scalar value for each independent 
+                to trials/observations and return a scalar value for each independent
                 data series.
 
     tail        String. Specifies tail of test to perform:
@@ -920,16 +924,16 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     compare_func = _tail_to_compare(tail)        # Tail-specific comparator
 
     # Reshape data so axis 0 is observations
-    if axis != 0: 
+    if axis != 0:
         data1 = np.moveaxis(data1, axis, 0)
         data2 = np.moveaxis(data2, axis, 0)
-    
+
     assert (data1.ndim == data2.ndim), \
         "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
     if data1.ndim > 1:
         assert (data1.shape[1:] == data2.shape[1:]), \
             "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
-        
+
     n1 = data1.shape[0]
     n2 = data2.shape[0]
 
@@ -939,7 +943,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     # Create generators with n_resamples-1 random resamplings with replacement
     # of ints 0:n1-1 and 0:n2-1
     # Note: Seed random number generator only *once* before generating both random samples
-    if seed is not None: set_random_seed(seed)    
+    if seed is not None: set_random_seed(seed)
     resamples1 = bootstraps(n1,n_resamples-1)
     resamples2 = bootstraps(n2,n_resamples-1)
 
@@ -955,7 +959,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
         # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
         # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)
-        
+
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
@@ -993,7 +997,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     if p.size == 1:
         p = p.item()
         if return_stats: stat_obs = stat_obs.item()
-        
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
@@ -1016,9 +1020,9 @@ def one_way_test(data, labels, axis=0, method='permutation', **kwargs):
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     method      String. Type of test to run. Currently only 'permutation' supported.
-                
+
     Any additional kwargs passed directly to stat function.
 
     RETURNS
@@ -1034,15 +1038,14 @@ def one_way_test(data, labels, axis=0, method='permutation', **kwargs):
                 Same size as data, but <axis> has length n_resamples-1.
     """
     method = method.lower()
-    
+
     if method in ['randomization','permutation','sign']:    test_func = one_way_permutation_test
-    # elif method == 'bootstrap':                             test_func = one_way_sample_bootstrap_test
     else:
         raise ValueError("Only 'permutation' method currently supported")
-    
+
     return test_func(data, labels, axis=axis, **kwargs)
-    
-    
+
+
 def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
     """
@@ -1060,7 +1063,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 'F'         : F-statistic (as in 1-way ANOVA) [default]
 
@@ -1108,7 +1111,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     """
     if (stat == 'F') and (tail != 'right'):
         warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
-        
+
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_way_stat(stat)     # Statistic (includes default)
     compare_func = _tail_to_compare(tail)       # Tail-specific comparator
@@ -1129,10 +1132,10 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
             labels  = labels[idxs]
             data    = data[idxs,...]
             N       = data.shape[0]
-            
-    # Append <groups> to stat_func args        
-    if stat_func == one_way_fstat: kwargs.update({'groups':groups})     
-        
+
+    # Append <groups> to stat_func args
+    if stat_func is one_way_fstat: kwargs.update({'groups':groups})
+
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data,labels, **kwargs)
 
@@ -1177,7 +1180,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     if p.size == 1:
         p = p.item()
         if return_stats: stat_obs = stat_obs.item()
-        
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
@@ -1199,7 +1202,7 @@ def two_way_test(data, labels, axis=0, method='permutation', **kwargs):
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
- 
+
     method      String. Type of test to run. Currently only 'permutation' supported.
 
     Any additional kwargs passed directly to stat function.
@@ -1213,22 +1216,21 @@ def two_way_test(data, labels, axis=0, method='permutation', **kwargs):
                 Same size as <p>.
 
     stat_resmp  (...,n_terms,...,n_resamples-1) ndarray. Distribution of statistic
-                values for all resamplings of data. Same size as data, but <axis> 
-                has length <n_terms>, and a new axis of length n_resamples-1 is 
+                values for all resamplings of data. Same size as data, but <axis>
+                has length <n_terms>, and a new axis of length n_resamples-1 is
                 appended to end of array.
                 NOTE: axis for resamples is different from all other functions bc
                 we need to accomodate both resample and terms dimensions here.
 
     """
     method = method.lower()
-    
+
     if method in ['randomization','permutation','sign']:    test_func = two_way_permutation_test
-    # elif method == 'bootstrap':                             test_func = two_way_sample_bootstrap_test
     else:
         raise ValueError("Only 'permutation' method currently supported")
-    
+
     return test_func(data, labels, axis=axis, **kwargs)
-    
+
 
 def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
@@ -1249,7 +1251,7 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 'F'         : F-statistic (as in 2-way ANOVA) [default]
 
@@ -1263,7 +1265,7 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
                 'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
                 'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
                 Note: For F-test, only right-tailed test really makes sense bc F distn
-                only has positive values and right-sided taile                
+                only has positive values and right-sided taile
                 Default: 'right' (1-tailed test)
 
     groups      [(n_groups(term),),] array-like. List of labels for each group/level,
@@ -1290,8 +1292,8 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
                 Same size as <p>.
 
     stat_resmp  (...,n_terms,...,n_resamples-1) ndarray. Distribution of statistic
-                values for all resamplings of data. Same size as data, but <axis> 
-                has length <n_terms>, and a new axis of length n_resamples-1 is 
+                values for all resamplings of data. Same size as data, but <axis>
+                has length <n_terms>, and a new axis of length n_resamples-1 is
                 appended to end of array.
                 NOTE: axis for resamples is different from all other functions bc
                 we need to accomodate both resample and terms dimensions here.
@@ -1306,26 +1308,26 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     # TODO  Add mechanism to auto-generate interaction term from factors (if interact arg==True)
     if (stat == 'F') and (tail != 'right'):
         warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
-    
+
     # Convert string specifier to callable function
     stat_func = _str_to_two_way_stat(stat)       # Statistic (includes default))
     compare_func = _tail_to_compare(tail)   # Tail-specific comparator
 
     # Wrap negative axis back into 0 to ndim-1
     if axis < 0: axis = len(data.shape) + axis
-    
+
     labels  = np.asarray(labels)
     n_terms = labels.shape[1]
     # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data.copy(), axis, 0)    
+    if axis != 0: data = np.moveaxis(data.copy(), axis, 0)
     N       = data.shape[0]
 
     # Find all groups/levels in list of labels (if not given in inputs)
-    if groups is None:        
-        groups = [np.unique(labels[:,term]) for term in range(n_terms)] 
-        
-    # Append <groups> to stat_func args        
-    if stat_func == two_way_fstat: kwargs.update({'groups':groups})
+    if groups is None:
+        groups = [np.unique(labels[:,term]) for term in range(n_terms)]
+
+    # Append <groups> to stat_func args
+    if stat_func is two_way_fstat: kwargs.update({'groups':groups})
 
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data,labels, **kwargs)
@@ -1338,11 +1340,12 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
         stat_resmp = np.empty((n_terms, *data.shape[1:],n_resamples-1))
         for i_resmp,resample in enumerate(resamples):
             # Compute statistic on data and resampled label rows
-            stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)            
+            stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs[...,np.newaxis], stat_resmp, -1, compare_func).squeeze(axis=-1)
+        p = resamples_to_pvalue(stat_obs[...,np.newaxis],
+                                stat_resmp, -1, compare_func).squeeze(axis=-1)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
@@ -1362,34 +1365,34 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     if axis != 0:
         p = np.moveaxis(p, 0, axis)
         if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)            
+            stat_obs    = np.moveaxis(stat_obs, 0, axis)
             stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
-            
+
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
-    
-    
+
+
 # =============================================================================
 # Confidence intervals
 # =============================================================================
-def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000, 
+def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000,
                         seed=None, return_stats=False, return_sorted=True, **kwargs):
     """
-    Mass univariate bootstrap confidence intervals of any arbitrary 1-sample stat 
+    Mass univariate bootstrap confidence intervals of any arbitrary 1-sample stat
     (eg mean).  Analogous to SEM/parametric confidence intervals.
-        
+
     ARGS
     data        (...,n,...) ndarray. Data to run test on. Arbitrary shape.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 'mean'  : mean across observations [default]
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (data) with <axis> corresponding
-                to trials/observations and return a scalar value for each independent 
+                to trials/observations and return a scalar value for each independent
                 data series.
 
     confint     Float. Confidence interval to compute, expressed as decimal value in range 0-1.
@@ -1405,37 +1408,37 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
     return_stats Bool. If False, only returns confidence intervals. If True, returns confints,
                 statistic computed on observed data, and full distribution of resample statistic.
                 Default: False
-    
-    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns 
-                stat_resmp unsorted (ordered by resample number), which is useful if you want 
+
+    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns
+                stat_resmp unsorted (ordered by resample number), which is useful if you want
                 to keep each resampling for all mass-univariate data series's together.
-                
+
     - Any additional kwargs passed directly to stat function -
-    
+
     RETURNS
     confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
                 except for <axis> reduced to length 2 = [lower,upper] confidence interval.
 
     - Following variables are only returned if return_stats is True -
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
-                Same size as data, but <axis> reduced to length 1.        
+                Same size as data, but <axis> reduced to length 1.
 
     stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> now has length n_resamples.        
+                Same size as data, but <axis> now has length n_resamples.
     """
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_sample_stat(stat)
-    
+
     # Indexes into set of bootstrap resamples corresponding to given confint
     conf_indexes = confint_to_indexes(confint, n_resamples)
 
     # Reshape data so axis 0 is observations
     if axis != 0: data = np.moveaxis(data, axis, 0)
     n = data.shape[0]
-    
+
     # Compute statistic of interest on actual observed data
-    if return_stats: stat_obs = stat_func(data, **kwargs)    
+    if return_stats: stat_obs = stat_func(data, **kwargs)
 
     # Create generators with n_resamples length-n independent Bernoulli RV's
     resamples = bootstraps(n, n_resamples, seed)
@@ -1445,53 +1448,53 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
     for i_resmp,resample in enumerate(resamples):
         # Compute statistic on resampled data
         stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)
-       
+
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, to return original unsorted version
         stat_resmp_sorted = stat_resmp.sort(axis=0)
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp_sorted[conf_indexes,...]
-        
+
     else:
         stat_resmp.sort(axis=0)     # Sort resample stats in place
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp[conf_indexes,...]
-        
+
     # Reshape output so observation axis is in appropriate location
     if axis != 0:
         confints = np.moveaxis(confints, 0, axis)
         if return_stats:
             stat_obs    = np.moveaxis(stat_obs, 0, axis)
             stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
-        
+
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
-                
+
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
-        
-   
+
+
 def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_resamples=10000,
                            seed=None, return_stats=False, return_sorted=True, **kwargs):
     """
-    Mass univariate bootstrap confidence intervals of any arbitrary paired-sample stat 
+    Mass univariate bootstrap confidence intervals of any arbitrary paired-sample stat
     (eg mean difference).  Analogous to SEM/parametric confidence intervals.
-        
+
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but 
+                Must have same number of observations (trials) n as data1, but
                 otherwise arbitrary shape.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 'mean'  : mean difference between paired observations [default]
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (data) with <axis> corresponding
-                to trials/observations and return a scalar value for each independent 
+                to trials/observations and return a scalar value for each independent
                 data series.
 
     confint     Float. Confidence interval to compute, expressed as decimal value in range 0-1.
@@ -1507,51 +1510,51 @@ def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_re
     return_stats Bool. If False, only returns confidence intervals. If True, returns confints,
                 statistic computed on observed data, and full distribution of resample statistic.
                 Default: False
-    
-    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns 
-                stat_resmp unsorted (ordered by resample number), which is useful if you want 
+
+    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns
+                stat_resmp unsorted (ordered by resample number), which is useful if you want
                 to keep each resampling for all mass-univariate data series's together.
-                
+
     - Any additional kwargs passed directly to stat function -
-    
+
     RETURNS
     confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
                 except for <axis> reduced to length 2 = [lower,upper] confidence interval.
 
     - Following variables are only returned if return_stats is True -
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
-                Same size as data, but <axis> reduced to length 1.        
+                Same size as data, but <axis> reduced to length 1.
 
     stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> now has length n_resamples.        
-    """ 
+                Same size as data, but <axis> now has length n_resamples.
+    """
     return one_sample_confints(data1 - data2, axis=axis, stat=stat, confint=confint,
                                n_resamples=n_resamples, seed=seed, return_stats=return_stats,
-                               return_sorted=return_sorted, **kwargs)    
-     
+                               return_sorted=return_sorted, **kwargs)
 
-def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_resamples=10000, 
+
+def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_resamples=10000,
                         seed=None, return_stats=False, return_sorted=True, **kwargs):
     """
-    Mass univariate bootstrap confidence intervals of any arbitrary 2-sample stat 
+    Mass univariate bootstrap confidence intervals of any arbitrary 2-sample stat
     (eg difference in group means).  Analogous to SEM/parametric confidence intervals.
-        
+
     ARGS
     data1       (...,n1,...) ndarray. Data from one group to compare.
     data2       (...,n2,...) ndarray. Data from a second group to compare.
                 Need not have the same n as data1, but all other dim's must be
                 same size/shape
-                
+
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
-                
+
     stat        String | Callable. String specifier for statistic to resample:
                 'meandiff'  : difference between group means [default]
 
                 -or- Custom function to generate resampled statistic of interest.
                 Should take single array argument (data) with <axis> corresponding
-                to trials/observations and return a scalar value for each independent 
+                to trials/observations and return a scalar value for each independent
                 data series.
 
     confint     Float. Confidence interval to compute, expressed as decimal value in range 0-1.
@@ -1567,28 +1570,28 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
     return_stats Bool. If False, only returns confidence intervals. If True, returns confints,
                 statistic computed on observed data, and full distribution of resample statistic.
                 Default: False
-    
-    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns 
-                stat_resmp unsorted (ordered by resample number), which is useful if you want 
+
+    return_sorted   Bool. If True [default], returns stat_resmp sorted by value. If False, returns
+                stat_resmp unsorted (ordered by resample number), which is useful if you want
                 to keep each resampling for all mass-univariate data series's together.
-                
+
     - Any additional kwargs passed directly to stat function -
-    
+
     RETURNS
     confints    (...,2,...) ndarray. Computed bootstrap confidence intervals. Same size as data,
                 except for <axis> reduced to length 2 = [lower,upper] confidence interval.
 
     - Following variables are only returned if return_stats is True -
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
-                Same size as data, but <axis> reduced to length 1.        
+                Same size as data, but <axis> reduced to length 1.
 
     stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
-                Same size as data, but <axis> now has length n_resamples.        
+                Same size as data, but <axis> now has length n_resamples.
     """
     # Convert string specifiers to callable functions
     stat_func    = _str_to_two_sample_stat(stat)
-    
+
     # Indexes into set of bootstrap resamples corresponding to given confint
     conf_indexes = confint_to_indexes(confint, n_resamples)
 
@@ -1605,14 +1608,14 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
 
     n1 = data1.shape[0]
     n2 = data2.shape[0]
-        
+
     # Compute statistic of interest on actual observed data
-    if return_stats: stat_obs = stat_func(data1, data2, **kwargs)    
+    if return_stats: stat_obs = stat_func(data1, data2, **kwargs)
 
     # Create generators with n_resamples-1 random resamplings with replacement
     # of ints 0:n1-1 and 0:n2-1
     # Note: Seed random number generator only *once* before generating both random samples
-    if seed is not None: set_random_seed(seed)    
+    if seed is not None: set_random_seed(seed)
     resamples1 = bootstraps(n1,n_resamples-1)
     resamples2 = bootstraps(n2,n_resamples-1)
 
@@ -1621,32 +1624,32 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
     for i_resmp,(resample1,resample2) in enumerate(zip(resamples1,resamples2)):
         # Compute statistic on resampled data
         stat_resmp[i_resmp,...] = stat_func(data1[resample1,...], data2[resample2,...], **kwargs)
-       
+
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, to return original unsorted version
         stat_resmp_sorted = stat_resmp.sort(axis=0)
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp_sorted[conf_indexes,...]
-        
+
     else:
         stat_resmp.sort(axis=0)     # Sort resample stats in place
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp[conf_indexes,...]
-        
+
     # Reshape output so observation axis is in appropriate location
     if axis != 0:
         confints = np.moveaxis(confints, 0, axis)
         if return_stats:
             stat_obs    = np.moveaxis(stat_obs, 0, axis)
             stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
-        
+
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
-                
+
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
-        
-                                                  
+
+
 # =============================================================================
 # Random sample generators
 # =============================================================================
@@ -1656,7 +1659,7 @@ def permutations(n, n_resamples=9999, seed=None):
     0:n-1, as would be needed for permutation/randomization tests
 
     resamples = permutations(n,n_resamples=9999,seed=None)
-    
+
     ARGS
     n           Int. Number of items to randomly resample from.
                 Will usually correspond to number of observations/trials
@@ -1666,13 +1669,13 @@ def permutations(n, n_resamples=9999, seed=None):
 
     seed        Int. Random generator seed for repeatable results.
                 Set=None [default] for unseeded random numbers.
-                
+
     YIELDS
     resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
                 contains a distinct random permutation of integers 0:n-1
     """
     if seed is not None: set_random_seed(seed)
-    
+
     for _ in range(n_resamples):
         yield np.random.permutation(n)
 
@@ -1684,7 +1687,7 @@ def bootstraps(n, n_resamples=9999, seed=None):
     confidence intervals
 
     resamples = bootstraps(n,n_resamples=9999,seed=None)
-    
+
     ARGS
     n           Int. Number of items to randomly resample from.
                 Will usually correspond to number of observations/trials
@@ -1694,14 +1697,14 @@ def bootstraps(n, n_resamples=9999, seed=None):
 
     seed        Int. Random generator seed for repeatable results.
                 Set=None [default] for unseeded random numbers.
-                
+
     YIELDS
     resamples   (n_resamples,) generator of (n,) vector of ints. Each iteration
                 contains a distinct random resampling with replacemnt from
                 integers 0:n-1
     """
     if seed is not None: set_random_seed(seed)
-    
+
     for _ in range(n_resamples):
         yield np.random.randint(n, size=(n,))
 
@@ -1713,7 +1716,7 @@ def signs(n, n_resamples=9999, seed=None):
     as would be needed to set the signs of stats in a sign test.
 
     resamples = signs(n,n_resamples=9999,seed=None)
-    
+
     ARGS
     n           Int. Number of items to randomly resample from.
                 Will usually correspond to number of observations/trials
@@ -1723,32 +1726,32 @@ def signs(n, n_resamples=9999, seed=None):
 
     seed        Int. Random generator seed for repeatable results.
                 Set=None [default] for unseeded random numbers.
-                
+
     YIELDS
     resamples   (n_resamples,) generator of (n,) vector of bool. Each iteration
                 contains a distinct random resampling of n Bernoulli binary RVs
     """
     if seed is not None: set_random_seed(seed)
-    
+
     for _ in range(n_resamples):
         yield np.random.binomial(1,0.5, size=(n,)).astype(bool)
 
 
 def jackknifes(n, n_resamples=None, seed=None):
     """
-    Yields generator with a set of n_resamples = n boolean variables, 
-    each of length n, and each of which excludes one observation/trial in turn, 
+    Yields generator with a set of n_resamples = n boolean variables,
+    each of length n, and each of which excludes one observation/trial in turn,
     as would be needed for a jackknife or leave-one-out test.
 
     resamples = jackknifes(n,n_resamples=n,seed=None)
-    
+
     ARGS
     n           Int. Number of items to randomly resample from.
                 Should equal number of observations/trials
 
     n_resamples Automatically set=n here. Only included for consistent interface.
     seed        Not used. Only included for consistent interface with other functions.
-                
+
     YIELDS
     resamples   (n,) generator of (n,) vector of bool. Each iteration is all 1's
                 except for a single 0, the observation (trial) excluded in that
@@ -1756,14 +1759,14 @@ def jackknifes(n, n_resamples=None, seed=None):
     """
     assert (n_resamples is None) or (n_resamples == n), \
         ValueError("For jackknife/leave-one-out, n_resamples MUST = n")
-        
+
     if seed is not None: set_random_seed(seed)
-    
-    trials = np.arange(n)    
+
+    trials = np.arange(n)
     for trial in range(n):
         yield trials != trial
-         
- 
+
+
 #==============================================================================
 # Functions to compute statistics
 #==============================================================================
@@ -1983,7 +1986,7 @@ def two_way_fstat(data, labels, axis=0, groups=None):
     doInteract = n_terms == 3
     # Find all groups/levels in list of labels (if not given)
     if groups is None:
-        groups = [np.unique(labels[:,term]) for term in range(n_terms)] 
+        groups = [np.unique(labels[:,term]) for term in range(n_terms)]
     n_groups = np.asarray([len(termGroups) for termGroups in groups])
 
     data_shape = data.shape
@@ -2015,7 +2018,7 @@ def two_way_fstat(data, labels, axis=0, groups=None):
         # For interaction term, calculations above give Cells Sum of Squares (Zar eqn. 12.18)
         # Interaction term Sum of Squares = SScells - SS1 - SS2 (Zar eqn. 12.12)
         if term == 2:
-          SS_groups[term] -= (SS_groups[0] + SS_groups[1])
+            SS_groups[term] -= (SS_groups[0] + SS_groups[1])
 
     SS_groups = np.concatenate(SS_groups,axis=axis)
 
@@ -2039,7 +2042,7 @@ def two_way_fstat(data, labels, axis=0, groups=None):
 
     return  (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
 
- 
+
 #==============================================================================
 # Utility functions
 #==============================================================================
@@ -2067,7 +2070,7 @@ def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
     else:               compare_func = _tail_to_compare(tail)
 
     n_resamples = stat_resmp.shape[axis]
-    
+
     # Count number of resampled stat values more extreme than observed value
     p = np.sum(compare_func(stat_obs,stat_resmp), axis=axis, keepdims=True)
 
@@ -2077,17 +2080,17 @@ def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
 
 def confint_to_indexes(confint, n_resamples):
     """
-    Returns indexes into set of bootstrap resamples corresponding 
+    Returns indexes into set of bootstrap resamples corresponding
     to given confidence interval
-    
+
     conf_indexes = confint_to_indexes(confint, n_resamples)
-    
+
     ARGS
     confint         Float. Desired confidence interval, in range 0-1.
                     eg, for 99% confidence interval, input 0.99
-                    
+
     n_resamples     Int. Number of bootstrap resamples.
-    
+
     RETURNS
     conf_indexes    (2,) list of int. Indexes into sorted bootstrap
                     resamples corresponding to [lower,upper] confidence
@@ -2095,8 +2098,9 @@ def confint_to_indexes(confint, n_resamples):
     """
     max_interval = 1 - 2.0/n_resamples
     assert (confint <= max_interval) or np.isclose(confint,max_interval), \
-        ValueError("Requested confidence interval is too large for given number of resamples (max = %.3f)" % max_interval)
-        
+        ValueError("Requested confint too large for given number of resamples (max = %.3f)" \
+                    % max_interval)
+
     return [round(n_resamples * (1-confint)/2) - 1,
             round(n_resamples - (n_resamples * (1-confint)/2)) - 1]
 
@@ -2108,18 +2112,18 @@ def _tail_to_compare(tail):
     """ Convert string specifier to callable function implementing it """
 
     assert isinstance(tail,str), \
-        TypeError("Unsupported type '%s' for <tail>. Must be string specifier or function" % type(tail))
+        TypeError("Unsupported type '%s' for <tail>. Use string or function" % type(tail))
     assert tail in ['both','right','left'], \
-        ValueError("Unsupported value '%s' for <tail>. Must be 'both', 'right', or 'left'" % tail)
+        ValueError("Unsupported value '%s' for <tail>. Use 'both', 'right', or 'left'" % tail)
 
     # 2-tailed test: hypothesis ~ stat_obs ~= statShuf
     if tail == 'both':
         return lambda stat_obs,stat_resmp: np.abs(stat_resmp) >= np.abs(stat_obs)
-    
+
     # 1-tailed rightward test: hypothesis ~ stat_obs > statShuf
     elif tail == 'right':
         return lambda stat_obs,stat_resmp: stat_resmp >= stat_obs
-    
+
     # 1-tailed leftward test: hypothesis ~ stat_obs < statShuf
     else: # tail == 'left':
         return lambda stat_obs,stat_resmp: stat_resmp <= stat_obs
@@ -2143,7 +2147,8 @@ def _str_to_two_sample_stat(stat):
     if callable(stat):                  return stat
     elif stat in ['t','tstat','t1']:    return two_sample_tstat
     elif stat in ['meandiff','mean']:
-        return lambda data1,data2: data1.mean(axis=0,keepdims=True) - data2.mean(axis=0,keepdims=True)
+        return lambda data1,data2: (data1.mean(axis=0,keepdims=True) -
+                                    data2.mean(axis=0,keepdims=True))
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
 
