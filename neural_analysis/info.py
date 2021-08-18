@@ -796,18 +796,16 @@ def auroc_2groups(data1, data2, axis=0, signed=True):
     data1, data1_shape = standardize_array(data1, axis=axis, target_axis=0)
     data2, data2_shape = standardize_array(data2, axis=axis, target_axis=0)
 
+    assert data1.ndim == data2.ndim, "auroc: data1,2 must have same dimensionality"
+    if data1.ndim > 1:
+        assert (*data1_shape[:axis],*data1_shape[axis+1:]) == \
+               (*data2_shape[:axis],*data2_shape[axis+1:]), \
+            "auroc: data1,2 must have same number of data series (timepts,freqs,channels,etc.)"
 
     n1 = data1.shape[0]
     n2 = data2.shape[0]
 
-    if data1.ndim > 1:
-        n_series = data1.shape[1]
-
-        assert data1.shape[1] == data2.shape[1], \
-            "auroc: data1,2 must have same number of data series (timepts,freqs,channels,etc.) \
-             (data1 ~ %d, data2 ~ %d)" % (data1.shape[1],data2.shape[1])
-    else:
-        n_series = 1
+    n_series = data1.shape[1] if data1.ndim > 1 else 1
 
     roc_area = np.empty((n_series,))
 

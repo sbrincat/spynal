@@ -17,7 +17,7 @@ from ..info import neural_info, neural_info_2groups
                           ('dprime', (-1.52,-1.56,-3.16,-2.53)),
                           ('auroc', (0.14,0.13,0.01,0.04)),
                           ('mutual_information', (0.5,0.42,0.9,0.82)),
-                          ('decode', 1.00)])                        
+                          ('decode', 0.90)])                        
 def test_two_sample_info(two_sample_data, method, result):    
     """ 
     Unit tests for neural_info function for computing neural information 

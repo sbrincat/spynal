@@ -61,13 +61,13 @@ def spike_field_pair(oscillation_pair):
 @pytest.mark.parametrize('method, spec_method, result',
                          [('coherence', 'wavelet',      (0.2475,0.4795)),
                           ('coherence', 'multitaper',   (0.1046,0.3043)),
-                          ('coherence', 'bandfilter',   (0.3490,0.6703)),
+                          ('coherence', 'bandfilter',   (0.3490,0.6706)),
                           ('PLV',       'wavelet',      (0.2541,0.3713)),
                           ('PLV',       'multitaper',   (0.0984,0.2228)),
-                          ('PLV',       'bandfilter',   (0.3322,0.4532)),
+                          ('PLV',       'bandfilter',   (0.3321,0.4528)),
                           ('PPC',       'wavelet',      (0.0912,0.3713)),
                           ('PPC',       'multitaper',   (0.0100,0.2228)),
-                          ('PPC',       'bandfilter',   (0.1715,0.4532))])
+                          ('PPC',       'bandfilter',   (0.1715,0.4528))])
 def test_synchrony(oscillation_pair, method, spec_method, result):
     """ Unit tests for synchrony() function """
     # Extract per-channel data and reshape -> (n_trials,n_timepts)
@@ -166,13 +166,13 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
 @pytest.mark.parametrize('method, spec_method, result',
                          [('coherence', 'wavelet',      (0.2400,0.2894)),
                           ('coherence', 'multitaper',   (0.1218,0.1530)),
-                          ('coherence', 'bandfilter',   (0.3721,0.2676)),
+                          ('coherence', 'bandfilter',   (0.3721,0.2696)),
                           ('PLV',       'wavelet',      (0.1600,-0.2363,1994)),
                           ('PLV',       'multitaper',   (0.0576,0.9140,6032)),
-                          ('PLV',       'bandfilter',   (0.3041,-0.2260,1994)),
+                          ('PLV',       'bandfilter',   (0.3041,-0.2257,1994)),
                           ('PPC',       'wavelet',      (0.0764,-0.2363,1994)),
                           ('PPC',       'multitaper',   (0.0085,0.9140,6032)),
-                          ('PPC',       'bandfilter',   (0.1417,-0.2260,1994))])
+                          ('PPC',       'bandfilter',   (0.1417,-0.2257,1994))])
 def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     """ Unit tests for spike_field_coupling() function """
     # Extract per-channel data and reshape -> (n_trials,n_timepts)

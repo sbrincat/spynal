@@ -833,11 +833,11 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
         if exclude_end:
             # Series of windows going backwards from ref point (flipped to proper order),
             # followed by Series of windows going forwards from ref point
-            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -step)),
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
                                          iarange(reference+step, lims[-1]-width+offset, step)))
 
         else:
-            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -step)),
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
                                          iarange(reference+step, lims[-1]-width, step)))
 
     # Set end of each window
