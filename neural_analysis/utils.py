@@ -22,7 +22,9 @@ undo_standardize_array Undoes effect of standardize_array after analysis
 iarange             np.arange(), but with an inclusive endpoint
 unsorted_unique     np.unique(), but without sorting values
 isarraylike         Tests if variable is "array-like" (ndarray, list, or tuple)
-setup_sliding_windows   Generates set of sliding windows using given parameters
+setup_sliding_windows Generates set of sliding windows using given parameters
+object_array_compare Compare each object within an object array
+concatenate_object_array Concatenates objects across one/more axes of object array
 
 Created on Fri Apr  9 13:28:15 2021
 
@@ -657,77 +659,6 @@ def undo_standardize_to_axis_end(data, data_shape, axis=-1):
     return data
 
 
-def concatenate_object_array(data,axis=None,sort=False):
-    """
-    Concatenates objects across one or more axes of an object array.
-    Useful for concatenating spike timestamps across trials, units, etc.
-
-    data = concatenate_object_array(data,axis=None,sort=False)
-
-    EXAMPLE
-    data = [[[1, 2],    [3, 4, 5]],
-            [[6, 7, 8], [9, 10]  ]]
-    concatenate_object_array(data,axis=0)
-    >> [[1,2,6,7,8], [3,4,5,9,10]]
-    concatenate_object_array(data,axis=1)
-    >> [[1,2,3,4,5], [6,7,8,9,10]]
-
-    ARGS
-    data    Object ndarray of arbitary shape containing 1d lists/arrays
-
-    axis    Int | list of int | None. Axis(s) to concatenate object array across.
-            Set = list of ints to concatenate across multiple axes.
-            Set = None [default] to concatenate across *all* axes in data.
-
-    sort    Bool. If True, sorts items in concatenated list objects. Default: False
-
-    OUTPUTS
-    data    Concatenated object(s).
-            If axis is None, returns as single list extracted from object array.
-            Otherwise, returns as object ndarray with all concatenated axes
-            reduced to singletons.
-    """
-    assert data.dtype == object, \
-        ValueError("data is not an object array. Use np.concatenate() instead.")
-
-    # Convert axis=None to list of *all* axes in data
-    if axis is None:    axis_ = 0 if data.ndim == 1 else list(range(data.ndim))
-    else:               axis_ = axis
-
-    # If <axis> is a list of multiple axes, iterate thru each axis,
-    # recursively calling this function on each axis in list
-    if not np.isscalar(axis_):
-        for ax in axis_:
-            # Only need to sort for final concatenation axis
-            sort_ = sort if ax == axis_[-1] else False
-            data = concatenate_object_array(data,axis=ax,sort=sort_)
-
-        # Extract single object if we concatenated across all axes (axis=None)
-        if axis is None: data = data.item()
-
-        return data
-
-    # If concatenation axis is already a singleton, we are done, return as-is
-    if data.shape[axis_] == 1: return data
-
-
-    # Reshape data so concatenation axis is axis 0, all other axes are unwrapped to 2d array
-    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
-    n_series = data.shape[1]
-
-    data_concat = np.empty((1,n_series),dtype=object)
-
-    for j in range(n_series):
-        # Concatenate objects across all entries
-        data_concat[0,j] = np.concatenate([values for values in data[:,j]])
-        # Sort items in concatenated object, if requested
-        if sort: data_concat[0,j].sort()
-
-    # Reshape data back to original axis order and shape
-    data_concat = undo_standardize_array(data_concat, data_shape, axis=axis, target_axis=0)
-
-    return data_concat
-
 
 # =============================================================================
 # Other utility functions
@@ -850,3 +781,180 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
         win_ends   = np.round(win_ends)
 
     return np.stack((win_starts,win_ends),axis=1)
+
+
+def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all):
+    """
+    Determines if each object element within two object arrays is equal
+    
+    equal = object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all)
+    
+    ARGS
+    data1,2     ndarray. Arbitrary shape. Two arrays to determine elementwise equality of.
+                Must have same shape if using anything other than defaults for comp_func,
+                reduce_func (bc we have no way of knowing how to deal with this).
+    
+    comp_func   Callable. Comparison function used to determine equality of each element.
+                Default: np.array_equal (True iff elements have same shape and values)
+                
+    reduce_func Callable. Optional function to reduce equality results for each element
+                across entire array.
+                Default: np.all (True iff ALL objects in array are elementwise True)
+       
+    OUTPUTS
+    equal       ndarray | bool. Reflects equality of each object element in data1,2.
+                If reduce_func is None, this is the elementwise equality of each object,
+                and has same shape as data1,2.
+                Otherwise, elementwise equality is reduced across the array using reduce_func,
+                and this returns as a single scalar bool.
+                
+                If data1,2 have different shapes: we return False if comp_func is array_equal
+                and reduce_func is np.all; otherwise an error is raised (don't know how to compare).
+    """
+    if data1.shape != data2.shape:
+        # For vanilla array_equal comparison, different shapes imply equality is False
+        if (comp_func == np.array_equal) and (reduce_func == np.all):
+            return False
+        # General case: we don't really know how to deal with different shapes
+        # w/o knowing comp_func and reduce_func
+        else:
+            raise ValueError("Unsure how to compare data1 and data2 with different shapes")
+    
+    equal = np.empty_like(data1)
+
+    # Create 1D flat iterator to iterate over arbitrary-shape data arrays
+    data_flat = data1.flat
+    for _ in range(data1.size):
+        # Multidim coordinates into data array
+        coords = data_flat.coords
+
+        # Count spikes within each bin
+        equal[coords] = comp_func(data1[coords], data2[coords])
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(data_flat)
+    
+    # Perform any reduction operation across output array
+    if reduce_func is not None: equal = reduce_func(equal)
+    
+    return equal
+
+
+def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
+    """
+    Compares object elements within two object arrays using given comparison function
+    
+    comp = object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None)
+    
+    ARGS
+    data1,2     ndarray. Two arrays to determine elementwise equality of.
+                Must have same shape
+    
+    comp_func   Callable. Comparison function used to compare each objecxt element.
+                Default: np.equal (returns True/False for each value w/in each object element)
+                
+    reduce_func Callable. Optional function to reduce comparison results for each element
+                across entire array.
+                Default: None (don't perform any reduction on result)
+       
+    OUTPUTS
+    equal       ndarray | bool. Reflects comparison of each object element in data1,2.
+                If reduce_func is None, this is the elementwise comparison of each object,
+                and has same shape as data1,2.
+                Otherwise, elementwise comparison is reduced across the array using reduce_func,
+                and this returns as a single scalar bool.    
+    """
+    assert data1.shape == data2.shape, \
+        ValueError("data1 and data2 must have same shape for comparison")
+
+    out = np.empty_like(data1)
+
+    # Create 1D flat iterator to iterate over arbitrary-shape data arrays
+    data_flat = data1.flat
+    for _ in range(data1.size):
+        # Multidim coordinates into data array
+        coords = data_flat.coords
+
+        # Count spikes within each bin
+        out[coords] = comp_func(data1[coords], data2[coords])
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(data_flat)
+    
+    # Perform any reduction operation across output array
+    if reduce_func is not None: out = reduce_func(out)
+    
+    return out
+    
+    
+def concatenate_object_array(data, axis=None, sort=False):
+    """
+    Concatenates objects across one or more axes of an object array.
+    Useful for concatenating spike timestamps across trials, units, etc.
+
+    data = concatenate_object_array(data,axis=None,sort=False)
+
+    EXAMPLE
+    data = [[[1, 2],    [3, 4, 5]],
+            [[6, 7, 8], [9, 10]  ]]
+    concatenate_object_array(data,axis=0)
+    >> [[1,2,6,7,8], [3,4,5,9,10]]
+    concatenate_object_array(data,axis=1)
+    >> [[1,2,3,4,5], [6,7,8,9,10]]
+
+    ARGS
+    data    Object ndarray of arbitary shape containing 1d lists/arrays
+
+    axis    Int | list of int | None. Axis(s) to concatenate object array across.
+            Set = list of ints to concatenate across multiple axes.
+            Set = None [default] to concatenate across *all* axes in data.
+
+    sort    Bool. If True, sorts items in concatenated list objects. Default: False
+
+    OUTPUTS
+    data    Concatenated object(s).
+            If axis is None, returns as single list extracted from object array.
+            Otherwise, returns as object ndarray with all concatenated axes
+            reduced to singletons.
+    """
+    assert data.dtype == object, \
+        ValueError("data is not an object array. Use np.concatenate() instead.")
+
+    # Convert axis=None to list of *all* axes in data
+    if axis is None:    axis_ = 0 if data.ndim == 1 else list(range(data.ndim))
+    else:               axis_ = axis
+
+    # If <axis> is a list of multiple axes, iterate thru each axis,
+    # recursively calling this function on each axis in list
+    if not np.isscalar(axis_):
+        for ax in axis_:
+            # Only need to sort for final concatenation axis
+            sort_ = sort if ax == axis_[-1] else False
+            data = concatenate_object_array(data,axis=ax,sort=sort_)
+
+        # Extract single object if we concatenated across all axes (axis=None)
+        if axis is None: data = data.item()
+
+        return data
+
+    # If concatenation axis is already a singleton, we are done, return as-is
+    if data.shape[axis_] == 1: return data
+
+
+    # Reshape data so concatenation axis is axis 0, all other axes are unwrapped to 2d array
+    data, data_shape = standardize_array(data, axis=axis, target_axis=0)
+    n_series = data.shape[1]
+
+    data_concat = np.empty((1,n_series),dtype=object)
+
+    for j in range(n_series):
+        # Concatenate objects across all entries
+        data_concat[0,j] = np.concatenate([values for values in data[:,j]])
+        # Sort items in concatenated object, if requested
+        if sort: data_concat[0,j].sort()
+
+    # Reshape data back to original axis order and shape
+    data_concat = undo_standardize_array(data_concat, data_shape, axis=axis, target_axis=0)
+
+    return data_concat
+

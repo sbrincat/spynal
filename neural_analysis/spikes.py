@@ -951,13 +951,13 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
         # If width = 1 ms, extend lims by 0.5 ms, so bins end up centered
         # on whole ms values, as we typically want for binary spike trains
         if isclose(width,1e-3): lims = [lims[0] - 0.5e-3, lims[1] + 0.5e-3]
-        bins = setup_sliding_windows(width,lims=lims,step=width)
+        bins = setup_sliding_windows(width, lims=lims, step=width)
 
     timepts = bins.mean(axis=1)
 
     # For each spike train in <spike_times> compute count w/in each hist bin
     # Note: Setting dtype=bool implies any spike counts > 0 will be True
-    spike_bool,bins = bin_rate(spike_times,bins=bins,output='bool')
+    spike_bool,bins = bin_rate(spike_times, bins=bins, output='bool')
 
     return spike_bool, timepts
 
@@ -1212,6 +1212,9 @@ def realign_spike_times(spike_times, align_times, trial_axis=0):
     RETURNS
     realigned   Same data struture, but with each timestamp realigned to times
     """
+    # Make copy of input data to avoid changing in caller
+    spike_times = spike_times.copy()
+    
     # Move trial axis to first axis of array
     if trial_axis != 0: spike_times = np.moveaxis(spike_times, trial_axis, 0)
 

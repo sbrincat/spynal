@@ -48,7 +48,6 @@ Created on Tue Jul 30 16:28:12 2019
 @author: sbrincat
 """
 # TODO  Parallelize resampling loops! (using joblib?)
-# TODO  Add option to return resamples as actual sequences (not iterators)?
 # TODO  How to pass custom function to paired_sample tests (eval'd as 1-samples)?
 # TODO  How to enforce dimensionality of custom functions (esp re: keepdims)?
 
@@ -1450,8 +1449,8 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
         stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)
 
     if return_stats and not return_sorted:
-        # Sort copy of stat_resmp, to return original unsorted version
-        stat_resmp_sorted = stat_resmp.sort(axis=0)
+        # Sort copy of stat_resmp, so we can return original unsorted version
+        stat_resmp_sorted = np.sort(stat_resmp, axis=0)
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp_sorted[conf_indexes,...]
 
@@ -1626,8 +1625,8 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
         stat_resmp[i_resmp,...] = stat_func(data1[resample1,...], data2[resample2,...], **kwargs)
 
     if return_stats and not return_sorted:
-        # Sort copy of stat_resmp, to return original unsorted version
-        stat_resmp_sorted = stat_resmp.sort(axis=0)
+        # Sort copy of stat_resmp, so we can return original unsorted version
+        stat_resmp_sorted = np.sort(stat_resmp, axis=0)        
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp_sorted[conf_indexes,...]
 

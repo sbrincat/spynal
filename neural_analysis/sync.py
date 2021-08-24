@@ -20,10 +20,6 @@ spike_field_ppc         Spike-field PPC between a spike/LFP pair
 simulate_multichannel_oscillation Generates simulated oscillatory paired data
 
 
-DEPENDENCIES
-pyfftw              Python wrapper around FFTW, the speedy FFT library
-spikes              A module for basic analyses of neural spiking activity
-
 Created on Thu Oct  4 15:28:15 2018
 
 @author: sbrincat
