@@ -12,6 +12,7 @@ Plots results and runs assertions that basic expected results are reproduced
 FUNCTIONS
 test_synchrony          Contains tests of synchrony estimation functions
 synchrony_test_battery  Runs standard battery of tests of synchrony estimation functions
+spike_field_test_battery Runs standard battery of tests of spike-field sync estimation functions
 """
 import os
 import time
@@ -503,6 +504,7 @@ def spike_field_test_battery(methods=['PPC','PLV','coherence'],
                 
                 # If saving plots to file, let's not leave them all open
                 if 'plot_dir' in kwargs: plt.close('all')                
+ 
                 
 def _amp_phase_to_complex(amp,theta):
     """ Converts amplitude and phase angle to complex variable """

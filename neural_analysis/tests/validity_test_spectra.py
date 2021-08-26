@@ -12,6 +12,7 @@ Plots results and runs assertions that basic expected results are reproduced
 FUNCTIONS
 test_power              Contains tests of spectral estimation functions
 power_test_battery      Runs standard battery of tests of spectral estimation functions
+itpc_test_battery       Runs standard battery of tests of ITPC estimation functions
 """
 import os
 import time

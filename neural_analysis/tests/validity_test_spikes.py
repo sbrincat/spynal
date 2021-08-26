@@ -10,10 +10,16 @@ number of trials, etc. to establish methods produce expected pattern of results.
 Plots results and runs assertions that basic expected results are reproduced
 
 FUNCTIONS
-test_rate           Contains tests of spike rate estimation functions
-rate_test_battery   Runs standard battery of tests of rate estimation functions
+test_rate           Tests of spike rate estimation functions
+
+test_rate_stats     Tests of spike rate statistic estimation functions
+rate_stat_test_battery  Runs standard battery of tests of rate stat functions
+
+test_isi_stats      Tests of inter-spike interval statistic estimation functions
+isi_stat_test_battery  Runs standard battery of tests of ISI stat functions
 """
-# TODO  Generalize testing framework cf other validity test functions (test battery function, n_trials test)
+# TODO  Generalize testing framework of test_rate cf other validity test functions 
+#       (test battery function, n_trials test)
 import os
 import time
 from warnings import warn

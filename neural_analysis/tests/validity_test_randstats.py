@@ -12,6 +12,7 @@ Plots results and runs assertions that basic expected results are reproduced
 FUNCTIONS
 test_randstats      Contains tests of randomization statistic computation functions
 stat_test_battery   Runs standard battery of tests of randomization stat functions
+
 test_confints       Contains tests of confidence interval computation functions
 confint_test_battery Runs standard battery of tests of confidence interval functions
 """

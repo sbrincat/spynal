@@ -1,6 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-spikes  A module for basic analyses of neural spiking activity
+spikes  A module for preprocessing, basic analyses, and plotting of neural spiking activity
+
+Most functions expect one of two formats of spiking data:
+bool        Binary spike trains where 1's label times of spikes and 0's = no spike
+            in a Numpy ndarray of dtype bool, where one axis corresponds to time
+            (and other optional axes might correspond to trial, units, etc.)
+
+timestamp   Explicit spike timestamps in a Numpy ndarray of dtype object (analogous
+            to Matlab cell arrays). Each object element holds a variable-length
+            list-like 1D subarray of spike timestamps for one trial, unit, etc.,
+            which can optionally be represented on the containing array's axes (or
+            a single 1D array/list may be given instead).
+
+Most functions perform operations in a mass-univariate manner.
+
+Rather than embedding function calls in loops over units, trials, etc., like this:
+for unit in units:
+    for trial in trials:
+        results[trial,unit] = compute_something(data[trial,unit])
+
+You can instead execute a single call on ALL the data, labeling the relevant axis
+for the computation (usually time here), and it will run in parallel (vectorized)
+across all units, trials, etc. in the data, like this:
+results = compute_something(data, axis)
+
 
 FUNCTIONS
 ### Spike count/rate computation ###
@@ -1218,7 +1242,7 @@ def realign_spike_times(spike_times, align_times, trial_axis=0):
     """
     # Make copy of input data to avoid changing in caller
     spike_times = spike_times.copy()
-    
+
     # Move trial axis to first axis of array
     if trial_axis != 0: spike_times = np.moveaxis(spike_times, trial_axis, 0)
 
