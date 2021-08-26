@@ -413,6 +413,10 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     shape           = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])
     rates[np.tile(no_spike_idxs,shape)] = 0
 
+    # KLUDGE Sometime rates end up with minute negative values due to floating point error,
+    # which can mess up things downstream (eg sqrt). Set these = 0.
+    rates[rates < 0] = 0
+
     # Reshape rates so that time axis is in original location
     if (data_type == 'bool') and (axis != data.ndim):
         rates = np.moveaxis(rates,-1,axis)
