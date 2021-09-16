@@ -90,8 +90,8 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data2,data2_orig)
     assert sync.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(dphi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
 
@@ -141,8 +141,8 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     assert timepts.shape == (n_timepts,)
     assert sync.shape == (n_freqs, n_timepts, 2)
     assert dphi.shape == (n_freqs, n_timepts, 2)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(dphi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(dphi.dtype,float)
     # HACK Loosen tolerance bc this doesn't quite match up for bandfilter (TODO why???)
     assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-3, atol=1e-3)
     assert np.isclose(dphi[:,:,0].mean(), result[1], rtol=1e-3, atol=1e-3)
@@ -157,16 +157,16 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     assert timepts.shape == (n_timepts,)
     assert sync.shape == (n_freqs, n_timepts)
     assert dphi.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(dphi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with spectral data input
-    spec1, freqs, timepts = spectrogram(data1, smp_rate, axis=1, method=spec_method,
-                                        spec_type='complex', keep_tapers=True)
-    spec2, freqs, timepts = spectrogram(data2, smp_rate, axis=1, method=spec_method,
-                                        spec_type='complex', keep_tapers=True)
+    extra_args = dict(axis=1, method=spec_method, spec_type='complex')
+    if spec_method == 'multitaper': extra_args.update(keep_tapers=True)
+    spec1, freqs, timepts = spectrogram(data1, smp_rate, **extra_args)
+    spec2, freqs, timepts = spectrogram(data2, smp_rate, **extra_args)
     sync, _, _, dphi = synchrony(spec1, spec2, axis=0, taper_axis=2, method=method,
                                  spec_method=spec_method, return_phase=True)
     assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
@@ -175,11 +175,16 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     assert timepts.shape == (n_timepts,)
     assert sync.shape == (n_freqs, n_timepts)
     assert dphi.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(dphi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method,
+                                            spec_method=spec_method, return_phase=True,
+                                            smp_rate=smp_rate, time_axis=-1, foo=None)
 
 
 @pytest.mark.parametrize('method, spec_method, result',
@@ -229,8 +234,8 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
     assert phi.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(phi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(phi.dtype,float)
     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
     if method != 'coherence':
@@ -285,8 +290,8 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         assert timepts.shape == (n_timepts,)
         assert sync.shape == (n_freqs, n_timepts, 2)
         assert phi.shape == (n_freqs, n_timepts, 2)
-        assert np.issubdtype(sync.dtype,np.float)
-        assert np.issubdtype(phi.dtype,np.float)
+        assert np.issubdtype(sync.dtype,float)
+        assert np.issubdtype(phi.dtype,float)
         assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-4, atol=1e-4)
         assert np.isclose(phi[:,:,0].mean(), result[1], rtol=1e-4, atol=1e-4)
         if method != 'coherence': assert np.round(n.mean()) == result[2]
@@ -303,8 +308,8 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert timepts.shape == (n_timepts,)
     assert sync.shape == (n_freqs, n_timepts)
     assert phi.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(phi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(phi.dtype,float)
     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
     if method != 'coherence': assert np.round(n.mean()) == result[2]
@@ -346,8 +351,15 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert sync.shape == (n_freqs, n_timepts)
     assert phi.shape == (n_freqs, n_timepts)
-    assert np.issubdtype(sync.dtype,np.float)
-    assert np.issubdtype(phi.dtype,np.float)
+    assert np.issubdtype(sync.dtype,float)
+    assert np.issubdtype(phi.dtype,float)
     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
     assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
     if method != 'coherence': assert np.round(n.mean()) == result[2]
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        sync, freqs, timepts, n, phi = spike_field_coupling(spkdata, lfpdata, axis=0, time_axis=-1,
+                                                            method=method, spec_method=spec_method,
+                                                            smp_rate=smp_rate, return_phase=True,
+                                                            foo=None, **extra_args)

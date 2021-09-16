@@ -126,6 +126,10 @@ def test_two_sample_info(two_sample_data, method, result):
         mu = [[10.35,13.00, 3.74, 8.95], [19.45,19.15,20.77,19.00]]
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
+
 
 @pytest.mark.parametrize('method, result',
                          [('pev', (74.30,81.87,73.69,79.15)),
@@ -230,6 +234,10 @@ def test_one_way_info(one_way_data, method, result):
         mu = [[10.35,13.00, 3.74 , 8.95], [19.45,19.15,20.77,19.00], [32.87,33.69,26.73,31.10]]
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
+
 
 @pytest.mark.parametrize('method, interact, result',
                          [('pev', False, (( 8.55, 2.91,27.23,15.67),
@@ -331,3 +339,11 @@ def test_two_way_info(two_way_data, method, interact, result):
         assert np.allclose(stats['p'].squeeze(), p, rtol=1e-3, atol=1e-3)
         for term in range(len(mu)):
             assert np.allclose(stats['mu'][term].squeeze(), mu[term], rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        info = neural_info(labels, data, axis=0, method=method, model='anova2', interact=interact,
+                           foo=None)
+        info = neural_info(design, data, axis=0, method=method, model='regress', foo=None)
+
+

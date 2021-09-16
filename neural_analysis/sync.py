@@ -157,7 +157,7 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for
                 multitaper spectral data)
 
-    Any other keyword args passed as-is to spectrogram() function.
+    **kwags     Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
     coh     ndarray. Magnitude of coherence between data1 and data2.
@@ -388,7 +388,7 @@ def plv(data1, data2, axis=0, return_phase=False, single_trial=None,
     taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for
                 multitaper spectral data)
 
-    Any other keyword args passed as-is to spectrogram() function.
+    **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
     PLV     ndarray. Phase locking value between data1 and data2.

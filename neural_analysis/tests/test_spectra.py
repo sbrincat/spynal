@@ -109,7 +109,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert freqs.shape == freqs_shape
     assert spec.shape == (n_freqs, n_trials)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,float)
     assert np.isclose(spec[:,0].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with different data array shape (3rd axis)
@@ -119,7 +119,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert freqs.shape == freqs_shape
     assert spec.shape == (n_freqs, n_trials/2, n_trials/2)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,float)
     assert np.isclose(spec[:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with transposed data dimensionality
@@ -128,7 +128,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert freqs.shape == freqs_shape
     assert spec.shape == (n_trials, n_freqs)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,float)
     assert np.isclose(spec[0,:].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with vector-valued data
@@ -137,7 +137,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert freqs.shape == freqs_shape
     assert spec.shape == (n_freqs,)
-    assert np.issubdtype(spec.dtype,np.float)
+    assert np.issubdtype(spec.dtype,float)
     assert np.isclose(spec.mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for expected output with time-reversed data
@@ -149,6 +149,11 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert spec.shape == (n_freqs, n_trials)
         assert np.isclose(spec[:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        spec, freqs = spectrum(data, smp_rate, axis=0, method=method, data_type=data_type,
+                            spec_type=spec_type, foo=None)
 
 
 # TODO Take a closer look at 'complex' outputs -- why coming out = 0?
@@ -186,7 +191,7 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     n_timepts = method_to_n_timepts[method]
     if spec_type == 'complex':  dtype = np.complex
     elif spec_type == 'burst':  dtype = np.bool
-    else:                       dtype = np.float
+    else:                       dtype = float
 
     # Time reversal -> inverted sign phase, complex conj of complex, preserves power
     if spec_type == 'phase':        reversed_result = -result
@@ -247,6 +252,11 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert spec.shape == (n_freqs, n_timepts, n_trials)
         assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
+                                        data_type=data_type_, spec_type=spec_type, foo=None)
 
 
 @pytest.mark.parametrize('itpc_method, method, result',
@@ -310,6 +320,11 @@ def test_itpc(oscillation, itpc_method, method, result):
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert spec.shape == (n_freqs, n_timepts)
         assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        spec, freqs, timepts = itpc(data, smp_rate, axis=0, method=method, itpc_method=itpc_method,
+                                    trial_axis=-1, foo=None)
 
 
 # =============================================================================

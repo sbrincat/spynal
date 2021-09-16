@@ -76,7 +76,7 @@ from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
 from scipy.stats import norm
 from sklearn.linear_model import LinearRegression
 from pyfftw.interfaces.scipy_fftpack import fft,ifft # ~ 46/16 s on benchmark
-    
+
 # from numpy.fft import fft,ifft        # ~ 15 s on benchmark
 # from scipy.fftpack import fft,ifft    # ~ 11 s on benchmark
 # from mkl_fft import fft,ifft    # ~ 15.2 s on benchmark
@@ -429,8 +429,12 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Convert spike timestamp data to boolean spike train format
     if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
-        data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
-        axis = data.ndim
+        lims    = kwargs.pop('lims',None)
+        bins    = kwargs.pop('bins',None)
+        data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
+        axis    = data.ndim
+    assert len(kwargs) == 0, \
+        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
 
     # If observation axis != 0, permute axis to make it so
     if axis != 0: data = np.moveaxis(data,axis,0)
@@ -579,8 +583,10 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     # Convert spike timestamp data to boolean spike train format
     if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
-        data,_ = times_to_bool(data,**kwargs)
-        axis = data.ndim
+        lims    = kwargs.pop('lims',None)
+        bins    = kwargs.pop('bins',None)
+        data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
+        axis    = data.ndim
 
     # If observation axis != 0, permute axis to make it so
     if axis != 0: data = np.moveaxis(data,axis,0)
@@ -800,8 +806,12 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Convert spike timestamp data to boolean spike train format
     if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
-        data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
-        axis = data.ndim
+        lims    = kwargs.pop('lims',None)
+        bins    = kwargs.pop('bins',None)
+        data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
+        axis    = data.ndim
+    assert len(kwargs) == 0, \
+        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
 
     # Convert buffer from s -> samples
     if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
@@ -843,7 +853,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)
 
-    spec = _undo_standardize_array_newaxis(spec,data_shape,axis=axis)
+    spec    = _undo_standardize_array_newaxis(spec,data_shape,axis=axis)
 
     timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
 
@@ -1177,8 +1187,10 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     # Convert spike timestamp data to boolean spike train format
     if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
-        data,_ = times_to_bool(data, width=1/smp_rate, **kwargs)
-        axis = data.ndim
+        lims    = kwargs.pop('lims',None)
+        bins    = kwargs.pop('bins',None)
+        data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
+        axis    = data.ndim
 
     # Convert buffer from s -> samples
     if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
@@ -1195,6 +1207,9 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     # Determine form of filter parameters given: b,a or z,p,k
     else:
+        assert len(kwargs) == 0, \
+            TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+
         if np.all([(param in params) for param in ['b','a']]):       form = 'ba'
         elif np.all([(param in params) for param in ['z','p','k']]): form = 'zpk'
         else:
@@ -1322,6 +1337,8 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
         gen_filt = lambda band,btype: cheby2(order,rs,band,btype=btype,output=form)
     else:
         raise ValueError("Filter type '%s' is not supported (yet)" % filt)
+    assert len(kwargs) == 0, \
+        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
 
     # Setup empty lists to hold filter parameters
     if form == 'ba':    params = OrderedDict({'b':[None]*n_bands, 'a':[None]*n_bands})
@@ -1672,17 +1689,19 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
 # =============================================================================
 # Plotting functions
 # =============================================================================
-def plot_spectrum(freqs, data, ylim=None, color=None, **kwargs):
+def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     """
     Plots frequency spectrum as a line plot.
 
-    plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
+    ax,lines = plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
 
     ARGS
     freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
             May be linearly or logarithmically sampled; we deal appropriately.
 
     data    (n_freqs,) ndarray. Frequency spectrum data.
+
+    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca()
 
     ylim    (2,) array-like. y-axis limits: (min,max)
             Default: min/max over all data +/- 5%  (data.min(),data.max())
@@ -1696,9 +1715,12 @@ def plot_spectrum(freqs, data, ylim=None, color=None, **kwargs):
     Plots spectrum data into current axes using plt.plot()
 
     RETURNS
+    ax      Pyplot Axis object. Axis for plot
     lines   List of Line2D objects. Output of plt.plot()
     """
     freqs   = np.asarray(freqs)
+    if ax is None: ax = plt.gca()
+    plt.sca(ax)
     if ylim is None:
         ylim = (data.min(), data.max())
         ylim = (ylim[0]-0.05*np.diff(ylim), ylim[1]+0.05*np.diff(ylim))
@@ -1717,14 +1739,14 @@ def plot_spectrum(freqs, data, ylim=None, color=None, **kwargs):
     plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
     plt.xticks(fticks,fticklabels)
 
-    return lines
+    return ax, lines
 
 
-def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
+def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', **kwargs):
     """
     Plots time-frequency spectrogram as a pseudocolor plot.
 
-    plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
+    ax,img = plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
 
     ARGS
     timepts (n_timepts,) array-like. Time sampling vector for data
@@ -1733,6 +1755,8 @@ def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
             May be linearly or logarithmically sampled; we deal appropriately.
 
     data    (n_freqs,n_timepts) ndarray. Time-frequency (spectrogam) data
+
+    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca()
 
     clim    (2,) array-like. Color axis limits: (min,max)
             Default: min/max over all data (data.min(),data.max())
@@ -1745,10 +1769,13 @@ def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
     Plots spectrogram data into current axes using plt.imshow()
 
     RETURNS
-    img    AxesImage object. Output of plt.imshow()
+    ax      Pyplot Axis object. Axis for plot
+    img     AxesImage object. Output of plt.imshow()
     """
     timepts = np.asarray(timepts)
     freqs   = np.asarray(freqs)
+    if ax is None: ax = plt.gca()
+    plt.sca(ax)
     if clim is None: clim = (data.min(), data.max())
 
     freqs,fticks,fticklabels = frequency_plot_settings(freqs)
@@ -1765,7 +1792,7 @@ def plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs):
     plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
     plt.yticks(fticks,fticklabels)
 
-    return img
+    return ax, img
 
 
 def frequency_plot_settings(freqs):

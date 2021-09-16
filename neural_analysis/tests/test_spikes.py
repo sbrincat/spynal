@@ -127,7 +127,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     data, timepts = spike_data[data_type]
     data_orig = data.copy()
 
-    if output == 'rate':    dtype_type = np.float
+    if output == 'rate':    dtype_type = float
     elif output == 'count': dtype_type = np.integer
     else:                   dtype_type = np.bool
 
@@ -190,7 +190,12 @@ def test_bin_rate(spike_data, data_type, output, result):
     else:
         assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
 
-
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        rates, bins = rate(data, method='bin', lims=[0,1], output=output, axis=-1,
+                           timepts=timepts, foo=None)
+                
+        
 @pytest.mark.parametrize('data_type, kernel, result',
                          [('spike_timestamp', 'gaussian', 4.92),
                           ('spike_timestamp', 'hanning', 4.93),
@@ -243,6 +248,11 @@ def test_density(spike_data, data_type, kernel, result):
     assert rates.shape == (10, 2, 101)
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0,
+                        axis=-1, timepts=timepts, foo=None)
+
 
 # =============================================================================
 # Unit tests for rate and ISI stats functions
@@ -281,6 +291,10 @@ def test_rate_stats(spike_data, data_type, stat, result):
     assert data_checker(rates,rates_orig)     # Ensure input data isn't altered by function
     assert stats.shape == (n_timepts, n_chnls, 1)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        stats = rate_stats(rates, stat=stat, axis=0, foo=None)
 
 
 @pytest.mark.parametrize('data_type, stat, result',
@@ -328,6 +342,11 @@ def test_isi_stats(spike_data, data_type, stat, result):
     assert stats.shape == (n_chnls, 1)
     assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        ISIs = isi(data, axis=-1, timepts=timepts, foo=None)
+        stats = isi_stats(ISIs, stat=stat, axis=axis, foo=None)
+        
 
 # =============================================================================
 # Unit tests for rate preprocessing/utility functions
@@ -389,14 +408,22 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
         assert object_array_equal(uncut_data,data_orig)     # Ensure input data isn't altered by function
         for trial in range(n_trials):
             for unit in range(n_units):
-                assert np.allclose(cut_data[trial,unit], data[trial,unit])
+                assert np.allclose(cut_data[trial,unit], data[trial,unit])                
 
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises((TypeError,AssertionError)):
+            cut_data = cut_trials(uncut_data, trial_lims, trial_refs=np.arange(0,n_trials), foo=None).T
+                
     else:
         trial_lims = np.asarray([0,1])[np.newaxis,:] + 1.001*np.arange(n_trials)[:,np.newaxis]
         cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1).transpose((2,0,1))
         assert np.array_equal(uncut_data,data_orig)     # Ensure input data isn't altered by function
         assert (cut_data == data).all()
-
+        
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises((TypeError,AssertionError)):
+            cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1, foo=None).transpose((2,0,1))
+        
     assert cut_data.shape == data.shape
 
 
@@ -427,6 +454,10 @@ def test_realign_data(spike_data, data_type):
             for unit in range(n_units):
                 assert np.allclose(realigned[unit,trial], data[trial,unit])
 
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises((TypeError,AssertionError)):
+            realigned = realign_data(data, 0.5*np.ones((n_trials,)), trial_axis=0, foo=None)
+            
     # For boolean data, realign to 2 distinct times, then concatenate together and test if same
     else:
         realigned1 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
@@ -448,7 +479,12 @@ def test_realign_data(spike_data, data_type):
         assert realigned.shape == data.T.shape
         assert (realigned == data.T).all()
 
-
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises((TypeError,AssertionError)):
+            realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                            timepts=timepts, time_axis=0, trial_axis=-1, foo=None)            
+            
+            
 @pytest.mark.parametrize('data_type',
                          [('spike_timestamp'),('spike_bool')])
 def test_pool_electrode_units(spike_data, data_type):

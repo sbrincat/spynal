@@ -680,20 +680,25 @@ def iarange(start=0, stop=0, step=1):
     return np.arange(start,stop+offset,step)
 
 
-def unsorted_unique(x, **kwargs):
+def unsorted_unique(x, axis=None, **kwargs):
     """
     Implements np.unique(x) without sorting, ie maintains original order of unique
     elements as they are found in x.
 
+    axis        Int. Axis of array to find unique values on; if None [default],
+                finds unique values in entire array
+
+    **kwargs    All other keyword passed directly to np.unique
+
     SOURCE  stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
     """
     x    = np.asarray(x)
-    if 'axis' in kwargs:
-        idxs = np.unique(x, return_index=True, **kwargs)[1]
-        return index_axis(x, kwargs['axis'], np.sort(idxs))
+    if axis is not None:
+        idxs = np.unique(x, return_index=True, axis=axis, **kwargs)[1]
+        return index_axis(x, axis, np.sort(idxs))
     else:
         x = x.flatten()
-        idxs = np.unique(x, return_index=True, **kwargs)[1]
+        idxs = np.unique(x, return_index=True, axis=axis, **kwargs)[1]
         return x[np.sort(idxs)]
 
 
@@ -786,28 +791,28 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
 def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all):
     """
     Determines if each object element within two object arrays is equal
-    
+
     equal = object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all)
-    
+
     ARGS
     data1,2     ndarray. Arbitrary shape. Two arrays to determine elementwise equality of.
                 Must have same shape if using anything other than defaults for comp_func,
                 reduce_func (bc we have no way of knowing how to deal with this).
-    
+
     comp_func   Callable. Comparison function used to determine equality of each element.
                 Default: np.array_equal (True iff elements have same shape and values)
-                
+
     reduce_func Callable. Optional function to reduce equality results for each element
                 across entire array.
                 Default: np.all (True iff ALL objects in array are elementwise True)
-       
+
     OUTPUTS
     equal       ndarray | bool. Reflects equality of each object element in data1,2.
                 If reduce_func is None, this is the elementwise equality of each object,
                 and has same shape as data1,2.
                 Otherwise, elementwise equality is reduced across the array using reduce_func,
                 and this returns as a single scalar bool.
-                
+
                 If data1,2 have different shapes: we return False if comp_func is array_equal
                 and reduce_func is np.all; otherwise an error is raised (don't know how to compare).
     """
@@ -819,7 +824,7 @@ def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.al
         # w/o knowing comp_func and reduce_func
         else:
             raise ValueError("Unsure how to compare data1 and data2 with different shapes")
-    
+
     equal = np.empty_like(data1)
 
     # Create 1D flat iterator to iterate over arbitrary-shape data arrays
@@ -833,36 +838,36 @@ def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.al
 
         # Iterate to next element (list of spike times for trial/unit/etc.) in data
         next(data_flat)
-    
+
     # Perform any reduction operation across output array
     if reduce_func is not None: equal = reduce_func(equal)
-    
+
     return equal
 
 
 def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
     """
     Compares object elements within two object arrays using given comparison function
-    
+
     comp = object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None)
-    
+
     ARGS
     data1,2     ndarray. Two arrays to determine elementwise equality of.
                 Must have same shape
-    
+
     comp_func   Callable. Comparison function used to compare each objecxt element.
                 Default: np.equal (returns True/False for each value w/in each object element)
-                
+
     reduce_func Callable. Optional function to reduce comparison results for each element
                 across entire array.
                 Default: None (don't perform any reduction on result)
-       
+
     OUTPUTS
     equal       ndarray | bool. Reflects comparison of each object element in data1,2.
                 If reduce_func is None, this is the elementwise comparison of each object,
                 and has same shape as data1,2.
                 Otherwise, elementwise comparison is reduced across the array using reduce_func,
-                and this returns as a single scalar bool.    
+                and this returns as a single scalar bool.
     """
     assert data1.shape == data2.shape, \
         ValueError("data1 and data2 must have same shape for comparison")
@@ -880,13 +885,13 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
 
         # Iterate to next element (list of spike times for trial/unit/etc.) in data
         next(data_flat)
-    
+
     # Perform any reduction operation across output array
     if reduce_func is not None: out = reduce_func(out)
-    
+
     return out
-    
-    
+
+
 def concatenate_object_array(data, axis=None, sort=False):
     """
     Concatenates objects across one or more axes of an object array.

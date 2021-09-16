@@ -549,7 +549,7 @@ def mutual_information(labels, data, axis=0, bins=None, resp_entropy=None, group
 
     # Bin-discretize data if it is not already integer-valued OR if value is input for bins
     do_bins = (bins is not None) or \
-              (np.issubdtype(data.dtype,np.float) and not np.allclose(np.round(data), data))
+              (np.issubdtype(data.dtype,float) and not np.allclose(np.round(data), data))
 
     if do_bins:
         # If bins are given explicitly, reshape them as needed

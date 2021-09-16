@@ -86,6 +86,11 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        p, stat_obs, stat_resmp = one_sample_test(data, axis=0, method=method, seed=1,
+                                                n_resamples=n_resamples, return_stats=True, foo=None)
+
 
 @pytest.mark.parametrize('stat, method, result_p, result_obs, result_resmp',
                          [('paired', 'permutation', 0.05, -2.97, -0.35),
@@ -216,6 +221,10 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
         assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
         assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, seed=1,
+                                            n_resamples=n_resamples, return_stats=True, foo=None)
 
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('permutation', 0.05, 11.50, 0.41)])
@@ -316,6 +325,11 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, seed=1,
+                                            n_resamples=n_resamples, return_stats=True, foo=None)
+
 
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('permutation', (0.05,0.05,0.4), (3.10,24.91,0.18), (0.25,0.19,0.20))])
@@ -413,6 +427,10 @@ def test_two_way_test(two_way_data, method, result_p, result_obs, result_resmp):
     assert np.allclose(stat_obs[:,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.allclose(stat_resmp[:,0,:].mean(axis=-1), result_resmp, rtol=1e-2, atol=1e-2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        p, stat_obs, stat_resmp = two_way_test(data, labels, axis=0, method=method, seed=1,
+                                            n_resamples=n_resamples, return_stats=True, foo=None)
 
 @pytest.mark.parametrize('method, result_ci, result_obs, result_resmp',
                          [('bootstrap', (8.53,12.18), 10.35, 10.36)])
@@ -487,6 +505,11 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        ci, stat_obs, stat_resmp = one_sample_confints(data, axis=0, n_resamples=n_resamples,
+                                                    seed=1, return_stats=True, foo=None)
 
 
 @pytest.mark.parametrize('stat, method, result_ci, result_obs, result_resmp',
@@ -580,3 +603,8 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples,
+                                            seed=1, return_stats=True, foo=None)

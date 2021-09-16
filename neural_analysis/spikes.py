@@ -382,23 +382,30 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 
     # Convert kernel specifier to actual kernel (window) function
     width_smps = width*smp_rate # convert width to samples
-    # Kernel is already a (custom) array of values
-    if isinstance(kernel,np.ndarray):       kernel_ = kernel
 
     # Kernel is a function/callable -- call it with width in samples
-    elif callable(kernel):                  kernel_ = kernel(width_smps,**kwargs)
+    if callable(kernel):
+        kernel_ = kernel(width_smps,**kwargs)
 
-    # Kernel is a string specifier -- call appropriate kernel-generating function
-    elif isinstance(kernel,str):
-        kernel = kernel.lower()
+    else:
+        assert len(kwargs) == 0, \
+            TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
 
-        if kernel in ['hann','hanning']:
-            kernel_ = hann(int(round(width_smps*2.0)))
-        elif kernel in ['gaussian','normal']:
-            kernel_ = gaussian(int(round(width_smps*6.0)),width_smps)
-        else:
-            raise ValueError("Unsupported value '%s' given for kernel. \
-                            Should be 'hanning'|'gaussian'" % kernel)
+        # Kernel is already a (custom) array of values
+        if isinstance(kernel,np.ndarray):
+            kernel_ = kernel
+
+        # Kernel is a string specifier -- call appropriate kernel-generating function
+        elif isinstance(kernel,str):
+            kernel = kernel.lower()
+
+            if kernel in ['hann','hanning']:
+                kernel_ = hann(int(round(width_smps*2.0)))
+            elif kernel in ['gaussian','normal']:
+                kernel_ = gaussian(int(round(width_smps*6.0)),width_smps)
+            else:
+                raise ValueError("Unsupported value '%s' given for kernel. \
+                                Should be 'hanning'|'gaussian'" % kernel)
 
     # Normalize kernel to integrate to 1
     kernel_ = kernel_ / (kernel_.sum()/smp_rate)
@@ -720,16 +727,20 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
                 units, etc.) within an object array. Unlike other functions,
                 here object array must be 1d.
 
-    ax          Axes object. Axis to plot into. Default: plt.gca()
+    ax          Pyplot Axis object. Axis to plot into. Default: plt.gca()
     xlim        (2,) array-like. x-axis limits of plot. Default: (auto-set)
     color       Color specifier. Color to plot all spikes in. Default: '0.25' (dark gray)
     height      Float. Height of each plotted spike (in fraction of distance btwn spike trains)
                 Default: 1.0 (each spike height is full range for its row in raster)
     x/ylabel    String. x/y-axis labels for plot. Default: (no label)
 
+    RETURNS
+    ax          Pyplot Axis object. Axis for plot
+
     ACTION      Plots raster plot from spike time data
     """
     if ax is None: ax = plt.gca()
+    plt.sca(ax)
 
     def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
         """ Plots single line of raster plot """
@@ -764,6 +775,8 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
 
     plt.show()
 
+    return ax
+
 
 def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
                         ax=None, plot_colors=None):
@@ -786,7 +799,10 @@ def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
     plot_colors (n_units_max,3) array. Color to plot each unit in.
                 Default: Colors from Blackrock Central Spike grid plots
 
-    ax          Pyplot Axis instance. Axis to plot into. Default: plt.gca()
+    ax          Pyplot Axis object. Axis to plot into. Default: plt.gca()
+
+    RETURNS
+    ax          Pyplot Axis object. Axis for plot
     """
     # TODO  Setup to handle single array of 1 unit's wfs instead of object array of units
     n_units      = len(spike_waves)
@@ -839,11 +855,11 @@ def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
     wf_range    (2,) array-like. [min,max] waveform amplitude for generating
                 2D histograms. Default: [min,max] of given waveforms
 
-    ax          Pyplot Axis instance. Axis to plot into. Default: plt.gca()
+    ax          Pyplot Axis object. Axis to plot into. Default: plt.gca()
     cmap        String | Colormap object. Colormap to plot heat map. Default: jet
 
     RETURNS
-    ax          Pyplot Axis instance. Axis for plot
+    ax          Pyplot Axis object. Axis for plot
     """
     # TODO  Setup to handle single array of 1 unit's wfs instead of object array of units
     if cmap is None:    cmap = 'jet'
