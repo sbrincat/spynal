@@ -51,3 +51,20 @@ def _enclose_in_object_array(data):
     out = np.empty((1,),dtype=object)
     out[0] = data
     return out
+
+
+def _has_method(obj, method):
+    """
+    Determines if given object class instance has given method
+    
+    INPUTS
+    obj     Object class instance (of any type) to test for method
+    method  String. Name of method to test for
+    
+    RETURNS
+    tf      Bool. True if obj.method exists; False otherwise
+    
+    SOURCE
+    stackoverflow.com/questions/7580532/how-to-check-whether-a-method-exists-in-python/7580687
+    """
+    return callable(getattr(obj, method, None))
