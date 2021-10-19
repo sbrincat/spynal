@@ -2217,15 +2217,13 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     freqs   (n_freqs,) array-like. Frequency sampling in <data>.
             Only needed if <data> is not an xarray DataArray
 
-    func    String | callable. Function to apply to each freqBand.
-            Default: mean
+    func    String | callable. Function to use to pool values within each frequency band.
+            Default: 'mean' (mean across all frequencies in band)
 
     RETURNS
     data    (...,n_freqbands,...) ndarray | xarray DataArray.
             Data with values averaged within each of given frequency bands
     """
-    # TODO  Deal with more complicated band edge situations (currently assumed non-overlapping)
-
     # Convert list of frequency band ranges to {'name':freq_range} dict
     if not isinstance(bands,dict):
         bands = {'band_'+str(i_band):frange for i_band,frange in enumerate(bands)}
@@ -2234,7 +2232,9 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     bins = []
     for value in bands.values(): bins.extend(value)
 
-    # xarray: Pool values in bands using DataArray groupby_bins() method
+    func_ = _str_to_pool_func(func)
+    
+    # Figure out data dimensionality and standardize so frequency axis = 0 (1st axis)
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
         # Find frequency dimension if not given explicitly
@@ -2257,14 +2257,6 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
         band_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
                                  dims=temp_dims, coords=coords)
 
-        for i_band,(_,frange) in enumerate(bands.items()):
-            fbool = (freqs >= frange[0]) & (freqs <= frange[1])
-            band_data[i_band,...] = data[fbool,...].mean(axis=0)
-
-        # Permute back to original data dimension order
-        if axis != 0: band_data = band_data.transpose(*dims)
-
-    # ndarray: loop thru freq bands, pooling values in each
     else:
         assert axis is not None, \
         ValueError("For ndarray data, must give frequency axis in <axis>")
@@ -2275,24 +2267,27 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
         data_shape= (len(bands), *data.shape[1:])
         band_data = np.zeros(data_shape,dtype=data.dtype)
+    
+    # Pool data over each frequency band    
+    for i_band,(_,frange) in enumerate(bands.items()):
+        fbool = (freqs >= frange[0]) & (freqs <= frange[1])
+        band_data[i_band,...] = func_(data[fbool,...])
 
-        for i_band,(_,frange) in enumerate(bands.items()):
-            fbool = (freqs >= frange[0]) & (freqs <= frange[1])
-            if func == 'mean':
-                band_data[i_band,...] = data[fbool,...].mean(axis=0)
-            else:
-                band_data[i_band,...] = func(data[fbool,...])
-
-        if axis != 0: band_data = band_data.swapaxes(axis,0)
+    # Permute back to original data dimension order
+    if axis != 0: 
+        if HAS_XARRAY and isinstance(data,xr.DataArray):
+            band_data = band_data.transpose(*dims)
+        else:
+            band_data = band_data.swapaxes(axis,0)
 
     return band_data
 
 
-def pool_time_epochs(data, epochs, axis=None, timepts=None):
+def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
     """
     Pools (averages) spectral data within each of a given set of time epochs
 
-    data = pool_time_epochs(data,epochs,axis=None,timepts=None)
+    data = pool_time_epochs(data,epochs,axis=None,timepts=None,func='mean')
 
     ARGS
     data    (...,n_timepts,...) ndarray | xarray DataArray.
@@ -2309,17 +2304,20 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
     timepts (n_timepts,) array-like. Time sampling in <data>.
             Only needed if <data> is not an xarray DataArray
 
+    func    String | callable. Function to use to pool values within each time epoch.
+            Default: 'mean' (mean across all timepoints in band)
+            
     RETURNS
     data    (...,nTimeEpochs,...) ndarray | xarray DataArray.
             Data with values averaged within each of given time epochs
     """
-    # todo  Deal with more complicated band edge situations (currently assumed non-overlapping)
-
     # Convert list of time epoch ranges to {'name':time_range} dict
     if not isinstance(epochs,dict):
         epochs = {'epochs_'+str(i_epoch):trange for i_epoch,trange in enumerate(epochs)}
 
-    # xarray: Pool values in epochs using DataArray groupby_bins() method
+    func_ = _str_to_pool_func(func)
+    
+    # Figure out data dimensionality and standardize so time axis = 0 (1st axis)
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
         if timepts is None: timepts = data.coords['time'].values
@@ -2339,14 +2337,6 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
         epoch_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
                                   dims=temp_dims, coords=coords)
 
-        for i_epoch,(_,trange) in enumerate(epochs.items()):
-            tbool = (timepts >= trange[0]) & (timepts <= trange[1])
-            epoch_data[i_epoch,...] = data[tbool,...].mean(axis=0)
-
-        # Permute back to original data dimension order
-        if axis != 0: epoch_data = epoch_data.transpose(*dims)
-
-    # ndarray: loop thru freq bands, mean-pooling values in each
     else:
         assert axis is not None, \
         ValueError("For ndarray data, must give time axis in <axis>")
@@ -2358,11 +2348,17 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None):
         data_shape= (len(epochs), *data.shape[1:])
         epoch_data = np.zeros(data_shape,dtype=data.dtype)
 
-        for i_epoch,(_,trange) in enumerate(epochs.items()):
-            tbool = (timepts >= trange[0]) & (timepts <= trange[1])
-            epoch_data[i_epoch,...] = data[tbool,...].mean(axis=0)
+    # Pool data over each time epoch
+    for i_epoch,(_,trange) in enumerate(epochs.items()):
+        tbool = (timepts >= trange[0]) & (timepts <= trange[1])
+        epoch_data[i_epoch,...] = func_(data[tbool,...])
 
-        if axis != 0: epoch_data = epoch_data.swapaxes(axis,0)
+    # Permute back to original data dimension order
+    if axis != 0: 
+        if HAS_XARRAY and isinstance(data,xr.DataArray):
+            epoch_data = epoch_data.transpose(*dims)
+        else:
+            epoch_data = epoch_data.swapaxes(axis,0)
 
     return epoch_data
 
@@ -2647,3 +2643,15 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
         data_out[:,i_event,...] = data[idxs,...]
 
     return data_out
+
+def _str_to_pool_func(func):
+    """ Converts string specifier to callable pooling function """
+    # If it's already a callable, return as-is
+    if callable(func):      return func    
+    else:
+        assert isinstance(func,str), "'func' must be a string or callable function"
+        
+        if func == 'mean':  return lambda x: np.mean(x, axis=0)            
+        elif func == 'sum': return lambda x: np.sum(x, axis=0)
+        else:
+            raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)

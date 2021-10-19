@@ -180,10 +180,6 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     Single-trial method:    Womelsdorf, Fries, Mitra, Desimone (2006) Science
     Single-trial method:    Richter, ..., Fries (2015) NeuroImage
     """
-    if 'method' in kwargs:
-        spec_method = kwargs.pop('method')
-        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
-
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
 
@@ -193,41 +189,16 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
     if axis < 0: axis = data1.ndim + axis
     if (time_axis is not None) and (time_axis < 0): time_axis = data1.ndim + time_axis
 
-    if data_type is None: data_type = _infer_data_type(data1)
-
-    # If raw data is input, compute spectral transform first
-    if data_type == 'raw':
-        assert smp_rate is not None, \
-            "For raw/time-series data, need to input value for <smp_rate>"
-        assert time_axis is not None, \
-            "For raw/time-series data, need to input value for <time_axis>"
-        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
-        data1,freqs,timepts = spectrogram(data1, smp_rate, axis=time_axis, method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-        # Account for new frequency (and/or taper) axis prepended before time_axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-        if spec_method == 'multitaper': taper_axis = time_axis-1
-
-    else:
-        freqs = []
-        timepts = []
-        if spec_method == 'multitaper':
-            assert taper_axis is not None, \
-                ValueError("Must set value for taper_axis for multitaper spectral inputs")
-
-    # For multitaper, compute means across trials, tapers; df = 2*n_trials*n_tapers
-    if spec_method == 'multitaper':
-        reduce_axes = (axis,taper_axis)
-        df = 2*data1.shape[axis]*data1.shape[taper_axis]
-    # Otherwise, just compute means across trials; df = 2*n_trials (TODO is this true?)
-    else:
-        reduce_axes = axis
-        df = 2*data1.shape[axis]
-
+    # Check if raw data input. If so, compute spectral transform first
+    data1, data2, freqs, timepts, axis, time_axis, taper_axis = \
+        _sync_raw_to_spectral(data1, data2, smp_rate, axis, time_axis, taper_axis,
+                              spec_method, data_type, **kwargs)
+        
+    # For multitaper, compute means across trials, tapers; otherwise just do means across trials
+    reduce_axes = (axis,taper_axis) if spec_method == 'multitaper' else axis
+    # For multitaper, degrees of freedom = 2*n_trials*n_tapers; otherwise df = 2*n_trials
+    df = 2*data1.shape[axis]
+    if spec_method == 'multitaper': df = df*data1.shape[taper_axis]
 
     def _spec_to_coh(data1, data2, axis, return_phase):
         """ Compute coherence from a pair of spectra/spectrograms """
@@ -255,7 +226,6 @@ def coherence(data1, data2, axis=0, return_phase=False, single_trial=None, ztran
 
             # Calculate coherence as cross-spectrum / product of spectra
             return S12 / np.sqrt(S1*S2)
-
 
     def _csd_to_coh(S12, S1, S2, axis):
         """ Compute coherence from cross spectrum, auto-spectra """
@@ -410,10 +380,6 @@ def plv(data1, data2, axis=0, return_phase=False, single_trial=None,
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
     """
-    if 'method' in kwargs:
-        spec_method = kwargs.pop('method')
-        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
-
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
 
@@ -422,38 +388,13 @@ def plv(data1, data2, axis=0, return_phase=False, single_trial=None,
 
     n_obs    = data1.shape[axis]
 
-    if data_type is None: data_type = _infer_data_type(data1)
-    # If raw data is input, compute spectral transform first
-    if data_type == 'raw':
-        assert smp_rate is not None, \
-            "For raw/time-series data, need to input value for <smp_rate>"
-        assert time_axis is not None, \
-            "For raw/time-series data, need to input value for <time_axis>"
-        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
-
-        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-
-        # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-        if spec_method == 'multitaper': taper_axis = time_axis-1
-
-    else:
-        freqs = []
-        timepts = []
-        if spec_method == 'multitaper':
-            assert taper_axis is not None, \
-                ValueError("Must set value for taper_axis for multitaper spectral inputs")
-
-    # For multitaper, compute means across trials, tapers
-    if spec_method == 'multitaper':  reduce_axes = (axis,taper_axis)
-    # Otherwise, just compute means across trials
-    else:                       reduce_axes = axis
-
+    # Check if raw data input. If so, compute spectral transform first
+    data1, data2, freqs, timepts, axis, time_axis, taper_axis = \
+        _sync_raw_to_spectral(data1, data2, smp_rate, axis, time_axis, taper_axis,
+                              spec_method, data_type, **kwargs)
+    
+    # For multitaper, compute means across trials, tapers; otherwise just do means across trials
+    reduce_axes = (axis,taper_axis) if spec_method == 'multitaper' else axis
 
     def _spec_to_plv(data1, data2, axis, return_phase, keepdims):
         """ Compute PLV from a pair of spectra/spectrograms """
@@ -574,10 +515,6 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
     Original concept:   Vinck et al. (2010) NeuroImage
     Relation to PLV:    Kornblith, Buschman, Miller (2015) Cerebral Cortex
     """
-    if 'method' in kwargs:
-        spec_method = kwargs.pop('method')
-        warn("'method' argument is deprecated, should be changed to 'spec_method' in calling code")
-
     assert not((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
     assert (single_trial is None) or (single_trial in ['pseudo','richter']), \
@@ -588,38 +525,13 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
 
     n_obs    = data1.shape[axis]
 
-    if data_type is None: data_type = _infer_data_type(data1)
-    # If raw data is input, compute spectral transform first
-    if data_type == 'raw':
-        assert smp_rate is not None, \
-            "For raw/time-series data, need to input value for <smp_rate>"
-        assert time_axis is not None, \
-            "For raw/time-series data, need to input value for <time_axis>"
-        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
-
-        data1,freqs,timepts = spectrogram(data1,smp_rate,axis=time_axis,method=spec_method,
-                                          data_type='lfp',spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2,smp_rate,axis=time_axis,method=spec_method,
-                                          data_type='lfp',spec_type='complex', **kwargs)
-
-        # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-        if spec_method == 'multitaper': taper_axis = time_axis-1
-
-    else:
-        freqs = []
-        timepts = []
-        if spec_method == 'multitaper':
-            assert taper_axis is not None, \
-                ValueError("Must set value for taper_axis for multitaper spectral inputs")
-
-    # For multitaper, compute means across trials, tapers
-    if spec_method == 'multitaper':  reduce_axes = (axis,taper_axis)
-    # Otherwise, just compute means across trials
-    else:                       reduce_axes = axis
-
+    # Check if raw data input. If so, compute spectral transform first
+    data1, data2, freqs, timepts, axis, time_axis, taper_axis = \
+        _sync_raw_to_spectral(data1, data2, smp_rate, axis, time_axis, taper_axis,
+                              spec_method, data_type, **kwargs)
+    
+    # For multitaper, compute means across trials, tapers; otherwise just do means across trials
+    reduce_axes = (axis,taper_axis) if spec_method == 'multitaper' else axis    
 
     def _spec_to_ppc(data1, data2, axis, return_phase, keepdims):
         """ Compute PPC from a pair of spectra/spectrograms """
@@ -1426,3 +1338,38 @@ def _infer_data_type(data):
     """ Infers type of data signal given -- 'raw' (real) | 'spectral' (complex) """
     if np.isrealobj(data):  return 'raw'
     else:                   return 'spectral'
+
+
+def _sync_raw_to_spectral(data1, data2, smp_rate, axis, time_axis, taper_axis,
+                          spec_method, data_type, **kwargs):
+    """ 
+    Checks data input to lfp-lfp synchrony methods. 
+    Determines if input data is raw or spectral, computes spectral transform if raw.
+    """    
+    if data_type is None: data_type = _infer_data_type(data1)
+    
+    # If raw data is input, compute spectral transform first
+    if data_type == 'raw':
+        assert smp_rate is not None, \
+            "For raw/time-series data, need to input value for <smp_rate>"
+        assert time_axis is not None, \
+            "For raw/time-series data, need to input value for <time_axis>"
+        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
+        data1,freqs,timepts = spectrogram(data1, smp_rate, axis=time_axis, method=spec_method,
+                                          data_type='lfp', spec_type='complex', **kwargs)
+        data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=spec_method,
+                                          data_type='lfp', spec_type='complex', **kwargs)
+        # Account for new frequency (and/or taper) axis prepended before time_axis
+        n_new_axes = 2 if spec_method == 'multitaper' else 1
+        if axis >= time_axis: axis += n_new_axes
+        time_axis += n_new_axes
+        if spec_method == 'multitaper': taper_axis = time_axis-1
+
+    else:
+        freqs = []
+        timepts = []
+        if spec_method == 'multitaper':
+            assert taper_axis is not None, \
+                ValueError("Must set value for taper_axis for multitaper spectral inputs")
+                
+    return data1, data2, freqs, timepts, axis, time_axis, taper_axis       

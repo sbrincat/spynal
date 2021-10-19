@@ -1,12 +1,14 @@
 """ Unit tests for spectra.py module """
 import pytest
 import numpy as np
+import xarray as xr
 
+from collections import OrderedDict
 from scipy.stats import bernoulli
 
 from ..spectra import simulate_oscillation, spectrum, power_spectrum, \
                       spectrogram, power_spectrogram, phase_spectrogram, itpc, \
-                      cut_trials, realign_data
+                      cut_trials, realign_data, pool_freq_bands, pool_time_epochs
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -328,7 +330,7 @@ def test_itpc(oscillation, itpc_method, method, result):
 
 
 # =============================================================================
-# Unit tests for preprocessing/utility functions
+# Unit tests for preprocessing/postprocessing/utility functions
 # =============================================================================
 def test_cut_trials(oscillation):
     """ Unit tests for cut_trials function """
@@ -373,3 +375,138 @@ def test_realign_data(oscillation):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert realigned.shape == data.T.shape
     assert (realigned == data.T).all()
+
+
+@pytest.mark.parametrize('variable_type, pooler, result',
+                         [('numpy',   'mean',   43.5538),
+                          ('numpy',   'sum',    300.0944),
+                          ('numpy',   'custom', 43.5538),
+                          ('xarray',  'mean',   43.5538),
+                          ('xarray',  'sum',    300.0944),
+                          ('xarray',  'custom', 43.5538)])
+def test_pool_freq_bands(oscillation, variable_type, pooler, result):
+    """ Unit tests for pool_freq_bands function """
+    data = oscillation
+    n_timepts, n_trials = data.shape
+    smp_rate = 1000
+    timepts = np.arange(0,1,1e-3)
+    
+    # Set 'func' = callable custom pooling function
+    if pooler == 'custom': pooler = lambda x: np.mean(x,axis=0)
+
+    variable_type_ = xr.DataArray if variable_type == 'xarray' else np.ndarray
+
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method='wavelet',
+                                       data_type='lfp', spec_type='power')
+    # Convert Numpy ndarray -> xarray DataArray
+    if variable_type == 'xarray':
+        spec = xr.DataArray(spec,
+                            dims=['frequency','time','trial'],
+                            coords={'frequency':freqs, 'time':timepts, 'trial':np.arange(n_trials)})
+    spec_orig = spec.copy()
+
+    # Frequency bands to pool data within
+    bands   = OrderedDict({'theta':[3,8], 'beta':[10,32], 'gamma':[40,100]})
+    n_bands = len(bands)
+
+    extra_args = dict(axis=0, freqs=freqs) if variable_type == 'numpy' else {}
+
+    eval_func = (lambda x: x.mean().values) if variable_type == 'xarray' else (lambda x: x.mean())
+
+    # Basic test of shape, type, value of output.
+    # Test values averaged over all timepts, freqs for 1st trial for simplicity
+    band_spec = pool_freq_bands(spec, bands, func=pooler, **extra_args)
+    # print(band_spec[:,:,0].mean(), np.mean(band_spec[:,:,0]))
+    # print(eval_func(band_spec[:,:,0]))
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert isinstance(band_spec,variable_type_)
+    assert band_spec.shape == (n_bands, n_timepts, n_trials)
+    assert np.isclose(eval_func(band_spec[:,:,0]), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with different data array shape (3rd axis)
+    spec2 = np.tile(spec[:,:,:,np.newaxis],(1,1,2)) if variable_type == 'numpy' else \
+            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
+    band_spec = pool_freq_bands(spec2, bands, func=pooler, **extra_args)
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert band_spec.shape == (n_bands, n_timepts, n_trials, 2)
+    assert np.isclose(eval_func(band_spec[:,:,0,0]), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with transposed data dimensionality
+    if variable_type == 'numpy': extra_args.update(axis=2)
+    band_spec = pool_freq_bands(spec.transpose(), bands, func=pooler, **extra_args)
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert band_spec.shape == (n_trials, n_timepts, n_bands)
+    assert np.isclose(eval_func(band_spec[0,:,:]), result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        band_spec = pool_freq_bands(spec, bands, func=pooler, foo=None, **extra_args)
+
+
+@pytest.mark.parametrize('variable_type, pooler, result',
+                         [('numpy',   'mean',   44.9441),
+                          ('numpy',   'sum',    22494.0313),
+                          ('numpy',   'custom', 44.9441),
+                          ('xarray',  'mean',   44.9441),
+                          ('xarray',  'sum',    22494.0313),
+                          ('xarray',  'custom', 44.9441)])
+def test_pool_time_epochs(oscillation, variable_type, pooler, result):
+    """ Unit tests for pool_time_epochs function """
+    data = oscillation
+    n_timepts, n_trials = data.shape
+    smp_rate = 1000
+    timepts = np.arange(0,1,1e-3)
+    
+    # Set 'func' = callable custom pooling function
+    if pooler == 'custom': pooler = lambda x: np.mean(x,axis=0)
+
+    variable_type_ = xr.DataArray if variable_type == 'xarray' else np.ndarray
+
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method='wavelet',
+                                       data_type='lfp', spec_type='power')
+    # Convert Numpy ndarray -> xarray DataArray
+    if variable_type == 'xarray':
+        spec = xr.DataArray(spec,
+                            dims=['frequency','time','trial'],
+                            coords={'frequency':freqs, 'time':timepts, 'trial':np.arange(n_trials)})    
+    spec_orig = spec.copy()
+    n_freqs = len(freqs)
+
+    # Make up some time epochs to pool data within
+    epochs   = OrderedDict({'sample':[0,0.5], 'delay':[0.5,1]})
+    n_epochs = len(epochs)
+
+    extra_args = dict(axis=1, timepts=timepts) if variable_type == 'numpy' else {}
+
+    eval_func = (lambda x: x.mean().values) if variable_type == 'xarray' else (lambda x: x.mean())
+
+    # Basic test of shape, type, value of output.
+    # Test values averaged over all timepts, freqs for 1st trial for simplicity
+    epoch_spec = pool_time_epochs(spec, epochs, func=pooler, **extra_args)
+    print(epoch_spec[:,:,0].mean(), np.mean(epoch_spec[:,:,0]))
+    print(eval_func(epoch_spec[:,:,0]))
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert isinstance(epoch_spec,variable_type_)
+    assert epoch_spec.shape == (n_freqs, n_epochs, n_trials)
+    assert np.isclose(eval_func(epoch_spec[:,:,0]), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with different data array shape (3rd axis)
+    spec2 = np.tile(spec[:,:,:,np.newaxis],(1,1,2)) if variable_type == 'numpy' else \
+            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')    
+    epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert epoch_spec.shape == (n_freqs, n_epochs, n_trials, 2)
+    assert np.isclose(eval_func(epoch_spec[:,:,0,0]), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with transposed data dimensionality
+    if variable_type == 'numpy': extra_args.update(axis=2)
+    spec2 = spec.transpose((0,2,1)) if variable_type == 'numpy' else \
+            spec.transpose('frequency','trial','time') 
+    epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    assert epoch_spec.shape == (n_freqs, n_trials, n_epochs)
+    assert np.isclose(eval_func(epoch_spec[:,0,:]), result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises((TypeError,AssertionError)):
+        epoch_spec = pool_time_epochs(spec, epochs, func=pooler, foo=None, **extra_args)
