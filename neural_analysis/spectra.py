@@ -2233,7 +2233,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     for value in bands.values(): bins.extend(value)
 
     func_ = _str_to_pool_func(func)
-    
+
     # Figure out data dimensionality and standardize so frequency axis = 0 (1st axis)
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
@@ -2267,14 +2267,14 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
         data_shape= (len(bands), *data.shape[1:])
         band_data = np.zeros(data_shape,dtype=data.dtype)
-    
-    # Pool data over each frequency band    
+
+    # Pool data over each frequency band
     for i_band,(_,frange) in enumerate(bands.items()):
         fbool = (freqs >= frange[0]) & (freqs <= frange[1])
         band_data[i_band,...] = func_(data[fbool,...])
 
     # Permute back to original data dimension order
-    if axis != 0: 
+    if axis != 0:
         if HAS_XARRAY and isinstance(data,xr.DataArray):
             band_data = band_data.transpose(*dims)
         else:
@@ -2306,7 +2306,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
 
     func    String | callable. Function to use to pool values within each time epoch.
             Default: 'mean' (mean across all timepoints in band)
-            
+
     RETURNS
     data    (...,nTimeEpochs,...) ndarray | xarray DataArray.
             Data with values averaged within each of given time epochs
@@ -2316,7 +2316,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
         epochs = {'epochs_'+str(i_epoch):trange for i_epoch,trange in enumerate(epochs)}
 
     func_ = _str_to_pool_func(func)
-    
+
     # Figure out data dimensionality and standardize so time axis = 0 (1st axis)
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
@@ -2354,7 +2354,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
         epoch_data[i_epoch,...] = func_(data[tbool,...])
 
     # Permute back to original data dimension order
-    if axis != 0: 
+    if axis != 0:
         if HAS_XARRAY and isinstance(data,xr.DataArray):
             epoch_data = epoch_data.transpose(*dims)
         else:
@@ -2647,11 +2647,11 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
 def _str_to_pool_func(func):
     """ Converts string specifier to callable pooling function """
     # If it's already a callable, return as-is
-    if callable(func):      return func    
+    if callable(func):      return func
     else:
         assert isinstance(func,str), "'func' must be a string or callable function"
-        
-        if func == 'mean':  return lambda x: np.mean(x, axis=0)            
+
+        if func == 'mean':  return lambda x: np.mean(x, axis=0)
         elif func == 'sum': return lambda x: np.sum(x, axis=0)
         else:
             raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)

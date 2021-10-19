@@ -390,7 +390,7 @@ def test_pool_freq_bands(oscillation, variable_type, pooler, result):
     n_timepts, n_trials = data.shape
     smp_rate = 1000
     timepts = np.arange(0,1,1e-3)
-    
+
     # Set 'func' = callable custom pooling function
     if pooler == 'custom': pooler = lambda x: np.mean(x,axis=0)
 
@@ -432,7 +432,7 @@ def test_pool_freq_bands(oscillation, variable_type, pooler, result):
     assert np.isclose(eval_func(band_spec[:,:,0,0]), result, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with transposed data dimensionality
-    if variable_type == 'numpy': extra_args.update(axis=2)
+    if variable_type == 'numpy': extra_args['axis'] = 2
     band_spec = pool_freq_bands(spec.transpose(), bands, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert band_spec.shape == (n_trials, n_timepts, n_bands)
@@ -456,7 +456,7 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
     n_timepts, n_trials = data.shape
     smp_rate = 1000
     timepts = np.arange(0,1,1e-3)
-    
+
     # Set 'func' = callable custom pooling function
     if pooler == 'custom': pooler = lambda x: np.mean(x,axis=0)
 
@@ -468,7 +468,7 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
     if variable_type == 'xarray':
         spec = xr.DataArray(spec,
                             dims=['frequency','time','trial'],
-                            coords={'frequency':freqs, 'time':timepts, 'trial':np.arange(n_trials)})    
+                            coords={'frequency':freqs, 'time':timepts, 'trial':np.arange(n_trials)})
     spec_orig = spec.copy()
     n_freqs = len(freqs)
 
@@ -492,16 +492,16 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
 
     # Test for consistent output with different data array shape (3rd axis)
     spec2 = np.tile(spec[:,:,:,np.newaxis],(1,1,2)) if variable_type == 'numpy' else \
-            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')    
+            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
     epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert epoch_spec.shape == (n_freqs, n_epochs, n_trials, 2)
     assert np.isclose(eval_func(epoch_spec[:,:,0,0]), result, rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with transposed data dimensionality
-    if variable_type == 'numpy': extra_args.update(axis=2)
+    if variable_type == 'numpy': extra_args['axis'] = 2
     spec2 = spec.transpose((0,2,1)) if variable_type == 'numpy' else \
-            spec.transpose('frequency','trial','time') 
+            spec.transpose('frequency','trial','time')
     epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert epoch_spec.shape == (n_freqs, n_trials, n_epochs)

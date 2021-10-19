@@ -44,6 +44,7 @@ from scipy.stats import f as Ftest
 from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.svm import SVC
 from patsy import DesignMatrix
 
 try:
@@ -88,30 +89,14 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
             Shape is same as data, with observation axis reduced to length = n_terms.
     """
     method = method.lower()
-
-    if method == 'pev':
-        return pev(labels,data,axis=axis,**kwargs)
-
-    elif method in ['dprime','d','cohensd']:
-        return dprime(labels,data,axis=axis,**kwargs)
-
-    elif method in ['auroc','roc','aucroc','auc']:
-        return auroc(labels,data,axis=axis,**kwargs)
-
-    elif method in ['mutual_information','mutual_info']:
-        return mutual_info(labels,data,axis=axis,**kwargs)
-
-    elif method in ['decode','decoder','decoding']:
-        return decode(labels,data,axis=axis,**kwargs)
-
-    else:
-        raise ValueError("Information method '%s' is not yet supported" % method)
+    info_func = _string_to_info_func(method)
+    return info_func(labels,data,axis=axis,**kwargs)
 
 
 def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
-    some binary task/behavioral variable (group), with the inputs being the
+    some binary (ie 2-group) task/behavioral variable, with the inputs being the
     data for each of the two possible conditions: (data1, data2)
 
     Note: Some methods (dprime, auroc) are faster with this method and it is
@@ -152,11 +137,7 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 
     # All other methods -- create label list, concatenate data and call (label,data) version
     else:
-        if method == 'pev':                                     info_func = pev
-        elif method in ['mutual_information','mutual_info']:    info_func = mutual_info
-        elif method in ['decode','decoder','decoding']:         info_func = decode
-        else:
-            raise ValueError("Information method '%s' is not yet supported" % method)
+        info_func = _string_to_info_func(method)
 
         n1 = data1.shape[axis]
         n2 = data2.shape[axis]
@@ -168,13 +149,78 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
         return info_func(labels, np.concatenate((data1,data2), axis=axis), axis=axis, **kwargs)
 
 
+def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
+    """
+    Wrapper function to compute mass-univariate neural information about
+    some multi-class (ie n group) variable, with the inputs being the
+    data for each of the possible conditions: (data1, data2, ..., data_k)
+
+    Note: Some methods (dprime, auroc) are designed for only binary comparisons
+    and will raise an error if you try to call them with this function
+
+    info = neural_info_ngroups(data1,data2,...,data_k,axis=0,method='pev',**kwargs)
+
+    ARGS
+    data1...k (...,n_obs1/k,...) ndarrays of arbitary size except for <axis>.
+            Sets of values for each data distribution to be compared.
+
+    axis    Int. Axis of data array to perform analysis on, corresponding
+            to trials/observations. Default: 0 (first axis)
+
+    method  String. Method to use to compute information. Options:
+            'pev' | 'dprime' | 'auroc' | 'mutual_info' | 'decode'
+            Default: 'pev'
+
+    **kwargs All other kwargs passed directly to information method function
+
+    RETURNS
+    info    (...,n_terms,...). Measure of information in data about difference between
+            data1 vs data2 vs ... data_k
+            Shape is same as data, with observation axis reduced to length = n_terms.
+    """
+    # TODO Add 'mutual_information','mutual_info' when mutual_info is updated for multi-class
+    n_group_methods = ['decode','decoder','decoding', 'pev']
+
+    n_groups = len(args)
+
+    assert (n_groups == 2) or (method in n_group_methods), \
+        "Must specify information 'method' that works on multi-class problems ('decode'|'pev')"
+
+    info_func = _string_to_info_func(method)
+
+    # Find number of observations (trials) in each group's data
+    n = [args[j].shape[axis] for j in range(n_groups)]
+    # Create list of integer labels, with n[group] values=group in each
+    # ie [0,0,0,...,1,1,1,...,k,k,k....], where k = n_groups
+    labels = np.hstack([j*np.ones((n[j],),dtype='uint8') for j in range(n_groups)])
+
+    return info_func(labels, np.concatenate(args, axis=axis), axis=axis, **kwargs)
+
+
+def _string_to_info_func(method):
+    """ Converts string specifier to function for computing neural information """
+    if method == 'pev':                                     return pev
+    elif method in ['dprime','d','cohensd']:                return dprime
+    elif method in ['auroc','roc','aucroc','auc']:          return auroc
+    elif method in ['mutual_information','mutual_info']:    return mutual_info
+    elif method in ['decode','decoder','decoding']:         return decode
+    else:
+        raise ValueError("Information method '%s' is not yet supported" % method)
+
+
 # =============================================================================
 # Population decoding (classification) analysis
 # =============================================================================
-def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=None,
+def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=None,
            groups=None, as_pct=False, return_stats=False, stats=None, **kwargs):
     """
     Mass-multivariate population decoding analysis using given classifier method
+
+    accuracy = decode(labels,data,axis=0,feature_axis=1,decoder='LDA',cv='auto',seed=None,
+                      groups=None,as_pct=False,return_stats=False,stats=None,**kwargs)
+
+    accuracy,stats = decode(labels,data,axis=0,feature_axis=1,decoder='LDA',cv='auto',seed=None,
+                            groups=None,as_pct=False,return_stats=True,stats=None,**kwargs)
 
     INPUTS
     labels  (n_obs,) ndarray. Labels/target values for each trial to predict
@@ -193,15 +239,18 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 
     decoder String | sklearn classifier object. Decoding classifier method to use.
             Can input either as a string specifier or as a scikit-learn classifier object instance.
-            'lda' :     Linear discriminant analysis w/
+            'LDA' :     Linear discriminant analysis using
                         sklearn.discriminant_analysis.LinearDiscriminantAnalysis
                         Unlike scikit's empirical prior, sets a uniform prior unless specified
                         otherwise (bc any imbalance in emprical probabilities of task conditions is
-                        usually happenstance, not predictive and not something we typically
-                        want to use)
+                        usually happenstance, not predictive and not something we want to use)
             'logistic': Logistic regression using sklearn.linear_model.LogisticRegression
                         Sets penalty='none' unless specified otherwise in kwargs, unlike scikit's
                         default 'l2' (L2 regularization) bc seems safer to make users opt-in.
+            'SVM' :     Support vector machine classification using sklearn.svm.SVC
+                        Sets kernel='linear' unless specified otherwise in kwargs, unlike scikit's
+                        default 'rbf' (nonlinear radial basis functions) bc linear classifiers are
+                        much more common in the field (and safer to make users opt-in to nonlinear)
 
             Can use custom objects, but must follow sklearn API (ie has 'fit' and 'score' methods).
 
@@ -245,6 +294,7 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
     REFERENCE
     https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
     https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+    https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html
     """
     labels = np.asarray(labels)
     data = np.asarray(data)
@@ -301,6 +351,11 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
             if 'penalty' not in kwargs: kwargs['penalty'] = 'none'
             decoder = LogisticRegression(**kwargs)
 
+        elif decoder in ['svm','svc']:
+            # If not specified otherwise, set linear kernel
+            if 'kernel' not in kwargs: kwargs['kernel'] = 'linear'
+            decoder = SVC(**kwargs)
+
         else:
             raise ValueError("Unsupported option '%s' given for decoding method" % decoder)
 
@@ -309,7 +364,9 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
         assert _has_method(decoder,'fit') and _has_method(decoder,'score'), \
             TypeError("Unsupported type (%s) for decoder. Use string | scikit classifier object"
                       % type(decoder))
-
+        # Ensure no additional parameters were passed that would be ignored
+        assert len(kwargs) == 0, \
+            TypeError("No additional arguments allowed here if using custom decoder function")
 
     # Convert string specifier to scikit cross-validation object, including default
     if isinstance(cv,str):
@@ -421,8 +478,11 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='lda', cv='auto', seed=
 # =============================================================================
 def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None):
     """
-    Mass-univariate mutual information between set of responses
-    and binary "stimulus" (ie, 2 contrasted experimental conditions)
+    Mass-univariate mutual information between set of discrete-valued (or discretized)
+    neural responses and categorical experimental conditions (often referred to as "stimuli"
+    in theoretical treatments).
+
+    NOTE: Currently only 2-class (binary) conditions are supported
 
     info = mutual_info(labels,data,axis=0,bins='fd',resp_entropy=None,groups=None)
 
@@ -430,7 +490,7 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
 
     where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
-    distribution, and p(r|s) is conditional probability of response given stimulus
+    distribution, and p(r|s) is conditional probability of response given experimental condition
 
     info = 0 indicates no mutual information between responses and experimental conditions
     info = 1 indicates maximum possible information btwn responses and conditions
@@ -440,11 +500,12 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
     frequencies, etc.).
 
     ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from
-                each group. Should be only two groups represented, unless sub-selecting
+    labels      (n_obs,) array-like. List of categorical group labels labelling observations
+                from each group. NOTE: Should be only two groups represented, unless sub-selecting
                 two groups using <groups> argument.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
+    data        (...,n_obs,...) ndarray. Data values to compute mutual information with labels.
+                If it is not discrete-valued (eg spike counts), it will be discretized using 'bins'
 
     axis        Scalar. Axis of data array to perform analysis on, corresponding
                 to trials/observations. Default: 0 (first axis)
@@ -992,7 +1053,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     SS_total = ((data - grand_mean)**2).sum(axis=0)
 
     # Groups Sums of Squares
-    SS_groups = np.zeros((n_series,))
+    SS_groups = np.zeros((1,n_series))
     for i_group in range(n_groups):
         # Group Sum of Squares for given group
         SS_groups += n[i_group]*(mu[i_group,:] - grand_mean)**2
@@ -1027,7 +1088,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     else:
         MS_groups= SS_groups / df_groups    # Groups mean square
         F       = MS_groups / MS_error      # F statistic
-        F[undefined] = 0                    # Set F = 0 for data w/ data variance = 0
+        F[:,undefined] = 0                  # Set F = 0 for data w/ data variance = 0
         p       = Ftest.sf(F,df_groups,df_error) # p value for given F stat
 
         F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
