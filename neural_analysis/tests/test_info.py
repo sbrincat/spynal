@@ -7,8 +7,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from patsy import dmatrix
 
 
-from .data_fixtures import two_sample_data, one_way_data, two_way_data
-from ..info import neural_info, neural_info_2groups, neural_info_ngroups
+from neural_analysis.tests.data_fixtures import two_sample_data, one_way_data, two_way_data
+from neural_analysis.info import neural_info, neural_info_2groups, neural_info_ngroups
 
 
 # =============================================================================
@@ -311,7 +311,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
     result = np.asarray(result)
     # Set any extra parameters for info function
     extra_args = params
-    
+
     n = int(10)
     n_chnls = int(4)
     n_terms = 2 + interact

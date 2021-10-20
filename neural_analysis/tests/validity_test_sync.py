@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from ..sync import simulate_multichannel_oscillation, synchrony
+from neural_analysis.sync import simulate_multichannel_oscillation, synchrony
 
                 
 def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=None, 

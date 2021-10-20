@@ -23,10 +23,10 @@ from math import ceil
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .data_fixtures import simulate_dataset
-from ..randstats import one_sample_test, paired_sample_test, two_sample_test, \
-                        one_way_test, two_way_test, \
-                        one_sample_confints, paired_sample_confints, two_sample_confints
+from neural_analysis.tests.data_fixtures import simulate_dataset
+from neural_analysis.randstats import one_sample_test, paired_sample_test, two_sample_test, \
+                                      one_way_test, two_way_test, \
+                                      one_sample_confints, paired_sample_confints, two_sample_confints
 
 
 # =============================================================================

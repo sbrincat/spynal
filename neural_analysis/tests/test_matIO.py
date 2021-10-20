@@ -4,7 +4,7 @@ import string
 import numpy as np
 import pandas as pd
 
-from ..matIO import loadmat
+from neural_analysis.matIO import loadmat
 
 # todo Should we embed mat file generation in a fixture? Would require matlab engine for Python.
 

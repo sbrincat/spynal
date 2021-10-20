@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 
 from patsy import dmatrix
 
-from .data_fixtures import simulate_dataset
-from ..info import neural_info, neural_info_2groups
+from neural_analysis.tests.data_fixtures import simulate_dataset
+from neural_analysis.info import neural_info, neural_info_2groups
 
 
 def test_neural_info(method, test='gain', test_values=None, distribution='normal',

@@ -6,9 +6,9 @@ import xarray as xr
 from collections import OrderedDict
 from scipy.stats import bernoulli
 
-from ..spectra import simulate_oscillation, spectrum, power_spectrum, \
-                      spectrogram, power_spectrogram, phase_spectrogram, itpc, \
-                      cut_trials, realign_data, pool_freq_bands, pool_time_epochs
+from neural_analysis.spectra import simulate_oscillation, spectrum, power_spectrum, \
+                                    spectrogram, power_spectrogram, phase_spectrogram, itpc, \
+                                    cut_trials, realign_data, pool_freq_bands, pool_time_epochs
 
 # =============================================================================
 # Fixtures for generating simulated data

@@ -27,8 +27,9 @@ from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .data_fixtures import simulate_dataset
-from ..spikes import simulate_spike_trains, times_to_bool, rate, rate_stats, isi, isi_stats
+from neural_analysis.tests.data_fixtures import simulate_dataset
+from neural_analysis.spikes import simulate_spike_trains, times_to_bool, rate, rate_stats, \
+                                   isi, isi_stats
 
 # =============================================================================
 # Tests for rate computation functions

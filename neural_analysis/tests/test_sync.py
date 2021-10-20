@@ -5,9 +5,9 @@ import numpy as np
 
 from scipy.stats import bernoulli
 
-from ..utils import index_axis
-from ..sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
-from ..spectra import spectrogram
+from neural_analysis.utils import index_axis
+from neural_analysis.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
+from neural_analysis.spectra import spectrogram
 
 # =============================================================================
 # Fixtures for generating simulated data

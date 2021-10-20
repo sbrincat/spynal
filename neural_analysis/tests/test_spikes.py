@@ -2,11 +2,11 @@
 import pytest
 import numpy as np
 
-from ..utils import setup_sliding_windows, unsorted_unique, \
-                    object_array_equal, concatenate_object_array
-from ..spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
-                     cut_trials, realign_data, pool_electrode_units,\
-                     rate, rate_stats, isi, isi_stats
+from neural_analysis.utils import setup_sliding_windows, unsorted_unique, \
+                                  object_array_equal, concatenate_object_array
+from neural_analysis.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
+                                   cut_trials, realign_data, pool_electrode_units, \
+                                   rate, rate_stats, isi, isi_stats
 
 
 # =============================================================================
