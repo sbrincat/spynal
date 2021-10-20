@@ -393,7 +393,8 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
                 raise ValueError("Unsupported stat '%s' requested" % stat)
 
             assert _has_method(decoder,method), \
-                TypeError("Decoder object does not contain '%s' method for requested '%s' stat" % (method,stat))
+                TypeError("Decoder object does not contain '%s' method for requested '%s' stat"
+                          % (method,stat))
 
     # Iterate analysis over all cross-validation train/test data splits
     if cv is not None:

@@ -712,7 +712,7 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
         transform = 'Z'
         warn("ztransform argument is deprecated and will be removed in future releases. " \
              "Please use transform='Z' instead")
-            
+
     if axis < 0: axis = lfpdata.ndim + axis
     if time_axis < 0: time_axis = lfpdata.ndim + time_axis
 

@@ -1,6 +1,5 @@
 """ Unit tests for matIO.py module """
 import pytest
-import string
 import numpy as np
 import pandas as pd
 

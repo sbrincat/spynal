@@ -1,13 +1,12 @@
 """ Unit tests for spectra.py module """
+from collections import OrderedDict
 import pytest
 import numpy as np
 import xarray as xr
 
-from collections import OrderedDict
 from scipy.stats import bernoulli
 
-from neural_analysis.spectra import simulate_oscillation, spectrum, power_spectrum, \
-                                    spectrogram, power_spectrogram, phase_spectrogram, itpc, \
+from neural_analysis.spectra import simulate_oscillation, spectrum, spectrogram, itpc, \
                                     cut_trials, realign_data, pool_freq_bands, pool_time_epochs
 
 # =============================================================================
@@ -143,7 +142,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     assert np.isclose(spec.mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for expected output with time-reversed data
-    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for bandfilter method -- different init conds do change results slightly at start
     # Skip test for multitaper phase/complex -- not time-reversal invariant
     if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
         spec, freqs = spectrum(np.flip(data,axis=0), smp_rate, axis=0, method=method,
@@ -246,7 +245,7 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
         assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for expected output with time-reversed data
-    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for bandfilter method -- different init conds do change results slightly at start
     # Skip test for multitaper phase/complex -- not time-reversal invariant
     if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
         spec, freqs, timepts = spectrogram(np.flip(data,axis=0), smp_rate, axis=0, method=method,
@@ -314,7 +313,7 @@ def test_itpc(oscillation, itpc_method, method, result):
     assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Test for expected output with time-reversed data
-    # Skip test for bandfilter method -- different initial conditions do change results slightly at start
+    # Skip test for bandfilter method -- different init conds do change results slightly at start
     # Skip test for multitaper method -- not time-reversal invariant due to windowing
     if method not in ['bandfilter','multitaper']:
         spec, freqs, timepts = itpc(np.flip(data,axis=0), smp_rate, axis=0, method=method,

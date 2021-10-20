@@ -149,7 +149,8 @@ def test_two_sample_info(two_sample_data, method, params, result):
         assert stats['mu'].shape == (2,n_chnls)
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['F'].squeeze(), [11.5,12.21,50.04,31.91], rtol=1e-2, atol=1e-2)
-        assert np.allclose(stats['p'].squeeze(), [3.25e-3,2.59e-3,1.35e-6,2.33e-5], rtol=1e-5, atol=1e-5)
+        assert np.allclose(stats['p'].squeeze(), [3.25e-3,2.59e-3,1.35e-6,2.33e-5],
+                           rtol=1e-5, atol=1e-5)
         mu = [[10.35,13.00, 3.74, 8.95], [19.45,19.15,20.77,19.00]]
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
@@ -280,7 +281,8 @@ def test_one_way_info(one_way_data, method, params, result):
         assert stats['mu'].shape == (3,n_chnls)
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
         assert np.allclose(stats['F'].squeeze(), [44.36,68.72,43.00,57.93], rtol=1e-2, atol=1e-2)
-        assert np.allclose(stats['p'].squeeze(), [2.93e-9,2.55e-11,4.04e-9,1.71e-10], rtol=1e-11, atol=1e-11)
+        assert np.allclose(stats['p'].squeeze(), [2.93e-9,2.55e-11,4.04e-9,1.71e-10],
+                           rtol=1e-11, atol=1e-11)
         mu = [[10.35,13.00,3.74,8.95], [19.45,19.15,20.77,19.00], [32.87,33.69,26.73,31.10]]
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
@@ -410,5 +412,3 @@ def test_two_way_info(two_way_data, method, interact, params, result):
         info = neural_info(labels, data, axis=0, method=method, model='anova2', interact=interact,
                            foo=None)
         info = neural_info(design, data, axis=0, method=method, model='regress', foo=None)
-
-

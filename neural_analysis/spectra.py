@@ -427,7 +427,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
         data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
         axis    = data.ndim
     assert len(kwargs) == 0, \
-        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+        TypeError("Incorrect or misspelled variable(s) in keyword args: "+', '.join(kwargs.keys()))
 
     # If observation axis != 0, permute axis to make it so
     if axis != 0: data = np.moveaxis(data,axis,0)
@@ -804,7 +804,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
         data,_  = times_to_bool(data, width=1/smp_rate, lims=lims, bins=bins)
         axis    = data.ndim
     assert len(kwargs) == 0, \
-        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+        TypeError("Incorrect or misspelled variable(s) in keyword args: "+', '.join(kwargs.keys()))
 
     # Convert buffer from s -> samples
     if buffer != 0:  buffer  = int(ceil(buffer*smp_rate))
@@ -1201,7 +1201,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     # Determine form of filter parameters given: b,a or z,p,k
     else:
         assert len(kwargs) == 0, \
-            TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+            TypeError("Incorrect or misspelled variable(s) in keyword args: " +
+                      ', '.join(kwargs.keys()))
 
         if np.all([(param in params) for param in ['b','a']]):       form = 'ba'
         elif np.all([(param in params) for param in ['z','p','k']]): form = 'zpk'
@@ -1331,7 +1332,7 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
     else:
         raise ValueError("Filter type '%s' is not supported (yet)" % filt)
     assert len(kwargs) == 0, \
-        TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+        TypeError("Incorrect or misspelled variable(s) in keyword args: "+', '.join(kwargs.keys()))
 
     # Setup empty lists to hold filter parameters
     if form == 'ba':    params = OrderedDict({'b':[None]*n_bands, 'a':[None]*n_bands})
@@ -2648,3 +2649,4 @@ def _str_to_pool_func(func):
         elif func == 'sum': return lambda x: np.sum(x, axis=0)
         else:
             raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)
+        

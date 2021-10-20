@@ -416,7 +416,8 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     elif method == 'bootstrap':
         test_func = paired_sample_bootstrap_test
     else:
-        raise ValueError("Unsupported test type '%s'. Should be 'permutation' or 'bootstrap'" % method)
+        raise ValueError("Unsupported test type '%s'. Should be 'permutation' or 'bootstrap'"
+                         % method)
 
     return test_func(data1, data2, axis=axis, **kwargs)
 
@@ -1622,7 +1623,7 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
 
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, so we can return original unsorted version
-        stat_resmp_sorted = np.sort(stat_resmp, axis=0)        
+        stat_resmp_sorted = np.sort(stat_resmp, axis=0)
         # Extract lower,upper confints from resampled and sorted stats
         confints = stat_resmp_sorted[conf_indexes,...]
 

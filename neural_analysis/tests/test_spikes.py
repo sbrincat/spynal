@@ -138,7 +138,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     # Test values summed over entire array -> scalar for spike counts
     # Test values averaged over entire array -> scalar for spike rates
     rates, bins = rate(data, method='bin', lims=[0,1], output=output, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert bins.shape == (20, 2)
     assert rates.shape == (10, 2, 20)
     assert np.issubdtype(rates.dtype,dtype_type)
@@ -148,7 +148,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     shape = (5,2,2,*data.shape[2:])
     rates, bins = rate(data.reshape(shape), method='bin', lims=[0,1], output=output,
                        axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert bins.shape == (20, 2)
     assert rates.shape == (5, 2, 2, 20)
     assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
@@ -158,7 +158,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     expected_shape = (20, 2, 10) if data_type == 'spike_bool' else (2, 10, 20)
     rates, bins = rate(data.transpose(), method='bin', lims=[0,1], output=output,
                        axis=0, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert bins.shape == (20, 2)
     assert rates.shape == expected_shape
     assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
@@ -166,7 +166,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     # Test for consistent output with different sliding window length
     rates, bins = rate(data, method='bin', lims=[0,1], width=20e-3, output=output,
                        axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert bins.shape == (50, 2)
     assert rates.shape == (10, 2, 50)
     assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
@@ -174,7 +174,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     # Test for consistent ouptut when bins are set explicitly
     bins = setup_sliding_windows(20e-3,[0,1])
     rates, bins = rate(data, method='bin', bins=bins, output=output, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert bins.shape == (50, 2)
     assert rates.shape == (10, 2, 50)
     assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
@@ -183,7 +183,7 @@ def test_bin_rate(spike_data, data_type, output, result):
     # Note: Summed counts should be same, but mean rates are expected to be slightly different here
     bins = [[0,250e-3], [250e-3,750e-3], [750e-3,1000e-3]]
     rates, bins = rate(data, method='bin', bins=bins, output=output, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert rates.shape == (10, 2, 3)
     if output == 'rate':
         assert np.isclose(rates.mean(), 5.53, rtol=1e-2, atol=1e-2)
@@ -194,8 +194,8 @@ def test_bin_rate(spike_data, data_type, output, result):
     with pytest.raises((TypeError,AssertionError)):
         rates, bins = rate(data, method='bin', lims=[0,1], output=output, axis=-1,
                            timepts=timepts, foo=None)
-                
-        
+
+
 @pytest.mark.parametrize('data_type, kernel, result',
                          [('spike_timestamp', 'gaussian', 4.92),
                           ('spike_timestamp', 'hanning', 4.93),
@@ -216,7 +216,7 @@ def test_density(spike_data, data_type, kernel, result):
     # Test values averaged over entire array -> scalar for spike rates
     rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0,
                        axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert tout.shape == (1001,)
     assert rates.shape == (10, 2, 1001)
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
@@ -225,7 +225,7 @@ def test_density(spike_data, data_type, kernel, result):
     shape = (5,2,2,*data.shape[2:])
     rates, tout = rate(data.reshape(shape), method='density', kernel=kernel, width=width,
                        lims=[0,1], buffer=0, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert tout.shape == (1001,)
     assert rates.shape == (5, 2, 2, 1001)
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
@@ -235,7 +235,7 @@ def test_density(spike_data, data_type, kernel, result):
     expected_shape = (1001, 2, 10) if data_type == 'spike_bool' else (2, 10, 1001)
     rates, tout = rate(data.transpose(), method='density', kernel=kernel, width=width,
                        lims=[0,1], buffer=0, axis=0, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert tout.shape == (1001,)
     assert rates.shape == expected_shape
     assert np.isclose(rates.mean(), result, rtol=1e-2, atol=1e-2)
@@ -243,7 +243,7 @@ def test_density(spike_data, data_type, kernel, result):
     # Test for ~ consistent ouptut with 10x downsampling after spike density estimation
     rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0,
                           downsmp=10, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert tout.shape == (101,)
     assert rates.shape == (10, 2, 101)
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
@@ -275,20 +275,20 @@ def test_rate_stats(spike_data, data_type, stat, result):
     # Basic test of shape, value of output
     # Test value of 1st trial/channel as exemplar
     stats = rate_stats(rates, stat=stat, axis=0)
-    assert data_checker(rates,rates_orig)     # Ensure input data isn't altered by function
+    assert data_checker(rates,rates_orig)     # Ensure input data not altered by func
     assert stats.shape == (1, n_chnls, n_timepts)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (additional axis inserted)
     stats = rate_stats(np.concatenate((rates[:,:,np.newaxis,:],rates[:,:,np.newaxis,:]), axis=2),
                        stat=stat, axis=0)
-    assert data_checker(rates,rates_orig)     # Ensure input data isn't altered by function
+    assert data_checker(rates,rates_orig)     # Ensure input data not altered by func
     assert stats.shape == (1, n_chnls, 2, n_timepts)
     assert np.isclose(stats[0,0,0,0], result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed data dimensionality
     stats = rate_stats(rates.T, stat=stat, axis=-1)
-    assert data_checker(rates,rates_orig)     # Ensure input data isn't altered by function
+    assert data_checker(rates,rates_orig)     # Ensure input data not altered by func
     assert stats.shape == (n_timepts, n_chnls, 1)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
 
@@ -313,7 +313,7 @@ def test_isi_stats(spike_data, data_type, stat, result):
 
     # Compute inter-spike intervals from timestamp/binary spike data -> (n_trials,n_units)
     ISIs = isi(data, axis=-1, timepts=timepts)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     n_trials,n_chnls = ISIs.shape
 
     # KLUDGE Pool ISI data across trials for locality-sensitive metrics, so output shape is same
@@ -325,20 +325,20 @@ def test_isi_stats(spike_data, data_type, stat, result):
     # Basic test of shape, value of output
     # Test value of 1st trial/channel as exemplar
     stats = isi_stats(ISIs, stat=stat, axis=axis)
-    assert data_checker(ISIs,ISIs_orig)     # Ensure input data isn't altered by function
+    assert data_checker(ISIs,ISIs_orig)     # Ensure input data not altered by func
     assert stats.shape == (1, n_chnls)
     assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (additional axis inserted)
     stats = isi_stats(np.concatenate((ISIs[:,:,np.newaxis],ISIs[:,:,np.newaxis]), axis=2),
                       stat=stat, axis=axis)
-    assert data_checker(ISIs,ISIs_orig)     # Ensure input data isn't altered by function
+    assert data_checker(ISIs,ISIs_orig)     # Ensure input data not altered by func
     assert stats.shape == (1, n_chnls, 2)
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed data dimensionality
     stats = isi_stats(ISIs.T, stat=stat, axis='each' if stat in ['CV2','LV'] else -1)
-    assert data_checker(ISIs,ISIs_orig)     # Ensure input data isn't altered by function
+    assert data_checker(ISIs,ISIs_orig)     # Ensure input data not altered by func
     assert stats.shape == (n_chnls, 1)
     assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
 
@@ -346,7 +346,7 @@ def test_isi_stats(spike_data, data_type, stat, result):
     with pytest.raises((TypeError,AssertionError)):
         ISIs = isi(data, axis=-1, timepts=timepts, foo=None)
         stats = isi_stats(ISIs, stat=stat, axis=axis, foo=None)
-        
+
 
 # =============================================================================
 # Unit tests for rate preprocessing/utility functions
@@ -359,7 +359,7 @@ def test_bool_to_times(spike_timestamp, spike_bool):
 
     # Test that timestamp->bool->timestamp data retains same dtype, shape, values
     data_bool_to_timestamp = bool_to_times(data_bool, timepts, axis=-1)
-    assert np.array_equal(data_bool,data_orig)  # Ensure input data isn't altered by function
+    assert np.array_equal(data_bool,data_orig)  # Ensure input data not altered by func
     assert data_bool_to_timestamp.dtype == data_timestamp.dtype
     assert data_bool_to_timestamp.shape == data_timestamp.shape
     assert np.asarray([d1.shape == d2.shape for d1,d2
@@ -368,8 +368,9 @@ def test_bool_to_times(spike_timestamp, spike_bool):
                        in zip(data_bool_to_timestamp.flatten(), data_timestamp.flatten())]).all()
 
     # Test for correct handling of single spike trains
-    assert np.allclose(bool_to_times(data_bool[0,0,:], timepts, axis=-1), data_timestamp[0,0], rtol=1e-2, atol=1e-2)
-    assert np.array_equal(data_bool,data_orig)  # Ensure input data isn't altered by function
+    assert np.allclose(bool_to_times(data_bool[0,0,:], timepts, axis=-1), data_timestamp[0,0],
+                       rtol=1e-2, atol=1e-2)
+    assert np.array_equal(data_bool,data_orig)  # Ensure input data not altered by func
 
 
 def test_times_to_bool(spike_timestamp, spike_bool):
@@ -380,7 +381,7 @@ def test_times_to_bool(spike_timestamp, spike_bool):
 
     # Test that bool->timestamp->bool data retains same shape, dtype, values
     data_timestamp_to_bool, timepts2 = times_to_bool(data_timestamp, lims=(0,1))
-    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data isn't altered by function
+    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data not altered by func
     assert (timepts == timepts2).all()
     assert data_timestamp_to_bool.shape == data_bool.shape
     assert data_timestamp_to_bool.dtype == data_bool.dtype
@@ -388,9 +389,9 @@ def test_times_to_bool(spike_timestamp, spike_bool):
 
     # Test for correct handling of single spike trains and list-valued data
     assert (times_to_bool(data_timestamp[0,0], lims=(0,1))[0] == data_bool[0,0,:]).all()
-    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data isn't altered by function
+    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data not altered by func
     assert (times_to_bool(list(data_timestamp[0,0]), lims=(0,1))[0] == data_bool[0,0,:]).all()
-    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data isn't altered by function
+    assert object_array_equal(data_timestamp,data_orig)  # Ensure input data not altered by func
 
 
 @pytest.mark.parametrize('data_type',
@@ -405,25 +406,25 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
     if data_type == 'spike_timestamp':
         trial_lims = np.asarray([0,1])[np.newaxis,:] + np.arange(n_trials)[:,np.newaxis]
         cut_data = cut_trials(uncut_data, trial_lims, trial_refs=np.arange(0,n_trials)).T
-        assert object_array_equal(uncut_data,data_orig)     # Ensure input data isn't altered by function
+        assert object_array_equal(uncut_data,data_orig)     # Ensure input data not altered by func
         for trial in range(n_trials):
             for unit in range(n_units):
-                assert np.allclose(cut_data[trial,unit], data[trial,unit])                
+                assert np.allclose(cut_data[trial,unit], data[trial,unit])
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises((TypeError,AssertionError)):
             cut_data = cut_trials(uncut_data, trial_lims, trial_refs=np.arange(0,n_trials), foo=None).T
-                
+
     else:
         trial_lims = np.asarray([0,1])[np.newaxis,:] + 1.001*np.arange(n_trials)[:,np.newaxis]
         cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1).transpose((2,0,1))
-        assert np.array_equal(uncut_data,data_orig)     # Ensure input data isn't altered by function
+        assert np.array_equal(uncut_data,data_orig)     # Ensure input data not altered by func
         assert (cut_data == data).all()
-        
+
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises((TypeError,AssertionError)):
             cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1, foo=None).transpose((2,0,1))
-        
+
     assert cut_data.shape == data.shape
 
 
@@ -435,11 +436,11 @@ def test_realign_data(spike_data, data_type):
     data_orig = data.copy()
     n_trials, n_units = data.shape[:2]
 
-    # For timestamp data, realign timestamps, then realign back to original timebase and test if same
+    # Realign timestamps, then realign back to original timebase and test if same
     if data_type == 'spike_timestamp':
         realigned = realign_data(data, 0.5*np.ones((n_trials,)), trial_axis=0)
         realigned = realign_data(realigned, -0.5*np.ones((n_trials,)), trial_axis=0)
-        assert object_array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
         assert realigned.shape == data.shape
         for trial in range(n_trials):
             for unit in range(n_units):
@@ -448,7 +449,7 @@ def test_realign_data(spike_data, data_type):
         # Test for consistent output with transposed data dimensionality
         realigned = realign_data(data.T, 0.5*np.ones((n_trials,)), trial_axis=-1)
         realigned = realign_data(realigned, -0.5*np.ones((n_trials,)), trial_axis=-1)
-        assert object_array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
         assert realigned.shape == data.T.shape
         for trial in range(n_trials):
             for unit in range(n_units):
@@ -457,7 +458,7 @@ def test_realign_data(spike_data, data_type):
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises((TypeError,AssertionError)):
             realigned = realign_data(data, 0.5*np.ones((n_trials,)), trial_axis=0, foo=None)
-            
+
     # For boolean data, realign to 2 distinct times, then concatenate together and test if same
     else:
         realigned1 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
@@ -465,7 +466,7 @@ def test_realign_data(spike_data, data_type):
         realigned2 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(0,0.5),
                                   timepts=timepts, time_axis=-1, trial_axis=0)
         realigned = np.concatenate((realigned1,realigned2), axis=-1)
-        assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
         assert realigned.shape == data.shape
         assert (realigned == data).all()
 
@@ -475,16 +476,16 @@ def test_realign_data(spike_data, data_type):
         realigned2 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(0,0.5),
                                   timepts=timepts, time_axis=0, trial_axis=-1)
         realigned = np.concatenate((realigned1,realigned2), axis=0)
-        assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
         assert realigned.shape == data.T.shape
         assert (realigned == data.T).all()
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises((TypeError,AssertionError)):
             realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
-                                            timepts=timepts, time_axis=0, trial_axis=-1, foo=None)            
-            
-            
+                                            timepts=timepts, time_axis=0, trial_axis=-1, foo=None)
+
+
 @pytest.mark.parametrize('data_type',
                          [('spike_timestamp'),('spike_bool')])
 def test_pool_electrode_units(spike_data, data_type):
@@ -517,14 +518,16 @@ def test_pool_electrode_units(spike_data, data_type):
 
     # Check if overall spike count, size is consistent after pooling
     data_mua,elec_idxs = pool_electrode_units(data, electrodes, axis=1, return_idxs=True)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert data_mua.shape == out_shape
     assert (elec_idxs == np.array([0,2])).all()
     assert (_count_all_spikes(data,electrodes) == np.array([result,result])).all()
 
     # Check for consistent output with axis-transposed data
-    data_mua,elec_idxs = pool_electrode_units(np.moveaxis(data,1,0), electrodes, axis=0, return_idxs=True)
-    assert data_checker(data,data_orig)     # Ensure input data isn't altered by function
+    data_mua,elec_idxs = pool_electrode_units(np.moveaxis(data,1,0), electrodes, axis=0,
+                                              return_idxs=True)
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert data_mua.shape == (out_shape[1],out_shape[0],*out_shape[2:])
     assert (elec_idxs == np.array([0,2])).all()
     assert (_count_all_spikes(data,electrodes) == np.array([result,result])).all()
+    

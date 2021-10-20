@@ -383,7 +383,8 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 
     else:
         assert len(kwargs) == 0, \
-            TypeError("Incorrect or misspelled variable(s) in keyword args: " + ', '.join(kwargs.keys()))
+            TypeError("Incorrect or misspelled variable(s) in keyword args: " +
+                      ', '.join(kwargs.keys()))
 
         # Kernel is already a (custom) array of values
         if isinstance(kernel,np.ndarray):
@@ -861,7 +862,7 @@ def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
     plt.sca(ax)
 
     # Concatenate waveforms across all units -> (n_timepts,n_spikes_total) ndarray
-    ok_idxs = np.asarray([unitWaveforms != None for unitWaveforms in spike_waves])
+    ok_idxs = np.asarray([unit_waveforms is not None for unit_waveforms in spike_waves])
     spike_waves = np.concatenate(spike_waves[ok_idxs],axis=1)
     n_timepts,n_spikes = spike_waves.shape
 
@@ -1849,4 +1850,3 @@ def _remove_buffer(data, buffer, axis=-1):
     else:
         return (data.swapaxes(-1,axis)[...,buffer:-buffer]
                     .swapaxes(axis,-1))
-

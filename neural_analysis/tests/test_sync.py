@@ -1,6 +1,6 @@
 """ Unit tests for sync.py module """
-import pytest
 from math import pi
+import pytest
 import numpy as np
 
 from scipy.stats import bernoulli
@@ -24,8 +24,9 @@ def oscillation_pair():
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
     frequency = 32
-    return simulate_multichannel_oscillation(2, frequency, amplitude=5.0, phase=[pi/4,0], phase_sd=[0,pi/4],
-                                             noise=1.0, n_trials=40, time_range=1.0, smp_rate=1000, seed=1)
+    return simulate_multichannel_oscillation(2, frequency, amplitude=5.0, phase=[pi/4,0],
+                                             phase_sd=[0,pi/4], noise=1.0, n_trials=40,
+                                             time_range=1.0, smp_rate=1000, seed=1)
 
 
 @pytest.fixture(scope='session')
@@ -88,7 +89,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
                                            spec_method=spec_method, return_phase=True,
                                            smp_rate=smp_rate, time_axis=-1)
     print(np.round(sync.mean(),4), np.round(dphi.mean(),4))
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert sync.shape == (n_freqs, n_timepts)
     assert np.issubdtype(sync.dtype,float)
@@ -100,7 +101,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync2, freqs2, timepts2 = synchrony(data1, data2, axis=0, method=method,
                                         spec_method=spec_method, return_phase=False,
                                         smp_rate=smp_rate, time_axis=-1)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs2.shape == freqs_shape
     assert timepts2.shape == (n_timepts,)
@@ -111,7 +112,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync, freqs, timepts, dphi = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
                                            axis=0, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=-1)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     # HACK Bandfilter not time-reversal invariant due to initial conditions
     if spec_method != 'bandfilter':
@@ -125,7 +126,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync, freqs, timepts, dphi = synchrony(data2, data1, axis=0, method=method,
                                            spec_method=spec_method, return_phase=True,
                                            smp_rate=smp_rate, time_axis=-1)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
     if spec_method == 'wavelet':
@@ -136,7 +137,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
                                            np.stack((data2,data2),axis=2),
                                            axis=0, method=method, spec_method=spec_method,
                                            return_phase=True, smp_rate=smp_rate, time_axis=1)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
@@ -152,7 +153,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync, freqs, timepts, dphi = synchrony(data1.T, data2.T, axis=-1, method=method,
                                            spec_method=spec_method,return_phase=True,
                                            smp_rate=smp_rate, time_axis=0)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
@@ -170,7 +171,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     spec2, freqs, timepts = spectrogram(data2, smp_rate, **extra_args)
     sync, _, _, dphi = synchrony(spec1, spec2, axis=0, taper_axis=2, method=method,
                                  spec_method=spec_method, return_phase=True)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
@@ -216,7 +217,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     timepts     = np.arange(lfpdata.shape[-1]) / smp_rate
 
     extra_args  = {'timepts':timepts, 'width':0.2} if method != 'coherence' else {}
-    if (spec_method == 'multitaper'):
+    if spec_method == 'multitaper':
         extra_args.update(time_width=0.2, spacing=0.2, freq_width=10)
 
     # Basic test of shape, dtype, value of output.
@@ -225,7 +226,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                         method=method, spec_method=spec_method,
                                                         smp_rate=smp_rate, return_phase=True,
                                                         **extra_args)
-    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert isinstance(freqs, np.ndarray)
     assert isinstance(timepts, np.ndarray)
@@ -250,7 +251,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                       method=method, spec_method=spec_method,
                                                       smp_rate=smp_rate, return_phase=False,
                                                       **extra_args)
-    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert freqs2.shape == freqs_shape
     assert timepts2.shape == (n_timepts,)
@@ -265,7 +266,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                         axis=0, time_axis=-1, method=method,
                                                         spec_method=spec_method, smp_rate=smp_rate,
                                                         return_phase=True, **extra_args)
-    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert sync.shape == (n_freqs, n_timepts)
     assert freqs.shape == freqs_shape
@@ -283,9 +284,10 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         sync, freqs, timepts, n, phi = spike_field_coupling(np.stack((spkdata,spkdata),axis=2),
                                                             np.stack((lfpdata,lfpdata),axis=2),
                                                             axis=0, time_axis=1, method=method,
-                                                            spec_method=spec_method, smp_rate=smp_rate,
+                                                            spec_method=spec_method,
+                                                            smp_rate=smp_rate,
                                                             return_phase=True, **extra_args)
-        assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+        assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
         assert np.array_equal(lfpdata,lfpdata_orig)
         assert freqs.shape == freqs_shape
         assert timepts.shape == (n_timepts,)
@@ -302,7 +304,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                         axis=-1, time_axis=0, method=method,
                                                         spec_method=spec_method, smp_rate=smp_rate,
                                                         return_phase=True, **extra_args)
-    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     if method != 'coherence': print(n.shape, np.round(n.mean()))
     assert freqs.shape == freqs_shape
@@ -344,11 +346,10 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     elif spec_method == 'multitaper':
         extra_args.update(timepts=timepts, taper_axis=time_axis-1, width=0.2)
 
-    # if spec_method == 'multitaper': extra_args.update(taper_axis=time_axis-1,timepts=timepts[retained_times])
     sync, _, _, n, phi = spike_field_coupling(spkspec, lfpspec, axis=0, time_axis=time_axis,
                                               method=method, spec_method=spec_method,
                                               return_phase=True, **extra_args)
-    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert sync.shape == (n_freqs, n_timepts)
     assert phi.shape == (n_freqs, n_timepts)
@@ -364,3 +365,4 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                             method=method, spec_method=spec_method,
                                                             smp_rate=smp_rate, return_phase=True,
                                                             foo=None, **extra_args)
+        

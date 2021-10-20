@@ -542,7 +542,6 @@ def undo_standardize_to_axis_0(data, data_shape, axis=0):
         # Reshape data -> (axis_len,<original shape w/o <axis>>)
         shape = (axis_len, *data_shape[np.arange(data_ndim) != axis])
         # Note: I think you want the order to be 'F' regardless of memory layout
-        # TODO test this!!!
         data = np.reshape(data,shape,order='F')
 
     # Squeeze (n,1) array back down to 1d (n,) vector,
@@ -643,7 +642,6 @@ def undo_standardize_to_axis_end(data, data_shape, axis=-1):
         # Reshape data -> (<original shape w/o <axis>>,axis_len)
         shape = (*data_shape[np.arange(data_ndim) != axis], axis_len)
         # Note: I think you want the order to be 'C' regardless of memory layout
-        # TODO test this!!!
         data  = np.reshape(data,shape,order='C')
 
     # Squeeze (1,n) array back down to 1d (n,) vector,
@@ -818,7 +816,7 @@ def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.al
     """
     if data1.shape != data2.shape:
         # For vanilla array_equal comparison, different shapes imply equality is False
-        if (comp_func == np.array_equal) and (reduce_func == np.all):
+        if (comp_func is np.array_equal) and (reduce_func is np.all):
             return False
         # General case: we don't really know how to deal with different shapes
         # w/o knowing comp_func and reduce_func
@@ -962,4 +960,3 @@ def concatenate_object_array(data, axis=None, sort=False):
     data_concat = undo_standardize_array(data_concat, data_shape, axis=axis, target_axis=0)
 
     return data_concat
-
