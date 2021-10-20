@@ -47,13 +47,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from patsy import DesignMatrix
 
-try:
-    from .utils import unsorted_unique, standardize_array, undo_standardize_array
-    from .helpers import _has_method
-# TEMP
-except ImportError:
-    from utils import unsorted_unique, standardize_array, undo_standardize_array
-    from helpers import _has_method
+from neural_analysis.utils import unsorted_unique, standardize_array, undo_standardize_array
+from neural_analysis.helpers import _has_method
 
 
 # =============================================================================

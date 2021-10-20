@@ -67,17 +67,11 @@ from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
 from scipy.stats import poisson, expon
 
-try:
-    from .utils import set_random_seed, unsorted_unique, index_axis, \
-                       standardize_array, undo_standardize_array, setup_sliding_windows, \
-                       concatenate_object_array, fano, cv, cv2, lv
-    from .helpers import _check_window_lengths, _enclose_in_object_array
-# TEMP
-except ImportError:
-    from neural_analysis.utils import set_random_seed, unsorted_unique, index_axis, \
-                      standardize_array, undo_standardize_array, setup_sliding_windows, \
-                      concatenate_object_array, fano, cv, cv2, lv
-    from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
+from neural_analysis.utils import set_random_seed, unsorted_unique, index_axis, \
+                                  standardize_array, undo_standardize_array, \
+                                  setup_sliding_windows, concatenate_object_array, \
+                                  fano, cv, cv2, lv
+from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
 
 
 # =============================================================================

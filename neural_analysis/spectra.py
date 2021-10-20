@@ -91,17 +91,10 @@ try:
 except ImportError:
     HAS_XARRAY = False
 
-try:
-    from .utils import set_random_seed, iarange, index_axis, axis_index_slices, \
-                       standardize_array, undo_standardize_array, interp1
-    from .helpers import _check_window_lengths
-    from .spikes import _spike_data_type, times_to_bool
-# TEMP
-except ImportError:
-    from utils import set_random_seed, iarange, index_axis, axis_index_slices, \
-                      standardize_array, undo_standardize_array, interp1
-    from helpers import _check_window_lengths
-    from spikes import _spike_data_type, times_to_bool
+from neural_analysis.utils import set_random_seed, iarange, index_axis, axis_index_slices, \
+                                  standardize_array, undo_standardize_array, interp1
+from neural_analysis.helpers import _check_window_lengths
+from neural_analysis.spikes import _spike_data_type, times_to_bool
 
 
 # Set default arguments for pyfftw functions: Fast planning, use all available threads

@@ -42,11 +42,7 @@ except ImportError:
     _HAS_XARRAY = False
     # print("xarray module is not installed. No support for loading/saving xarray format")
 
-try:
-    from .helpers import _enclose_in_object_array
-# TEMP    
-except ImportError:
-    from helpers import _enclose_in_object_array
+from neural_analysis.helpers import _enclose_in_object_array
 
     
 # =============================================================================

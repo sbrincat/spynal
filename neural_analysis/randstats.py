@@ -55,11 +55,7 @@ from math import sqrt
 from warnings import warn
 import numpy as np
 
-try:
-    from .utils import set_random_seed
-# TEMP
-except ImportError:
-    from utils import set_random_seed
+from neural_analysis.utils import set_random_seed
 
 
 # =============================================================================

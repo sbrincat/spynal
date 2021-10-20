@@ -4,11 +4,11 @@ sync    A module for analysis of neural synchrony
 
 FUNCTIONS
 ### Field-field synchrony ###
-synchrony           Synchrony between pair of channels using given method
-coherence           Time-frequency coherence between pair of channels
+synchrony           General synchrony between pair of analog channels using given method
+coherence           Time-frequency coherence between pair of analog channels
 ztransform_coherence Z-transform coherence so ~ normally distributed
-plv                 Phase locking value (PLV) between pair of channels
-ppc                 Pairwise phase consistency (PPC) btwn pair of channels
+plv                 Phase locking value (PLV) between pair of analog channels
+ppc                 Pairwise phase consistency (PPC) btwn pair of analog channels
 
 ### Spike-field synchrony ###
 spike_field_coupling    General spike-field coupling/synchrony btwn spike/LFP pair
@@ -29,15 +29,9 @@ Created on Thu Oct  4 15:28:15 2018
 from warnings import warn
 import numpy as np
 
-try:
-    from .utils import set_random_seed, setup_sliding_windows, index_axis
-    from .spectra import spectrogram, simulate_oscillation
-    from .randstats import jackknifes
-# TEMP
-except ImportError:
-    from utils import set_random_seed, setup_sliding_windows, index_axis
-    from spectra import spectrogram, simulate_oscillation
-    from randstats import jackknifes
+from neural_analysis.utils import set_random_seed, setup_sliding_windows, index_axis
+from neural_analysis.spectra import spectrogram, simulate_oscillation
+from neural_analysis.randstats import jackknifes
 
 
 # =============================================================================
@@ -644,13 +638,13 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', time_axis=None,
 
 
 def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
-                          ztransform=False, return_phase=False, data_type=None,
-                          spec_method='multitaper', smp_rate=None, **kwargs):
+                          transform=None, return_phase=False, data_type=None,
+                          spec_method='multitaper', smp_rate=None, ztransform=None, **kwargs):
     """
     Computes pairwise coherence between single-channel spiking data and LFP data
 
     coh,freqs,timepts = spike_field_coherence(spkdata,lfpdata,axis=0,time_axis=None,taper_axis=None,
-                                              ztransform=False,return_phase=False,data_type=None,
+                                              transform=None,return_phase=False,data_type=None,
                                               spec_method='multitaper',smp_rate=None,
                                               **kwargs)
 
@@ -679,8 +673,11 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
     taper_axis  Int. Axis of spectral data corresponding to tapers. Only needed for
             multitaper spectral data.
 
-    ztransform Bool. If True, returns z-transformed coherence using Jarvis &
-            Mitra (2001) method. If false [default], returns raw coherence.
+    transform   String or None. Transform to apply to all computed coherence values
+                Set=None [default] to return untransformed coherence. Options:
+                'Z' :       Z-transform coherence using Jarvis & Mitra (2001) method
+
+    ztransform  DEPRECATED. Use transform='Z' instead!
 
     return_phase Bool. If True, returns add'l output with mean spike-triggered phase
 
@@ -711,6 +708,11 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
     phi     ndarray. Coherency phase in radians.
             Optional: Only returned if return_phase is True.
     """
+    if ztransform is not None:
+        transform = 'Z'
+        warn("ztransform argument is deprecated and will be removed in future releases. " \
+             "Please use transform='Z' instead")
+            
     if axis < 0: axis = lfpdata.ndim + axis
     if time_axis < 0: time_axis = lfpdata.ndim + time_axis
 
@@ -750,7 +752,7 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
         timepts = []
 
     extra_args = dict(axis=axis, data_type='spectral', spec_method=spec_method,
-                      ztransform=ztransform, return_phase=return_phase)
+                      transform=transform, return_phase=return_phase)
     if spec_method == 'multitaper': extra_args.update(taper_axis=taper_axis)
 
     if return_phase:
