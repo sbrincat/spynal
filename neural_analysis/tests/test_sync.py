@@ -87,6 +87,7 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method,
                                            spec_method=spec_method, return_phase=True,
                                            smp_rate=smp_rate, time_axis=-1)
+    print(np.round(sync.mean(),4), np.round(dphi.mean(),4))
     assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data2,data2_orig)
     assert sync.shape == (n_freqs, n_timepts)
