@@ -530,6 +530,8 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
     """
     # TODO  Recode for > 2 groups
     labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
+    
 
     # Reshape data array -> (n_observations,n_data_series) matrix
     data, data_shape = standardize_array(data, axis=axis, target_axis=0)
@@ -681,6 +683,7 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     roc         (...,1,...) ndarray.  AUROC btwn. groups along given axis.
     """
     labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
@@ -808,6 +811,7 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
     """
     labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     # Find set of unique group labels in <labels>
     if groups is None: groups = np.unique(labels)
@@ -913,6 +917,7 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
     """
     # TODO Add anovan model
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     # Attempt to infer proper linear model based on labels
     if model is None:
@@ -1006,6 +1011,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         n   (...,n_groups,). Number of observations (trials) in each group/level
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     assert (labels.ndim == 1) or (labels.shape[1] == 1), \
             "labels should have only a single column for anova1 model (it has %d)" \
@@ -1168,6 +1174,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
     """
     # TODO Add <groups> arg with list of group labels to use?
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     # Reshape data array data -> (n_observation,n_data_series) matrix
     data, data_shape = standardize_array(data, axis=axis, target_axis=0)
@@ -1361,6 +1368,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
                       wikipedia.org/wiki/Effect_size
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
+    if axis < 0: axis = data.ndim + axis
 
     # Reshape data array data -> (n_observations,n_data_series) matrix
     data, data_shape = standardize_array(data, axis=axis, target_axis=0)

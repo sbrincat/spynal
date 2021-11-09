@@ -59,17 +59,26 @@ def spike_field_pair(oscillation_pair):
 # =============================================================================
 # Unit tests
 # =============================================================================
-@pytest.mark.parametrize('method, spec_method, result',
-                         [('coherence', 'wavelet',      (0.2475,0.4795)),
-                          ('coherence', 'multitaper',   (0.1046,0.3043)),
-                          ('coherence', 'bandfilter',   (0.3490,0.6706)),
-                          ('PLV',       'wavelet',      (0.2541,0.3713)),
-                          ('PLV',       'multitaper',   (0.0984,0.2228)),
-                          ('PLV',       'bandfilter',   (0.3321,0.4528)),
-                          ('PPC',       'wavelet',      (0.0912,0.3713)),
-                          ('PPC',       'multitaper',   (0.0100,0.2228)),
-                          ('PPC',       'bandfilter',   (0.1715,0.4528))])
-def test_synchrony(oscillation_pair, method, spec_method, result):
+@pytest.mark.parametrize('method, spec_method, single_trial, result',
+                         [('coherence', 'wavelet',      None,       (0.2475,0.4795)),
+                          ('coherence', 'multitaper',   None,       (0.1046,0.3043)),
+                          ('coherence', 'bandfilter',   None,       (0.3490,0.6706)),
+                          ('PLV',       'wavelet',      None,       (0.2541,0.3713)),
+                          ('PLV',       'multitaper',   None,       (0.0984,0.2228)),
+                          ('PLV',       'bandfilter',   None,       (0.3321,0.4528)),
+                          ('PPC',       'wavelet',      None,       (0.0912,0.3713)),
+                          ('PPC',       'multitaper',   None,       (0.0100,0.2228)),
+                          ('PPC',       'bandfilter',   None,       (0.1715,0.4528)),
+                          ('coherence', 'wavelet',      'pseudo',   (0.1988,None)),
+                          ('coherence', 'multitaper',   'pseudo',   (0.0623,None)),
+                          ('coherence', 'bandfilter',   'pseudo',   (0.3080,None)),
+                          ('PLV',       'wavelet',      'pseudo',   (0.2022,None)),
+                          ('PLV',       'multitaper',   'pseudo',   (0.0588,None)),
+                          ('PLV',       'bandfilter',   'pseudo',   (0.2858,None)),
+                          ('PPC',       'wavelet',      'pseudo',   (0.0679,None)),
+                          ('PPC',       'multitaper',   'pseudo',   (0.0015,None)),
+                          ('PPC',       'bandfilter',   'pseudo',   (0.1502,None))])
+def test_synchrony(oscillation_pair, method, spec_method, single_trial, result):
     """ Unit tests for synchrony() function """
     # Extract per-channel data and reshape -> (n_trials,n_timepts)
     data1, data2 = oscillation_pair[:,:,0].T, oscillation_pair[:,:,1].T
@@ -82,111 +91,153 @@ def test_synchrony(oscillation_pair, method, spec_method, result):
     n_freqs     = method_to_n_freqs[spec_method]
     n_timepts   = method_to_n_timepts[spec_method]
     freqs_shape = (n_freqs,2) if spec_method == 'bandfilter' else (n_freqs,)
+    n_trials    = data1.shape[0]
+    sync_shape  = (n_trials, n_freqs, n_timepts) if single_trial else (1, n_freqs, n_timepts)
+    if spec_method == 'multitaper': sync_shape = (*sync_shape[:2], 1, sync_shape[-1])
+
+    extra_args = dict(axis=0, method=method, spec_method=spec_method,
+                      single_trial=single_trial,
+                      return_phase=True if single_trial is None else False,
+                      smp_rate=smp_rate, time_axis=-1)
 
     # Basic test of shape, dtype, value of output.
     # Test values averaged over all timepts, freqs for simplicity
-    sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method,
-                                           spec_method=spec_method, return_phase=True,
-                                           smp_rate=smp_rate, time_axis=-1)
-    print(np.round(sync.mean(),4), np.round(dphi.mean(),4))
+    if single_trial:    sync, freqs, timepts = synchrony(data1, data2, **extra_args)
+    else:               sync, freqs, timepts, dphi = synchrony(data1, data2, **extra_args)
+    print(np.round(sync.mean(),4))
+    if not single_trial: print(np.round(dphi.mean(),4))
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
-    assert sync.shape == (n_freqs, n_timepts)
+    assert sync.shape == sync_shape
     assert np.issubdtype(sync.dtype,float)
-    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
-    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    if not single_trial:
+        assert np.issubdtype(dphi.dtype,float)
+        assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with return_phase=False
-    sync2, freqs2, timepts2 = synchrony(data1, data2, axis=0, method=method,
-                                        spec_method=spec_method, return_phase=False,
-                                        smp_rate=smp_rate, time_axis=-1)
-    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
-    assert np.array_equal(data2,data2_orig)
-    assert freqs2.shape == freqs_shape
-    assert timepts2.shape == (n_timepts,)
-    assert np.allclose(sync2, sync, rtol=1e-4, atol=1e-4)
+    # Note: Returning phase not allowed for single-trial estimate, so skip in that case
+    if not single_trial:
+        extra_args['return_phase'] = False
+        sync2, freqs2, timepts2 = synchrony(data1, data2, **extra_args)
+        assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
+        assert np.array_equal(data2,data2_orig)
+        assert freqs2.shape == freqs_shape
+        assert timepts2.shape == (n_timepts,)
+        assert np.allclose(sync2, sync, rtol=1e-4, atol=1e-4)
+        extra_args['return_phase'] = True
 
     # Test for consistent output with reversed time axis (dphi should change sign, otherwise same)
     # Skip test for multitaper/bandfilter phase, bandfilter sync -- not time-reversal invariant
-    sync, freqs, timepts, dphi = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
-                                           axis=0, method=method, spec_method=spec_method,
-                                           return_phase=True, smp_rate=smp_rate, time_axis=-1)
+    if single_trial:
+        sync, freqs, timepts = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
+                                         **extra_args)
+    else:
+        sync, freqs, timepts, dphi = synchrony(np.flip(data1,axis=-1), np.flip(data2,axis=-1),
+                                               **extra_args)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     # HACK Bandfilter not time-reversal invariant due to initial conditions
     if spec_method != 'bandfilter':
         assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
     # HACK Only synchrony magnitude -- not phase -- is time-reversal invariant for multitaper
-    if spec_method == 'wavelet':
+    if not single_trial and (spec_method == 'wavelet'):
         assert np.isclose(dphi.mean(), -result[1], rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with channels swapped (dphi should change sign, otherwise same)
     # Skip test for multitaper/bandfilter phase -- not time-reversal invariant
-    sync, freqs, timepts, dphi = synchrony(data2, data1, axis=0, method=method,
-                                           spec_method=spec_method, return_phase=True,
-                                           smp_rate=smp_rate, time_axis=-1)
+    if single_trial:    sync, freqs, timepts = synchrony(data2, data1, **extra_args)
+    else:               sync, freqs, timepts, dphi = synchrony(data2, data1, **extra_args)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
-    if spec_method == 'wavelet':
+    if not single_trial and (spec_method == 'wavelet'):
         assert np.isclose(dphi.mean(), -result[1], rtol=1e-4, atol=1e-4)
 
     # Test for consistent output with different data array shape (3rd axis)
-    sync, freqs, timepts, dphi = synchrony(np.stack((data1,data1),axis=2),
-                                           np.stack((data2,data2),axis=2),
-                                           axis=0, method=method, spec_method=spec_method,
-                                           return_phase=True, smp_rate=smp_rate, time_axis=1)
+    extra_args['time_axis'] = 1
+    if single_trial:
+        sync, freqs, timepts = synchrony(np.stack((data1,data1),axis=2),
+                                         np.stack((data2,data2),axis=2), **extra_args)
+    else:
+        sync, freqs, timepts, dphi = synchrony(np.stack((data1,data1),axis=2),
+                                               np.stack((data2,data2),axis=2), **extra_args)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
-    assert sync.shape == (n_freqs, n_timepts, 2)
-    assert dphi.shape == (n_freqs, n_timepts, 2)
+    assert sync.shape == (*sync_shape, 2)
     assert np.issubdtype(sync.dtype,float)
-    assert np.issubdtype(dphi.dtype,float)
     # HACK Loosen tolerance bc this doesn't quite match up for bandfilter (TODO why???)
-    assert np.isclose(sync[:,:,0].mean(), result[0], rtol=1e-3, atol=1e-3)
-    assert np.isclose(dphi[:,:,0].mean(), result[1], rtol=1e-3, atol=1e-3)
+    if single_trial:
+        assert np.isclose(sync[...,0].mean(), result[0], rtol=1e-3, atol=1e-3)
+    else:
+        assert np.isclose(sync[...,0].mean(), result[0], rtol=1e-3, atol=1e-3)
+        assert dphi.shape == (*sync_shape, 2)
+        assert np.issubdtype(dphi.dtype,float)
+        assert np.isclose(dphi[...,0].mean(), result[1], rtol=1e-3, atol=1e-3)
+    extra_args['time_axis'] = -1
 
     # Test for consistent output with transposed data dimensionality -> (time,trials)
-    sync, freqs, timepts, dphi = synchrony(data1.T, data2.T, axis=-1, method=method,
-                                           spec_method=spec_method,return_phase=True,
-                                           smp_rate=smp_rate, time_axis=0)
+    transposed_shape = (*sync_shape[1:],sync_shape[0])
+    extra_args.update(axis=-1, time_axis=0)
+    if single_trial:    sync, freqs, timepts = synchrony(data1.T, data2.T, **extra_args)
+    else:               sync, freqs, timepts, dphi = synchrony(data1.T, data2.T, **extra_args)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
-    assert sync.shape == (n_freqs, n_timepts)
-    assert dphi.shape == (n_freqs, n_timepts)
+    assert sync.shape == transposed_shape
     assert np.issubdtype(sync.dtype,float)
-    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
-    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    if not single_trial:
+        assert np.issubdtype(dphi.dtype,float)
+        assert dphi.shape == transposed_shape
+        assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    extra_args.update(axis=0, time_axis=-1)
+
+    # Test for consistent output with keepdims=False (reduced trial axis)
+    reduced_shape = tuple([j for j in sync_shape if j != 1])
+    # reduced_shape = sync_shape if single_trial else sync_shape[1:]
+    extra_args['keepdims'] = False
+    if single_trial:    sync, freqs, timepts = synchrony(data1, data2, **extra_args)
+    else:               sync, freqs, timepts, dphi = synchrony(data1, data2, **extra_args)
+    assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
+    assert np.array_equal(data2,data2_orig)
+    assert sync.shape == reduced_shape
+    assert np.issubdtype(sync.dtype,float)
+    assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
+    if not single_trial:
+        assert np.issubdtype(dphi.dtype,float)
+        assert dphi.shape == reduced_shape
+        assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    extra_args['keepdims'] = True
 
     # Test for consistent output with spectral data input
-    extra_args = dict(axis=1, method=spec_method, spec_type='complex')
-    if spec_method == 'multitaper': extra_args.update(keep_tapers=True)
-    spec1, freqs, timepts = spectrogram(data1, smp_rate, **extra_args)
-    spec2, freqs, timepts = spectrogram(data2, smp_rate, **extra_args)
-    sync, _, _, dphi = synchrony(spec1, spec2, axis=0, taper_axis=2, method=method,
-                                 spec_method=spec_method, return_phase=True)
+    spec_args = dict(axis=1, method=spec_method, spec_type='complex')
+    if spec_method == 'multitaper': spec_args.update(keep_tapers=True)
+    spec1, freqs, timepts = spectrogram(data1, smp_rate, **spec_args)
+    spec2, freqs, timepts = spectrogram(data2, smp_rate, **spec_args)
+    extra_args['taper_axis'] = 2
+    if single_trial:    sync, _, _ = synchrony(spec1, spec2, **extra_args)
+    else:               sync, _, _, dphi = synchrony(spec1, spec2, **extra_args)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
-    assert sync.shape == (n_freqs, n_timepts)
-    assert dphi.shape == (n_freqs, n_timepts)
+    assert sync.shape == sync_shape
     assert np.issubdtype(sync.dtype,float)
-    assert np.issubdtype(dphi.dtype,float)
     assert np.isclose(sync.mean(), result[0], rtol=1e-4, atol=1e-4)
-    assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
+    if not single_trial:
+        assert np.issubdtype(dphi.dtype,float)
+        assert dphi.shape == sync_shape
+        assert np.isclose(dphi.mean(), result[1], rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises((TypeError,AssertionError)):
-        sync, freqs, timepts, dphi = synchrony(data1, data2, axis=0, method=method,
-                                            spec_method=spec_method, return_phase=True,
-                                            smp_rate=smp_rate, time_axis=-1, foo=None)
+        extra_args['foo'] = None
+        if single_trial:    sync, freqs, timepts = synchrony(data1, data2, **extra_args)
+        else:               sync, freqs, timepts, dphi = synchrony(data1, data2, **extra_args)
 
 
 @pytest.mark.parametrize('method, spec_method, result',
@@ -365,4 +416,3 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                             method=method, spec_method=spec_method,
                                                             smp_rate=smp_rate, return_phase=True,
                                                             foo=None, **extra_args)
-        

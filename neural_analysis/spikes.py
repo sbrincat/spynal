@@ -101,8 +101,8 @@ def rate(data, method='bin', **kwargs):
     rates       (...,n_timepts) ndarray | (...,n_timepts,...) ndarray.
                 Estimated spike rates (in spk/s) using given method.
 
-    timepts     For bin: (n_timepts,) ndarray. Time sampling vector (in s).
-                For density: (n_bins,2) ndarray. [start,end] of each time bin (in s).
+    timepts     For density: (n_timepts,) ndarray. Time sampling vector (in s).
+                For bin: (n_bins,2) ndarray. [start,end] of each time bin (in s).
     """
     if method in ['bin','bins','bin_rate','psth']:      rate_func = bin_rate
     elif method in ['density','spike_density','sdf']:   rate_func = density

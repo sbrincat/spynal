@@ -29,7 +29,8 @@ Created on Thu Oct  4 15:28:15 2018
 from warnings import warn
 import numpy as np
 
-from neural_analysis.utils import set_random_seed, setup_sliding_windows, index_axis
+from neural_analysis.utils import set_random_seed, setup_sliding_windows, index_axis, \
+                                  axis_index_slices
 from neural_analysis.spectra import spectrogram, simulate_oscillation
 from neural_analysis.randstats import jackknifes
 
@@ -99,8 +100,8 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, **kwargs):
 
 
 def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_trial=None,
-              spec_method='wavelet', data_type=None, smp_rate=None, time_axis=None, taper_axis=None,
-              ztransform=None, **kwargs):
+              spec_method='wavelet', data_type=None, smp_rate=None, time_axis=None,
+              taper_axis=None, keepdims=True, ztransform=None,  **kwargs):
     """
     Computes pairwise coherence between pair of channels of raw or
     spectral (time-frequency) data (LFP or spikes)
@@ -108,7 +109,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     coh,freqs,timepts[,dphi] = coherence(data1,data2,axis=0,return_phase=False,
                                          transform=None,single_trial=None,
                                          spec_method='wavelet',data_type=None,smp_rate=None,
-                                         time_axis=None,taper_axis=None,**kwargs)
+                                         time_axis=None,taper_axis=None,keepdims=True,**kwargs)
 
     ARGS
     data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
@@ -136,8 +137,6 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
                 'richter'   single-trial estimates using actual jackknife estimates
                             as in Richter & Fries 2015
 
-    ztransform  DEPRECATED. Use transform='Z' instead!
-
     data_type   Str. What kind of data are we given in data1,data2:
                 'raw' or 'spectral'
                 Default: assume 'raw' if data is real; 'spectral' if complex
@@ -154,13 +153,19 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for
                 multitaper spectral data)
 
+    keepdims    Bool. If True [default], retains reduced trial,taper axes as singleton axes
+                in output arrays. If False, removes reduced trial,taper axes from outputs.
+
+    ztransform  DEPRECATED. Use transform='Z' instead!
+
     **kwags     Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
     coh     ndarray. Magnitude of coherence between data1 and data2.
-            If data is spectral, this has shape as data, but with <axis> removed.
-            If data is raw, this has same shape with <axis> removed and a new
-            frequency axis inserted immediately before <time_axis>.
+            If data is spectral, this has same shape as data, but with <axis> reduced
+            to a singleton or removed, depending on value of <keepdims>.
+            If data is raw, this has same shape as data with <axis> reduced or removed
+            and a new frequency axis inserted immediately before <time_axis>.
 
     freqs   (n_freqs,) ndarray. List of frequencies in <coh>.
             Only returned for raw data, [] otherwise.
@@ -168,7 +173,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     timepts (n_timepts,) ndarray. List of timepoints in <coh> (in s, referenced to start of
             data). Only returned for raw data, [] otherwise.
 
-    dphi   ndarray. Coherence phase in radians.
+    dphi   ndarray. Coherence phase in radians. Same shape as <coh>.
            Positive values correspond to data1 leading data2.
            Negative values correspond to data1 lagging behind data2.
            Optional: Only returned if return_phase is True.
@@ -199,72 +204,84 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     # For multitaper, compute means across trials, tapers; degrees of freedom = 2*n_trials*n_tapers
     if spec_method == 'multitaper':
         reduce_axes = (axis,taper_axis)
-        n = np.prod([data1.shape[ax] for ax in reduce_axes])
+        df = 2*np.prod([data1.shape[ax] for ax in reduce_axes])
     # Otherwise just do means across trials; df = 2*n_trials
     else:
         reduce_axes = axis
-        n = data1.shape[axis]   # TODO Should n be this or 2*this???
-    df = 2*n
+        df = 2*data1.shape[axis]
 
-    # Setup actual function call for any transform to compute on raw PLV values
+    # Setup actual function call for any transform to compute on raw coherence values
     if (transform is None) or callable(transform):
         transform_ = transform
+    elif transform.lower() in ['z','ztransform']:
+        transform_ = lambda coh: ztransform_coherence(coh, df)
     else:
-        if transform.lower() in ['z','ztransform']:
-            transform_ = lambda coh: ztransform_coherence(coh, df)
-        else:
-            raise ValueError("Unsupported value '%s' set for <transform>" % transform)
+        raise ValueError("Unsupported value '%s' set for <transform>" % transform)
 
-    def _spec_to_coh(data1, data2, axis, return_phase, transform):
-        """ Compute coherence from a pair of spectra/spectrograms """
-        # Compute auto-spectra, average across trials/tapers
+    # Compute cross-spectrum and auto-spectrum of each channel
+    auto_spec1 = data1*data1.conj()
+    auto_spec2 = data2*data2.conj()
+    cross_spec = data1*data2.conj()
+
+    def _cross_auto_to_coh(cross_spec, auto_spec1, auto_spec2, axis,
+                           return_phase, transform, keepdims):
+        """ Compute coherence from cross-spectrum and pair of auto-spectra """
+        # Average spectra across observatations (trials and/or tapers)
         # Note: .real deals with floating point error, converts complex dtypes to float
-        spec1 = np.mean(data1*data1.conj(), axis=axis).real
-        spec2 = np.mean(data2*data2.conj(), axis=axis).real
+        auto_spec1 = np.mean(auto_spec1, axis=axis, keepdims=keepdims).real
+        auto_spec2 = np.mean(auto_spec2, axis=axis, keepdims=keepdims).real
+        cross_spec = np.mean(cross_spec, axis=axis, keepdims=keepdims)
 
-        if return_phase:
-            # Compute cross spectrum, average across trials/tapers
-            cross_spec = np.mean(data1*data2.conj(), axis=axis)
+        # Calculate complex coherency as cross-spectrum / product of square root of spectra
+        coherency = cross_spec / np.sqrt(auto_spec1*auto_spec2)
 
-            # Calculate complex coherency as cross-spectrum / product of spectra
-            coherency = cross_spec / np.sqrt(spec1*spec2)
+        # Convert complex coherency -> coherence (magnitude of coherency)
+        coherence = np.abs(coherency).real
 
-            # Absolute value converts complex coherency -> coherence
-            # Angle extracts mean coherence phase angle
-            # Note: .real deals with floating point error, converts complex dtypes to float
-            if transform is None:
-                return np.abs(coherency).real, np.angle(coherency)
-            else:
-                return transform(np.abs(coherency).real), np.angle(coherency)
+        # Perform any requested tranform on coherence (eg z-scoring)
+        if transform is not None: coherence = transform(coherence)
 
-        else:
-            # Compute cross spectrum, average across trials/tapers,
-            # and take absolute value (bc phase not needed)
-            cross_spec = np.abs(np.mean(data1*data2.conj(), axis=axis)).real
+        # Optionally also extract coherence phase angle
+        if return_phase:    return coherence, np.angle(coherency)
+        else:               return coherence, None
 
-            # Calculate coherence as cross-spectrum / product of spectra
-            if transform is None:
-                return cross_spec / np.sqrt(spec1*spec2)
-            else:
-                return transform(cross_spec / np.sqrt(spec1*spec2))
 
     # Standard across-trial coherence estimator
     if single_trial is None:
-        if return_phase:
-            coh, dphi = _spec_to_coh(data1, data2, reduce_axes, return_phase, transform_)
-        else:
-            coh = _spec_to_coh(data1, data2, reduce_axes, return_phase, transform_)
+        coh, dphi = _cross_auto_to_coh(cross_spec, auto_spec1, auto_spec2, reduce_axes,
+                                        return_phase, transform_, keepdims)
 
     # Single-trial coherence estimator using jackknife resampling method
     else:
-        # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
-        jackfunc = lambda data1,data2: _spec_to_coh(data1, data2, 0, False, transform_)
-        # Jackknife resampling of PLV statistic (this is the 'richter' estimator)
-        coh = two_sample_jackknife(jackfunc, data1, data2, axis=reduce_axes)
+        # Jackknife resampling of coherence statistic (this is the 'richter' estimator)
+        # Note: Allow for reduction along taper axis within resampled stat function, but only
+        #       resample across trial axis--want sync estimates for single-trials, not tapers
+        jackfunc = lambda s12,s1,s2: _cross_auto_to_coh(s12, s1, s2, reduce_axes,
+                                                        False, transform_, True)[0]
+        coh_shape = list(cross_spec.shape)
+        if spec_method == 'multitaper': coh_shape[taper_axis] = 1
+        n_jack = coh_shape[axis]
+        ndim = len(coh_shape)
+
+        # Create generator with n length-n vectors, each of which excludes 1 trial
+        resamples = jackknifes(n_jack)
+
+        # Do jackknife resampling -- estimate statistic w/ each observation left out
+        coh = np.empty(coh_shape, dtype=float)
+        for trial,sel in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            slices_in   = axis_index_slices(axis, sel, ndim)
+            slices_out  = axis_index_slices(axis, [trial], ndim)
+            coh[slices_out] = jackfunc(cross_spec[slices_in],
+                                       auto_spec1[slices_in], auto_spec2[slices_in])
+
         # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
+        # Note: n here is the number of jackknifes computed = n_trials
         if single_trial == 'pseudo':
-            coh_full = _spec_to_coh(data1, data2, reduce_axes, False, transform_)
-            coh = jackknife_to_pseudoval(coh_full, coh, n)
+            coh_full = jackfunc(cross_spec, auto_spec1, auto_spec2)
+            coh = jackknife_to_pseudoval(coh_full, coh, data1.shape[axis])
+
+        if not keepdims and (spec_method == 'multitaper'): coh = coh.squeeze(axis=taper_axis)
 
     if return_phase:    return coh, freqs, timepts, dphi
     else:               return coh, freqs, timepts
@@ -298,7 +315,7 @@ def ztransform_coherence(coh, df, beta=23/20):
 
 def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=None,
         spec_method='wavelet', data_type=None, smp_rate=None,
-        time_axis=None, taper_axis=None, **kwargs):
+        time_axis=None, taper_axis=None, keepdims=True, **kwargs):
     """
     Computes phase locking value (PLV) between raw or spectral (time-frequency) LFP data
 
@@ -310,18 +327,18 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
     PLV,freqs,timepts[,dphi] = plv(data1,data2,axis=0,return_phase=False,
                                    transform=None,single_trial=None,
                                    spec_method='wavelet',data_type=None,smp_rate=None,
-                                   time_axis=None,taper_axis=None,**kwargs)
+                                   time_axis=None,taper_axis=None,keepdims=True,**kwargs)
 
     ARGS
-    data1,2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
-            Can be given as raw LFPs or complex-valued time-frequency transform.
+    data1,2     (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
+                Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
-            For raw data, axis corresponding to time must be given in <time_axis>.
+                Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+                For raw data, axis corresponding to time must be given in <time_axis>.
 
-            Other than those constraints, data can have arbitrary shape, with analysis
-            performed independently along each dimension other than observation <axis>
-            (eg different frequencies, timepoints, conditions, etc.)
+                Other than those constraints, data can have arbitrary shape, with analysis
+                performed independently along each dimension other than observation <axis>
+                (eg different frequencies, timepoints, conditions, etc.)
 
     axis        Int. Axis corresponding to distinct observations/trials. Default: 0
 
@@ -353,24 +370,27 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
     taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for
                 multitaper spectral data)
 
+    keepdims    Bool. If True [default], retains reduced trial,taper axes as singleton axes
+                in output arrays. If False, removes reduced trial,taper axes from outputs.
+
     **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    PLV     ndarray. Phase locking value between data1 and data2.
-            If data is spectral, this has shape as data, but with <axis> removed.
-            If data is raw, this has same shape with <axis> removed and a new
-            frequency axis inserted immediately before <time_axis>.
+    PLV         ndarray. Phase locking value between data1 and data2.
+                If data is spectral, this has same shape as data, but with <axis> removed.
+                If data is raw, this has same shape with <axis> removed and a new
+                frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in <PLV>.
-            Only returned for raw data, [] otherwise.
+    freqs       (n_freqs,). List of frequencies in <PLV>.
+                Only returned for raw data, [] otherwise.
 
-    timepts (n_timepts,). List of timepoints in <PLV> (in s, referenced to start of
-            data). Only returned for raw data, [] otherwise.
+    timepts     (n_timepts,). List of timepoints in <PLV> (in s, referenced to start of
+                data). Only returned for raw data, [] otherwise.
 
-    dphi    ndarray. Mean phase difference between data1 and data2 in radians.
-            Positive values correspond to data1 leading data2.
-            Negative values correspond to data1 lagging behind data2.
-            Optional: Only returned if return_phase is True.
+    dphi        ndarray. Mean phase difference between data1 and data2 in radians.
+                Positive values correspond to data1 leading data2.
+                Negative values correspond to data1 lagging behind data2.
+                Optional: Only returned if return_phase is True.
 
     REFERENCES
     Lachaux et al. (1999) Human Brain Mapping
@@ -403,59 +423,74 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
         else:
             raise ValueError("Unsupported value '%s' set for <transform>" % transform)
 
+    # Compute normalized cross-spectrum btwn the two channels
+    # Cross-spectrum-based method adapted from FieldTrip ft_conectivity_ppc()
+    # Note: Traditional circular mean-based algorithm is ~3x slower
+    cross_spec = data1*data2.conj()                 # Compute cross-spectrum
+    cross_spec = cross_spec / np.abs(cross_spec)    # Normalize cross-spectrum
+
+
+    def _cross_to_plv(cross_spec, axis, return_phase, transform, keepdims):
+        """ Compute PLV from cross-spectrum """
+        # Vector-average complex spectra across observatations (trials and/or tapers)
+        vector_mean = np.mean(cross_spec, axis=axis, keepdims=keepdims)
+
+        # Compute PLV = magnitude of complex vector mean = mean resultant length
+        # Note: .real deals with floating point error, converts complex dtypes to float
+        PLV = np.abs(vector_mean).real
+
+        # Perform any requested tranform on PLV (eg convert to PPC)
+        if transform is not None: PLV = transform(PLV)
+
+        # Optionally also extract mean relative phase angle
+        if return_phase:    return PLV, np.angle(vector_mean)
+        else:               return PLV, None
+
+
     # Standard across-trial PLV estimator
     if single_trial is None:
-        if return_phase:
-            PLV,dphi = _spec_to_plv(data1, data2, reduce_axes, return_phase, transform_, False)
-            return  PLV, freqs, timepts, dphi
-
-        else:
-            PLV = _spec_to_plv(data1, data2, reduce_axes, return_phase, transform_, False)
-            return  PLV, freqs, timepts
+        PLV, dphi = _cross_to_plv(cross_spec, reduce_axes, return_phase, transform_, keepdims)
 
     # Single-trial PLV estimator using jackknife resampling method
     else:
-        # Note: two_sample_jackknife() (temporarily) shifts trial axis to 0, so axis=0 here
-        jackfunc = lambda data1,data2: _spec_to_plv(data1, data2, 0, False, transform_, False)
         # Jackknife resampling of PLV statistic (this is the 'richter' estimator)
-        PLV = two_sample_jackknife(jackfunc, data1, data2, axis=reduce_axes)
-        # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
-        if single_trial == 'pseudo':
-            plv_full = _spec_to_plv(data1, data2, reduce_axes, False, transform_, True)
-            PLV = jackknife_to_pseudoval(plv_full, PLV, n)
+        # Note: Allow for reduction along taper axis within resampled stat function, but only
+        #       resample across trial axis--want sync estimates for single-trials, not tapers
+        jackfunc = lambda s12: _cross_to_plv(s12, reduce_axes, False, transform_, True)[0]
+        plv_shape = list(data1.shape)
+        if spec_method == 'multitaper': plv_shape[taper_axis] = 1
+        n_jack = plv_shape[axis]
+        ndim = len(plv_shape)
 
-        return  PLV, freqs, timepts
+        # Create generator with n length-n vectors, each of which excludes 1 trial
+        resamples = jackknifes(n_jack)
+
+        # Do jackknife resampling -- estimate statistic w/ each observation left out
+        PLV = np.empty(plv_shape, dtype=float)
+        for trial,sel in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            slices_in   = axis_index_slices(axis, sel, ndim)
+            slices_out  = axis_index_slices(axis, [trial], ndim)
+            PLV[slices_out] = jackfunc(cross_spec[slices_in])
+
+        # Convert to jackknife pseudovalues = n*stat_full - (n-1)*stat_jackknife
+        # Note: n here is the number of jackknifes computed = n_trials
+        if single_trial == 'pseudo':
+            plv_full = jackfunc(cross_spec)
+            PLV = jackknife_to_pseudoval(plv_full, PLV, data1.shape[axis])
+
+        if not keepdims and (spec_method == 'multitaper'): PLV = PLV.squeeze(axis=taper_axis)
+
+    if return_phase:    return  PLV, freqs, timepts, dphi
+    else:               return  PLV, freqs, timepts
 
 # Alias function plv as phase_locking_value
 phase_locking_value = plv
 
 
-def _spec_to_plv(data1, data2, axis, return_phase, transform, keepdims):
-    """ Compute PLV from a pair of complex spectra/spectrograms """
-    # Cross-spectrum-based method adapted from FieldTrip ft_conectivity_ppc()
-    # Note: circular mean-based algorithm is ~3x slower
-    cross_spec = data1*data2.conj()                 # Compute cross-spectrum
-    cross_spec = cross_spec / np.abs(cross_spec)    # Normalize cross-spectrum
-
-    if return_phase:
-        # Compute vector mean across trial/observations
-        vector_mean = np.mean(cross_spec, axis=axis, keepdims=keepdims)
-        # Compute PLV, phase difference as absolute value, angle of vector mean
-        if transform is None:
-            return np.abs(vector_mean), np.angle(vector_mean)
-        else:
-            return transform(np.abs(vector_mean)), np.angle(vector_mean)
-    else:
-        # Compute vector mean across trial/observations -> absolute value
-        if transform is None:
-            return np.abs(np.mean(cross_spec, axis=axis, keepdims=keepdims))
-        else:
-            return transform(np.abs(np.mean(cross_spec, axis=axis, keepdims=keepdims)))
-
-
 def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
         spec_method='wavelet', data_type=None, smp_rate=None,
-        time_axis=None, taper_axis=None, **kwargs):
+        time_axis=None, taper_axis=None, keepdims=True, **kwargs):
     """
     Computes pairwise phase consistency (PPC) between raw or spectral
     (time-frequency) LFP data, which is bias-corrected (unlike PLV and coherence,
@@ -471,18 +506,18 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
 
     PPC,freqs,timepts[,dphi] = ppc(data1,data2,axis=0,return_phase=False,single_trial=None,
                                    spec_method='wavelet',data_type=None,smp_rate=None,
-                                   time_axis=None,taper_axis=None,**kwargs)
+                                   time_axis=None,taper_axis=None,keepdims=True,**kwargs)
 
     ARGS
-    data1,data2   (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
-            Can be given as raw LFPs or complex-valued time-frequency transform.
+    data1,data2 (...,n_obs,...) ndarrays. Single-channel LFP data for 2 distinct channels.
+                Can be given as raw LFPs or complex-valued time-frequency transform.
 
-            Trial/observation axis is assumed to be axis 0 unless given in <axis>.
-            For raw data, axis corresponding to time must be given in <time_axis>.
+                Trial/observation axis is assumed to be axis 0 unless given in <axis>.
+                For raw data, axis corresponding to time must be given in <time_axis>.
 
-            Other than those constraints, data can have arbitrary shape, with analysis
-            performed independently along each dimension other than observation <axis>
-            (eg different frequencies, timepoints, conditions, etc.)
+                Other than those constraints, data can have arbitrary shape, with analysis
+                performed independently along each dimension other than observation <axis>
+                (eg different frequencies, timepoints, conditions, etc.)
 
     axis        Int. Axis corresponding to distinct observations/trials. Default: 0
 
@@ -509,24 +544,27 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
     taper_axis  Int. Axis of spectral data corresponding to tapers (ONLY needed for
                 multitaper spectral data)
 
+    keepdims    Bool. If True [default], retains reduced trial,taper axes as singleton axes
+                in output arrays. If False, removes reduced trial,taper axes from outputs.
+
     **kwargs    Any other keyword args passed as-is to spectrogram() function.
 
     RETURNS
-    PPC     Pairwise phase consistency between data1 and data2.
-            If data is spectral, this has shape as data, but with <axis> removed.
-            If data is raw, this has same shape with <axis> removed and a new
-            frequency axis inserted immediately before <time_axis>.
+    PPC         Pairwise phase consistency between data1 and data2.
+                If data is spectral, this has same shape as data, but with <axis> removed.
+                If data is raw, this has same shape with <axis> removed and a new
+                frequency axis inserted immediately before <time_axis>.
 
-    freqs   (n_freqs,). List of frequencies in <coh>.
-            Only returned for raw data, [] otherwise.
+    freqs       (n_freqs,). List of frequencies in <coh>.
+                Only returned for raw data, [] otherwise.
 
-    timepts (n_timepts,). List of timepoints in <coh> (in s, referenced to start of
-            data). Only returned for raw data, [] otherwise.
+    timepts     (n_timepts,). List of timepoints in <coh> (in s, referenced to start of
+                data). Only returned for raw data, [] otherwise.
 
-    dphi    ndarray. Mean phase difference between data1 and data2 in radians.
-            Positive values correspond to data1 leading data2.
-            Negative values correspond to data1 lagging behind data2.
-            Optional: Only returned if return_phase is True.
+    dphi        ndarray. Mean phase difference between data1 and data2 in radians.
+                Positive values correspond to data1 leading data2.
+                Negative values correspond to data1 lagging behind data2.
+                Optional: Only returned if return_phase is True.
 
     REFERENCES
     Original concept:   Vinck et al. (2010) NeuroImage
@@ -535,7 +573,8 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
     # Simply call plv() with a 'PPC' transform
     return plv(data1, data2, axis=axis, return_phase=return_phase, transform='PPC',
                single_trial=single_trial, spec_method=spec_method, data_type=data_type,
-               smp_rate=smp_rate,  time_axis=time_axis, taper_axis=taper_axis, **kwargs)
+               smp_rate=smp_rate,  time_axis=time_axis, taper_axis=taper_axis,
+               keepdims=keepdims, **kwargs)
 
 # Alias function ppc as pairwise_phase_consistency
 pairwise_phase_consistency = ppc
@@ -609,7 +648,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', time_axis=None,
 
     RETURNS
     sync    ndarray. Magnitude of spike-field coupling (coherence or PLV/PPC magnitude).
-            If data is spectral, this has shape as data, but with <axis> removed.
+            If data is spectral, this has same shape as data, but with <axis> removed.
             If data is raw, this has same shape with <axis> removed and a new
             frequency axis inserted immediately before <time_axis>.
 
@@ -1163,10 +1202,9 @@ spike_field_pairwise_phase_consistency = spike_field_ppc
 # =============================================================================
 # Utility functions for generating single-trial jackknife pseudovalues
 # =============================================================================
-def two_sample_jackknife(func, data1, data2, *args, axis=0, **kwargs):
+def two_sample_jackknife(func, data1, data2, *args, axis=0, shape=None, dtype=None, **kwargs):
     """
-    Jackknife resampling of arbitrary statistic
-    computed by <func> on <data1> and <data2>
+    Jackknife resampling of arbitrary statistic computed by <func> on <data1> and <data2>
 
     ARGS
     func    Callable. Takes data1,data2 (and optionally any *args and **kwargs) as input,
@@ -1176,30 +1214,31 @@ def two_sample_jackknife(func, data1, data2, *args, axis=0, **kwargs):
 
     axis    Int. Observation (trial) axis of data1 and data2. Default: 0
 
+    shape   Seq of ints. Shape for output array <stat>. Default: data1.shape (same as input)
+    dtype   String. dtype for output array <stat>. Default: data1.dtype (same as input)
+
     *args,**kwargs  Any additional arguments passed directly to <func>
 
     RETURNS
     stat    ndarray of same size as data1,data2. Jackknife resamples of statistic.
     """
+    if shape is None: shape = data1.shape
+    if dtype is None: dtype = data1.dtype
 
-    # If observation axis != 0, permute axis to make it so
-    if axis != 0:
-        data1 = np.moveaxis(data1,axis,0)
-        data2 = np.moveaxis(data2,axis,0)
-
-    n = data1.shape[0]
-
-    stat = np.zeros_like(data1)
+    n = data1.shape[axis]
+    ndim = data1.ndim
 
     # Create generator with n length-n vectors, each of which excludes 1 trial
     resamples = jackknifes(n)
 
+    stat = np.empty(shape, dtype=dtype)
+
     # Do jackknife resampling -- estimate statistic w/ each observation left out
     for trial,sel in enumerate(resamples):
-        stat[trial,...] = func(data1[sel,...], data2[sel,...], *args, **kwargs)
-
-    # If observation axis wasn't 0, permute axis back to original position
-    if axis != 0: stat = np.moveaxis(stat,0,axis)
+        # Index into <axis> of data and stat, with ':' for all other axes
+        slices_in   = axis_index_slices(axis, sel, ndim)
+        slices_out  = axis_index_slices(axis, [trial], ndim)
+        stat[slices_out] = func(data1[slices_in], data2[slices_in], *args, **kwargs)
 
     return stat
 
@@ -1220,7 +1259,7 @@ def jackknife_to_pseudoval(x, xjack, n):
     n       Int. Number of observations (trials) used to compute x
 
     RETURNS
-    pseudo  ndarray of same shape as x. Single-trial jackknifed pseudovalues.
+    pseudo  ndarray of same shape as xjack. Single-trial jackknifed pseudovalues.
     """
     return n*x - (n-1)*xjack
 
