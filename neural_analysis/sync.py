@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-sync    A module for analysis of neural synchrony
+sync    A module for analysis of oscillatory neural synchrony
 
 FUNCTIONS
 ### Field-field synchrony ###

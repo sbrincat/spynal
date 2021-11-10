@@ -2,6 +2,40 @@
 """
 randstats     A module for nonparametric randomization, permutation, and bootstrap statistics
 
+Functionality for hypothesis significance testing and confidence interval computation based on
+random resampling of the observed data. This uses the data itself to generate an expected
+distribution for the null hypothesis, and does not rely on any specific assumptions about
+the form of the data distribution(s).
+
+Includes tests/confints for several common data schemes:
+- one-sample (are data values different from 0 or baseline?)
+- paired-sample difference (are paired data observations different?)
+- two-sample difference (are two groups/conditions of data different?)
+- one-way difference (is there some difference between multiple groups/conditions of data?)
+- two-way analysis (for data varying along 2 dims, are there diff's along each and/or interaction?)
+
+Most significance tests include options for either permutation (shuffle) or bootstrap methods.
+
+All functions can compute tests/confints based on random resampling of a default statistic typical
+for given data scheme (eg t-statistic, F-statistic) or on any custom user-input statistic.
+
+For data not conforming to the above schemes, there is also direct access to low-level functions
+for generating samples for permutation or bootstraps in your own code.
+
+Most functions perform operations in a mass-univariate manner. This means that
+rather than embedding function calls in for loops over channels, timepoints, etc., like this:
+
+for channel in channels:
+    for timepoint in timepoints:
+        results[timepoint,channel] = compute_something(data[timepoint,channel])
+
+You can instead execute a single call on ALL the data, labeling the relevant axis
+for the computation (usually trials/observations here), and it will run in parallel (vectorized)
+across all channels, timepoints, etc. in the data, like this:
+
+results = compute_something(data, axis)
+
+
 FUNCTIONS
 ### One-sample tests (analogs of 1-sample t-test) ###
 one_sample_test                 Wrapper for all 1-sample tests (~ 1-sample t-test)
@@ -55,7 +89,7 @@ from math import sqrt
 from warnings import warn
 import numpy as np
 
-from neural_analysis.utils import set_random_seed
+from neural_analysis.utils import set_random_seed, axis_index_slices
 
 
 # =============================================================================
@@ -168,16 +202,18 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.6.2
     """
-    # Convert string specifiers to callable functions
-    stat_func    = _str_to_one_sample_stat(stat)    # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
-
     # Copy data variable to avoid changing values in caller
     data = data.copy()
 
-    # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data, axis, 0)
-    n = data.shape[0]
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data.ndim + axis
+
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_one_sample_stat(stat,axis)   # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+
+    n = data.shape[axis]
+    ndim = data.ndim
 
     # Subtract hypothetical mean(s) 'mu' from data to center them there
     if mu != 0:  data -= mu
@@ -190,38 +226,37 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        stat_resmp = np.empty((n_resamples-1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data.shape)]
+        stat_resmp = np.empty(stat_shape)
         for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
             # Randomly flip signs of obervations flagged by random variables above
-            data[resample,...] *= -1
+            data[data_slices] *= -1
             # Compute statistic on resampled data
-            stat_resmp[i_resmp,...] = stat_func(data, **kwargs)
+            stat_resmp[stat_slices] = stat_func(data, **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data.shape)]
+        count = np.ones(stat_shape)
         for resample in resamples:
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
             # Randomly flip signs of obervations flagged by random variables above
-            data[resample,...] *= -1
+            data[data_slices] *= -1
             # Compute statistic on resampled data and tally values passing criterion
             count += compare_func(stat_obs, stat_func(data, **kwargs))
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -305,13 +340,15 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch. 3.10
     """
-    # Convert string specifiers to callable functions
-    stat_func    = _str_to_one_sample_stat(stat)    # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data.ndim + axis
 
-    # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data, axis, 0)
-    n = data.shape[0]
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_one_sample_stat(stat,axis)   # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+
+    ndim = data.ndim
+    n = data.shape[axis]
 
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data, **kwargs)
@@ -321,28 +358,35 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        stat_resmp = np.empty((n_resamples-1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data.shape)]
+        stat_resmp = np.empty(stat_shape)
         for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
             # Compute statistic on resampled data
-            stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)
+            stat_resmp[stat_slices] = stat_func(data[data_slices], **kwargs)
 
         # Center each resampled statistic on their mean to approximate null disttribution
         # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
-        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)
+        # stat_resmp -= stat_resmp.mean(axis=axis,keepdims=True)
 
         # p value = proportion of bootstrap-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs - mu, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs - mu, stat_resmp, axis, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data.shape)]
+        count = np.ones(stat_shape)
         for resample in resamples:
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
             # Compute statistic on resampled data
-            stat_resmp = stat_func(data[resample,...])
+            stat_resmp = stat_func(data[data_slices])
 
             # Subtract observed statistic from distribution of resampled statistics
             stat_resmp -= stat_obs
@@ -352,15 +396,6 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
-        # TODO Is it really necessary to reshape data to avoid changing in caller???
-        data = np.moveaxis(data, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -467,15 +502,19 @@ def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups
     labels = np.asarray(labels)
     if groups is None: groups = np.unique(labels)
 
-    n1 = (labels == groups[0]).sum()
-    n2 = (labels == groups[1]).sum()
-
     assert len(groups) == 2, "Must have only 2 groups (conditions) in labels"
+
+    group1_bool = labels == groups[0]
+    group2_bool = labels == groups[1]
+    
+    n1 = group1_bool.sum()
+    n2 = group2_bool.sum()
+
     assert n1 == n2, \
         "Two groups must have same number of observations/trials (%d != %d)" % (n1,n2)
 
-    return paired_sample_test(data.compress(labels == groups[0], axis=axis),
-                              data.compress(labels == groups[1], axis=axis),
+    return paired_sample_test(data.compress(group1_bool, axis=axis),
+                              data.compress(group2_bool, axis=axis),
                               axis=axis, method=method, **kwargs)
 
 
@@ -544,8 +583,13 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.6.1
     """
-    if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
 
+    _paired_sample_data_checks(data1, data2)
+            
+    if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
+        
     return one_sample_randomization_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                          tail=tail, n_resamples=n_resamples,
                                          return_stats=return_stats, seed=seed, **kwargs)
@@ -613,8 +657,13 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.6.1
     """
-    if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
 
+    _paired_sample_data_checks(data1, data2)
+        
+    if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
+        
     return one_sample_bootstrap_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                      tail=tail, n_resamples=n_resamples,
                                      return_stats=return_stats, seed=seed, **kwargs)
@@ -783,67 +832,72 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.6.3
     """
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
+
+    _two_sample_data_checks(data1, data2, axis)
+
     # Convert string specifiers to callable functions
-    stat_func    = _str_to_two_sample_stat(stat)    # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+    stat_func    = _str_to_two_sample_stat(stat,axis)   # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
 
-    # Reshape data so axis 0 is observations
-    if axis != 0:
-        data1 = np.moveaxis(data1.copy(), axis, 0)
-        data2 = np.moveaxis(data2.copy(), axis, 0)
-
-    n1 = data1.shape[0]
-    n2 = data2.shape[0]
+    ndim = data1.ndim
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
     N  = n1+n2
 
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data1,data2, **kwargs)
 
     # Pool two samples together into combined data
-    data_pool = np.concatenate((data1,data2),axis=0)
+    data_pool = np.concatenate((data1,data2),axis=axis)
 
     # Create generators with n_resamples-1 random permutations of ints 0:N-1
     resamples = permutations(N, n_resamples-1, seed)
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        stat_resmp = np.empty((n_resamples-1,*data1.shape[1:]))
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data1.shape)]
+        stat_resmp = np.empty(stat_shape)
         for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
             # First n1 permuted indexes are resampled "data1"
-            data1_resmp  = data_pool[resample[0:n1],...]
             # Remaining n2 permuted indexes are resampled "data2"
-            data2_resmp  = data_pool[resample[n1:],...]
+            data1_slices = axis_index_slices(axis, resample[0:n1], ndim)
+            data2_slices = axis_index_slices(axis, resample[n1:], ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
+
+            data1_resmp  = data_pool[data1_slices]
+            data2_resmp  = data_pool[data2_slices]
             # Compute statistic on resampled data1,data2
-            stat_resmp[i_resmp,...] = stat_func(data1_resmp,data2_resmp, **kwargs)
+            stat_resmp[stat_slices] = stat_func(data1_resmp, data2_resmp, **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((1,*data1.shape[1:]))
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data1.shape)]
+        count = np.ones(stat_shape)
         for resample in resamples:
+            # Index into <axis> of data, with ':' for all other axes
             # First n1 permuted indexes are resampled "data1"
-            data1_resmp   = data_pool[resample[0:n1],...]
             # Remaining n2 permuted indexes are resampled "data2"
-            data2_resmp   = data_pool[resample[n1:],...]
+            data1_slices = axis_index_slices(axis, resample[0:n1], ndim)
+            data2_slices = axis_index_slices(axis, resample[n1:], ndim)
+
+            data1_resmp   = data_pool[data1_slices]
+            data2_resmp   = data_pool[data2_slices]
             # Compute statistic on resampled data1,data2
-            stat_resmp    = stat_func(data1_resmp,data2_resmp, **kwargs)
+            stat_resmp    = stat_func(data1_resmp, data2_resmp, **kwargs)
             # Compute statistic on resampled data and tally values passing criterion
-            count += compare_func(stat_obs,stat_resmp)
+            count += compare_func(stat_obs, stat_resmp)
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -914,24 +968,19 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.3.10, 6.3
-    """
+    """    
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
+
+    _two_sample_data_checks(data1, data2, axis)
+
     # Convert string specifiers to callable functions
-    stat_func    = _str_to_two_sample_stat(stat) # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)        # Tail-specific comparator
+    stat_func    = _str_to_two_sample_stat(stat,axis)   # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
 
-    # Reshape data so axis 0 is observations
-    if axis != 0:
-        data1 = np.moveaxis(data1, axis, 0)
-        data2 = np.moveaxis(data2, axis, 0)
-
-    assert (data1.ndim == data2.ndim), \
-        "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
-    if data1.ndim > 1:
-        assert (data1.shape[1:] == data2.shape[1:]), \
-            "data1 & 2 must have same shape except for observation/trial axis (<axis>)"
-
-    n1 = data1.shape[0]
-    n2 = data2.shape[0]
+    ndim = data1.ndim
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
 
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data1, data2, **kwargs)
@@ -944,31 +993,40 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     resamples2 = bootstraps(n2,n_resamples-1)
 
     if return_stats:
-        stat_resmp = np.empty((n_resamples-1,*data1.shape[1:]))
+        # Compute statistic under <n_resamples> random resamplings
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data1.shape)]
+        stat_resmp = np.empty(stat_shape)
 
         # Iterate thru <n_resamples> random resamplings, recomputing statistic on each
         for i_resmp,(resample1,resample2) in enumerate(zip(resamples1,resamples2)):
-            stat_resmp[i_resmp,...] = stat_func(data1[resample1,...],
-                                                data2[resample2,...], **kwargs)
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data1_slices = axis_index_slices(axis, resample1, ndim)
+            data2_slices = axis_index_slices(axis, resample2, ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
+            stat_resmp[stat_slices] = stat_func(data1[data1_slices], data2[data2_slices], **kwargs)
 
         # Center each resampled statistic on their mean to approximate null disttribution
         # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
         stat_resmp -= stat_obs
-        # stat_resmp -= stat_resmp.mean(axis=0,keepdims=True)
+        # stat_resmp -= stat_resmp.mean(axis=axis,keepdims=True)
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((1,*data1.shape[1:]))
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data1.shape)]
+        count = np.ones(stat_shape)
         for resample1,resample2 in zip(resamples1,resamples2):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data1_slices = axis_index_slices(axis, resample1, ndim)
+            data2_slices = axis_index_slices(axis, resample2, ndim)
+
             # Compute statistic on resampled data
-            stat_resmp = stat_func(data1[resample1,...],
-                                   data2[resample2,...], **kwargs)
+            stat_resmp = stat_func(data1[data1_slices], data2[data2_slices], **kwargs)
             # Subtract observed statistic from distribution of resampled statistics
             stat_resmp -= stat_obs
 
@@ -977,17 +1035,6 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
-
-        # TODO Is it really necessary to reshape data to avoid changing in caller???
-        data1 = np.moveaxis(data1, 0, axis)
-        data2 = np.moveaxis(data2, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -1108,14 +1155,16 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     if (stat == 'F') and (tail != 'right'):
         warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
 
-    # Convert string specifiers to callable functions
-    stat_func    = _str_to_one_way_stat(stat)     # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)       # Tail-specific comparator
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data.ndim + axis
 
-    labels = np.asarray(labels)
-    # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data.copy(), axis, 0)
-    N = data.shape[0]
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_one_way_stat(stat,axis)  # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+
+    labels  = np.asarray(labels)
+    ndim    = data.ndim
+    N       = data.shape[axis]
 
     # Find set of unique group labels in list of labels (if not given)
     if groups is None:
@@ -1123,38 +1172,43 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     # If groups set in args, remove any observations not represented in <groups>
     else:
-        idxs = np.in1d(labels,groups)
+        idxs = np.in1d(labels, groups)
         if idxs.sum() != N:
             labels  = labels[idxs]
-            data    = data[idxs,...]
-            N       = data.shape[0]
+            data    = data[axis_index_slices(axis, idxs, ndim)]
+            N       = data.shape[axis]
 
     # Append <groups> to stat_func args
     if stat_func is one_way_fstat: kwargs.update({'groups':groups})
 
     # Compute statistic of interest on actual observed data
-    stat_obs = stat_func(data,labels, **kwargs)
+    stat_obs = stat_func(data, labels, **kwargs)
 
     # Create generators with n_resamples-1 random permutations of ints 0:N-1
     resamples = permutations(N, n_resamples-1, seed)
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        stat_resmp = np.empty((n_resamples-1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data.shape)]
+        stat_resmp = np.empty(stat_shape)
         for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of stat, with ':' for all other axes
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
+
             # Compute statistic on data and resampled labels
             # Note: Only need to resample labels
-            stat_resmp[i_resmp,...] = stat_func(data,labels[resample], **kwargs)
+            stat_resmp[stat_slices] = stat_func(data, labels[resample], **kwargs)
 
         # p value = proportion of permutation-resampled test statistic values
         #  >= observed value (+ observed value itself)
-        p = resamples_to_pvalue(stat_obs, stat_resmp, 0, compare_func)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((1,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data.shape)]
+        count = np.ones(stat_shape)
         for resample in resamples:
             # Compute statistic on data and resampled labels
             # Note: Only need to resample labels
@@ -1164,13 +1218,6 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
 
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
@@ -1301,22 +1348,21 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
         effectively shuffles observations between specific combinations
         of groups/factor levels (ANOVA "cells") cf. recommendation in Manly book
     """
-    # TODO  Add mechanism to auto-generate interaction term from factors (if interact arg==True)
+    # todo  Add mechanism to auto-generate interaction term from factors (if interact arg==True)
     if (stat == 'F') and (tail != 'right'):
         warn("For F-test, only right-tailed tests make sense (tail set = %s in args)" % tail)
 
-    # Convert string specifier to callable function
-    stat_func = _str_to_two_way_stat(stat)       # Statistic (includes default))
-    compare_func = _tail_to_compare(tail)   # Tail-specific comparator
-
     # Wrap negative axis back into 0 to ndim-1
-    if axis < 0: axis = len(data.shape) + axis
+    if axis < 0: axis = data.ndim + axis
+
+    # Convert string specifier to callable function
+    stat_func = _str_to_two_way_stat(stat,axis) # Statistic (includes default))
+    compare_func = _tail_to_compare(tail)       # Tail-specific comparator
 
     labels  = np.asarray(labels)
     n_terms = labels.shape[1]
-    # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data.copy(), axis, 0)
-    N       = data.shape[0]
+    ndim    = data.ndim
+    N       = data.shape[axis]
 
     # Find all groups/levels in list of labels (if not given in inputs)
     if groups is None:
@@ -1326,14 +1372,16 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     if stat_func is two_way_fstat: kwargs.update({'groups':groups})
 
     # Compute statistic of interest on actual observed data
-    stat_obs = stat_func(data,labels, **kwargs)
+    stat_obs = stat_func(data, labels, **kwargs)
 
     # Create generators with n_resamples-1 random permutations of ints 0:N-1
     resamples = permutations(N, n_resamples-1, seed)
 
     if return_stats:
         # Compute statistic under <n_resamples> random resamplings
-        stat_resmp = np.empty((n_terms, *data.shape[1:],n_resamples-1))
+        stat_shape = [axlen if ax != axis else n_terms for ax,axlen in enumerate(data.shape)]
+        stat_shape.append(n_resamples-1)
+        stat_resmp = np.empty(stat_shape)
         for i_resmp,resample in enumerate(resamples):
             # Compute statistic on data and resampled label rows
             stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)
@@ -1342,12 +1390,13 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs[...,np.newaxis],
                                 stat_resmp, -1, compare_func).squeeze(axis=-1)
-
+        
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
         # Note: Init count to 1's to account for observed value itself
-        count = np.ones((n_terms,*data.shape[1:]))
+        stat_shape = [axlen if ax != axis else n_terms for ax,axlen in enumerate(data.shape)]
+        count = np.ones(stat_shape)
         for resample in resamples:
             # Compute statistic on data and resampled label rows
             stat_resmp = stat_func(data,labels[resample,:], **kwargs)
@@ -1356,13 +1405,6 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
         # p value = proportion of permutation-resampled test statistic values
         p = count / n_resamples
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        p = np.moveaxis(p, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -1423,45 +1465,45 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
                 for all resamplings of data.
                 Same size as data, but <axis> now has length n_resamples.
     """
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data.ndim + axis
+
     # Convert string specifiers to callable functions
-    stat_func    = _str_to_one_sample_stat(stat)
+    stat_func    = _str_to_one_sample_stat(stat,axis)
 
     # Indexes into set of bootstrap resamples corresponding to given confint
     conf_indexes = confint_to_indexes(confint, n_resamples)
 
-    # Reshape data so axis 0 is observations
-    if axis != 0: data = np.moveaxis(data, axis, 0)
-    n = data.shape[0]
+    ndim = data.ndim
+    n = data.shape[axis]
 
     # Compute statistic of interest on actual observed data
     if return_stats: stat_obs = stat_func(data, **kwargs)
 
-    # Create generators with n_resamples length-n independent Bernoulli RV's
+    # Create generators with n_resamples random bootstrap resamplings with replacement
     resamples = bootstraps(n, n_resamples, seed)
 
     # Compute statistic under <n_resamples> random resamplings
-    stat_resmp = np.empty((n_resamples,*data.shape[1:]))
+    stat_shape = [axlen if ax != axis else n_resamples for ax,axlen in enumerate(data.shape)]
+    stat_resmp = np.empty(stat_shape)
     for i_resmp,resample in enumerate(resamples):
+        # Index into <axis> of data and stat, with ':' for all other axes
+        data_slices = axis_index_slices(axis, resample, ndim)
+        stat_slices = axis_index_slices(axis, [i_resmp], ndim)
         # Compute statistic on resampled data
-        stat_resmp[i_resmp,...] = stat_func(data[resample,...], **kwargs)
+        stat_resmp[stat_slices] = stat_func(data[data_slices], **kwargs)
 
+    # Sort boostrap resampled stats and extract confints from them
+    stat_slices = axis_index_slices(axis, conf_indexes, ndim)
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, so we can return original unsorted version
-        stat_resmp_sorted = np.sort(stat_resmp, axis=0)
+        stat_resmp_sorted = np.sort(stat_resmp, axis=axis)
         # Extract lower,upper confints from resampled and sorted stats
-        confints = stat_resmp_sorted[conf_indexes,...]
-
+        confints = stat_resmp_sorted[stat_slices]
     else:
-        stat_resmp.sort(axis=0)     # Sort resample stats in place
+        stat_resmp.sort(axis=axis)     # Sort resample stats in place
         # Extract lower,upper confints from resampled and sorted stats
-        confints = stat_resmp[conf_indexes,...]
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        confints = np.moveaxis(confints, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
+        confints = stat_resmp[stat_slices]
 
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
@@ -1585,59 +1627,54 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
                 for all resamplings of data.
                 Same size as data, but <axis> now has length n_resamples.
     """
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
+    
+    _two_sample_data_checks(data1, data2, axis)
+
+
     # Convert string specifiers to callable functions
-    stat_func    = _str_to_two_sample_stat(stat)
+    stat_func    = _str_to_two_sample_stat(stat,axis)
 
     # Indexes into set of bootstrap resamples corresponding to given confint
     conf_indexes = confint_to_indexes(confint, n_resamples)
 
-    # Reshape data so axis 0 is observations
-    if axis != 0:
-        data1 = np.moveaxis(data1, axis, 0)
-        data2 = np.moveaxis(data2, axis, 0)
-
-    assert (data1.ndim == data2.ndim), \
-        "data1 & 2 must have same shape except for observation axis (<axis>)"
-    if data1.ndim > 1:
-        assert (data1.shape[1:] == data2.shape[1:]), \
-            "data1 & 2 must have same shape except for observation axis (<axis>)"
-
-    n1 = data1.shape[0]
-    n2 = data2.shape[0]
+    ndim = data1.ndim
+    n1 = data1.shape[axis]
+    n2 = data2.shape[axis]
 
     # Compute statistic of interest on actual observed data
     if return_stats: stat_obs = stat_func(data1, data2, **kwargs)
 
-    # Create generators with n_resamples-1 random resamplings with replacement
+    # Create generators with n_resamples random bootstrap resamplings with replacement
     # of ints 0:n1-1 and 0:n2-1
     # Note: Seed random number generator only *once* before generating both random samples
     if seed is not None: set_random_seed(seed)
-    resamples1 = bootstraps(n1,n_resamples-1)
-    resamples2 = bootstraps(n2,n_resamples-1)
+    resamples1 = bootstraps(n1,n_resamples)
+    resamples2 = bootstraps(n2,n_resamples)
 
     # Compute statistic under <n_resamples> random resamplings
-    stat_resmp = np.empty((n_resamples,*data1.shape[1:]))
+    stat_shape = [axlen if ax != axis else n_resamples for ax,axlen in enumerate(data1.shape)]
+    stat_resmp = np.empty(stat_shape)
     for i_resmp,(resample1,resample2) in enumerate(zip(resamples1,resamples2)):
+        # Index into <axis> of data and stat, with ':' for all other axes
+        data1_slices = axis_index_slices(axis, resample1, ndim)
+        data2_slices = axis_index_slices(axis, resample2, ndim)
+        stat_slices = axis_index_slices(axis, [i_resmp], ndim)
         # Compute statistic on resampled data
-        stat_resmp[i_resmp,...] = stat_func(data1[resample1,...], data2[resample2,...], **kwargs)
+        stat_resmp[stat_slices] = stat_func(data1[data1_slices], data2[data2_slices], **kwargs)
 
+    # Sort boostrap resampled stats and extract confints from them
+    stat_slices = axis_index_slices(axis, conf_indexes, ndim)    
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, so we can return original unsorted version
-        stat_resmp_sorted = np.sort(stat_resmp, axis=0)
+        stat_resmp_sorted = np.sort(stat_resmp, axis=axis)
         # Extract lower,upper confints from resampled and sorted stats
-        confints = stat_resmp_sorted[conf_indexes,...]
-
+        confints = stat_resmp_sorted[stat_slices]
     else:
-        stat_resmp.sort(axis=0)     # Sort resample stats in place
+        stat_resmp.sort(axis=axis)     # Sort resample stats in place
         # Extract lower,upper confints from resampled and sorted stats
-        confints = stat_resmp[conf_indexes,...]
-
-    # Reshape output so observation axis is in appropriate location
-    if axis != 0:
-        confints = np.moveaxis(confints, 0, axis)
-        if return_stats:
-            stat_obs    = np.moveaxis(stat_obs, 0, axis)
-            stat_resmp  = np.moveaxis(stat_resmp, 0, axis)
+        confints = stat_resmp[stat_slices]
 
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
@@ -2125,45 +2162,71 @@ def _tail_to_compare(tail):
         return lambda stat_obs,stat_resmp: stat_resmp <= stat_obs
 
 
-def _str_to_one_sample_stat(stat):
+def _str_to_one_sample_stat(stat,axis):
     """ Convert string specifier to function to compute 1-sample statistic """
     if isinstance(stat,str):  stat = stat.lower()
 
     if callable(stat):                  return stat
-    elif stat in ['t','tstat','t1']:    return one_sample_tstat
-    elif stat == 'mean':                return lambda data: data.mean(axis=0,keepdims=True)
+    elif stat in ['t','tstat','t1']:    return lambda data: one_sample_tstat(data,axis=axis)
+    elif stat == 'mean':                return lambda data: data.mean(axis=axis,keepdims=True)
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
 
 
-def _str_to_two_sample_stat(stat):
+def _str_to_two_sample_stat(stat,axis):
     """ Convert string specifier to function to compute 2-sample statistic """
     if isinstance(stat,str):  stat = stat.lower()
 
-    if callable(stat):                  return stat
-    elif stat in ['t','tstat','t1']:    return two_sample_tstat
+    if callable(stat):
+        return stat
+    elif stat in ['t','tstat','t1']:
+        return lambda data1,data2: two_sample_tstat(data1, data2, axis=axis)
     elif stat in ['meandiff','mean']:
-        return lambda data1,data2: (data1.mean(axis=0,keepdims=True) -
-                                    data2.mean(axis=0,keepdims=True))
+        return lambda data1,data2: (data1.mean(axis=axis,keepdims=True) -
+                                    data2.mean(axis=axis,keepdims=True))
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
 
 
-def _str_to_one_way_stat(stat):
+def _str_to_one_way_stat(stat,axis):
     """ Convert string specifier to function to compute 1-way multi-sample statistic """
     if isinstance(stat,str):  stat = stat.lower()
 
-    if callable(stat):                  return stat
-    elif stat in ['f','fstat','f1']:    return one_way_fstat
+    if callable(stat):
+        return stat
+    elif stat in ['f','fstat','f1']:
+        return lambda data, labels: one_way_fstat(data, labels, axis=axis)
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
 
 
-def _str_to_two_way_stat(stat):
+def _str_to_two_way_stat(stat,axis):
     """ Convert string specifier to function to compute 2-way multi-sample statistic """
     if isinstance(stat,str):  stat = stat.lower()
 
-    if callable(stat):                  return stat
-    elif stat in ['f','fstat','f2']:    return two_way_fstat
+    if callable(stat):
+        return stat
+    elif stat in ['f','fstat','f2']:
+        return lambda data, labels: two_way_fstat(data, labels, axis=axis)
     else:
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
+
+
+def _paired_sample_data_checks(data1, data2):
+    """ Checks data format requirements for paired-sample data """
+
+    assert np.array_equal(data1.shape, data2.shape), \
+        ValueError("data1 and data2 must have same shape for paired-sample tests. \
+                    Use two-sample tests to compare non-paired data with different n's.")
+
+
+def _two_sample_data_checks(data1, data2, axis):
+    """ Checks data format requirements for two-sample data """
+    
+    assert (data1.ndim == data2.ndim), \
+        "data1 and data2 must have same shape except for observation/trial axis (<axis>)"
+
+    if data1.ndim > 1:
+        assert np.array_equal([data1.shape[ax] for ax in range(data1.ndim) if ax != axis],
+                              [data2.shape[ax] for ax in range(data2.ndim) if ax != axis]), \
+            "data1 and data2 must have same shape except for observation/trial axis (<axis>)"

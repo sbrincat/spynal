@@ -13,9 +13,9 @@ timestamp   Explicit spike timestamps in a Numpy ndarray of dtype object (analog
             which can optionally be represented on the containing array's axes (or
             a single 1D array/list may be given instead).
 
-Most functions perform operations in a mass-univariate manner.
+Most functions perform operations in a mass-univariate manner. This means that 
+rather than embedding function calls in for loops over units, trials, etc., like this:
 
-Rather than embedding function calls in loops over units, trials, etc., like this:
 for unit in units:
     for trial in trials:
         results[trial,unit] = compute_something(data[trial,unit])
@@ -23,6 +23,7 @@ for unit in units:
 You can instead execute a single call on ALL the data, labeling the relevant axis
 for the computation (usually time here), and it will run in parallel (vectorized)
 across all units, trials, etc. in the data, like this:
+
 results = compute_something(data, axis)
 
 

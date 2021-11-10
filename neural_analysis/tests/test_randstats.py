@@ -454,7 +454,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     assert stat_obs.shape == (1,n_chnls)
     assert stat_resmp.shape == (n_resamples,n_chnls)
     print(ci.shape, stat_obs.shape, stat_resmp.shape)
-    print(ci[:,0], stat_obs[0,0], stat_resmp[:,0].mean())
+    print(np.round(ci[:,0],2), np.round(stat_obs[0,0],2), np.round(stat_resmp[:,0].mean(),2))
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
@@ -517,7 +517,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
 
 @pytest.mark.parametrize('stat, method, result_ci, result_obs, result_resmp',
                          [('paired', 'bootstrap', (-14.55,-4.77), -9.10, -9.84),
-                          ('two_sample', 'bootstrap', (-14.58,-5.40), -9.10, -9.05)])
+                          ('two_sample', 'bootstrap', (-14.58,-5.40), -9.10, -9.38)])
 def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_obs, result_resmp):
     """ Unit tests for paired/two_sample_confints function for paired/two-sample CI's """
     data, labels = two_sample_data
@@ -541,7 +541,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert stat_obs.shape == (1,n_chnls)
     assert stat_resmp.shape == (n_resamples,n_chnls)
     print(ci.shape, stat_obs.shape, stat_resmp.shape)
-    print(ci[:,0], stat_obs[0,0], stat_resmp[:,0].mean())
+    print(np.round(ci[:,0],2), np.round(stat_obs[0,0],2), np.round(stat_resmp[:,0].mean(),2))
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
@@ -577,6 +577,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert stat_resmp.shape == (n_chnls,n_resamples)
     assert np.allclose(ci[0,:], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
+    # print(stat_resmp.shape, stat_resmp[:].mean(), result_resmp)    
     assert np.isclose(stat_resmp[0,:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with vector-valued data

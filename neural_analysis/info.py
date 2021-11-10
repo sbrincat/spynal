@@ -2,6 +2,53 @@
 """
 info    A module for computing measures of neural information about task/behavioral variables
 
+Functionality for computing information in neural activity about experimental variables 
+(task conditions and/or behavior) using various different methods, which different assumptions
+about form of data:
+- PEV -- Measures percent of variance in neural activity explained by experimental variable(s).
+    Assumes task->activity encoding described by linear model, and data is ~ normally distributed
+    with same variance for all conditions. 
+    Can handle any arbitary combinations of multi-level categorical or continuous task variables.
+
+- dprime -- Measures distance between data means normalized by their pooled standard deviations.
+    Assumes task->activity encoding is based on a change in mean activity, data is normal.
+    Can only handle two-sample data (ie contrasts between two categorical task conditions).
+
+- area under ROC -- Measures area under ROC curve for discriminating activity btwn two conditions.
+    Assumes task->activity encoding is based on a change in mean activity, but no assumption of
+    any specific data distributions.
+    Can only handle two-sample data (ie contrasts between two categorical task conditions).
+
+- mutual information -- Measures mutual information between neural activity and task variable
+    (roughly, how much knowing the neural activity reduces uncertainty about the task variable).
+    Makes NO assumptions about data distribution or form of task->activity encoding model.
+    But, as a result, requires more data to reliably estimate.
+    Can only handle two-sample data (ie contrasts between two categorical task conditions).
+
+- decoding -- Measures accuracy in decoding (classifying) task variable from neural activity
+    Unlike other methods here, this is based on a decoding (activity->task), rather than encoding
+    (task->activity), model.
+    Unlike other models, this method is multivariate (looks at information across multiple neural
+    channels), rather than univariate (looks at information only in a single channel at a time).
+    Commonly-used linear decoders assume activity->task decoding is described a linear model, and
+    often also assume activity is distributed as a multivariate normal. However, user can also use
+    any custom decoding model (with different assumptions) with this function.
+    Can only handle multi-level categorical (multinomial) task variables.
+    
+Most functions perform operations in a mass-univariate (or mass-multivariate) manner. This means
+that rather than embedding function calls in for loops over channels, timepoints, etc., like this:
+
+for channel in channels:
+    for timepoint in timepoints:
+        results[timepoint,channel] = compute_something(data[timepoint,channel])
+
+You can instead execute a single call on ALL the data, labeling the relevant axis
+for the computation (usually trials/observations here), and it will run in parallel (vectorized)
+across all channels, timepoints, etc. in the data, like this:
+
+results = compute_something(data, axis)
+
+
 FUNCTIONS
 ### High-level information computation wrapper functions ###
 neural_info     Wrapper function computes neural information using any given method
@@ -18,7 +65,7 @@ mutual_info     Computes neural info as Shannon mutual information btwn response
 auroc           Computes neural info as area under ROC curve
 
 ### D-prime/Cohen's d-related functions ###
-dprime          Computes neural information as d-prime (Cohen's d)
+dprime          Computes neural information as d-prime (Cohen's d) -- difference in means/pooled SD
 
 ### Percent explained variance-related functions ###
 pev             Computes neural info as percent explained variance (with optional stats)

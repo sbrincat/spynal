@@ -2,6 +2,29 @@
 """
 spectra     A module for spectral analysis of neural oscillations
 
+Functionality for computing frequency spectra as well as time-frequency (spectrogram) transforms.
+
+Options to compute spectral analysis using multitaper, wavelet, band-pass filtering or spectral
+burst analysis methods.
+
+Options to return full complex spectral data, spectral power, or spectral phase.
+
+Also includes functions for preprocessing, postprocessing, and plotting of analog/spectral data.
+
+Most functions perform operations in a mass-univariate manner. This means that 
+rather than embedding function calls in for loops over channels, trials, etc., like this:
+
+for channel in channels:
+    for trial in trials:
+        results[trial,channel] = compute_something(data[trial,channel])
+
+You can instead execute a single call on ALL the data, labeling the relevant axis
+for the computation (usually time here), and it will run in parallel (vectorized)
+across all channels, trials, etc. in the data, like this:
+
+results = compute_something(data, axis)
+
+
 FUNCTIONS
 ### General spectral analysis ###
 spectrum            Frequency spectrum of data
