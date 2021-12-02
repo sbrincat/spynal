@@ -94,7 +94,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from patsy import DesignMatrix
 
-from neural_analysis.utils import unsorted_unique, standardize_array, undo_standardize_array
+from neural_analysis.utils import unsorted_unique, data_groups_to_data_labels, \
+                                  standardize_array, undo_standardize_array
 from neural_analysis.helpers import _has_method
 
 
@@ -168,6 +169,9 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 
     two_group_methods = ['auroc','roc','aucroc','auc', 'dprime','d','cohensd']
 
+    assert (data1.shape[axis] != 0) and (data2.shape[axis] != 0), \
+        "Data contains no observations (trials) for one or more groups"
+        
     # Methods that prefer to call 2-group version bc it's faster -- just call 2-group version
     if method in two_group_methods:
         if method in ['dprime','d','cohensd']:                  info_func = _dprime_2groups
@@ -180,15 +184,8 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     # All other methods -- create label list, concatenate data and call (label,data) version
     else:
         info_func = _string_to_info_func(method)
-
-        n1 = data1.shape[axis]
-        n2 = data2.shape[axis]
-        assert (n1 != 0) and (n2 != 0), \
-            "Data contains no observations (trials) for one or more groups"
-
-        labels = np.hstack((np.zeros((n1,),dtype='uint8'), np.ones((n2,),dtype='uint8')))
-
-        return info_func(labels, np.concatenate((data1,data2), axis=axis), axis=axis, **kwargs)
+        data, labels = data_groups_to_data_labels(data1, data2, axis=axis)
+        return info_func(labels, data, axis=axis, **kwargs)
 
 
 def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
@@ -229,14 +226,8 @@ def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
         "Must specify information 'method' that works on multi-class problems ('decode'|'pev')"
 
     info_func = _string_to_info_func(method)
-
-    # Find number of observations (trials) in each group's data
-    n = [args[j].shape[axis] for j in range(n_groups)]
-    # Create list of integer labels, with n[group] values=group in each
-    # ie [0,0,0,...,1,1,1,...,k,k,k....], where k = n_groups
-    labels = np.hstack([j*np.ones((n[j],),dtype='uint8') for j in range(n_groups)])
-
-    return info_func(labels, np.concatenate(args, axis=axis), axis=axis, **kwargs)
+    data, labels = data_groups_to_data_labels(*args, axis=axis)
+    return info_func(labels, data, axis=axis, **kwargs)
 
 
 def _string_to_info_func(method):

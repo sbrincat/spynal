@@ -7,7 +7,12 @@ import xarray as xr
 from scipy.stats import bernoulli
 
 from neural_analysis.spectra import simulate_oscillation, spectrum, spectrogram, itpc, \
-                                    cut_trials, realign_data, pool_freq_bands, pool_time_epochs
+                                    cut_trials, realign_data, pool_freq_bands, pool_time_epochs, \
+                                    plot_spectrum, plot_spectrogram
+
+# Possible errors to expect when inputting a missing/misspelled argument
+MISSING_ARG_ERRS = (TypeError,AttributeError,AssertionError)
+
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -152,7 +157,7 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
         assert np.isclose(spec[:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         spec, freqs = spectrum(data, smp_rate, axis=0, method=method, data_type=data_type,
                             spec_type=spec_type, foo=None)
 
@@ -255,7 +260,7 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
         assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
                                         data_type=data_type_, spec_type=spec_type, foo=None)
 
@@ -323,7 +328,7 @@ def test_itpc(oscillation, itpc_method, method, result):
         assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         spec, freqs, timepts = itpc(data, smp_rate, axis=0, method=method, itpc_method=itpc_method,
                                     trial_axis=-1, foo=None)
 
@@ -438,7 +443,7 @@ def test_pool_freq_bands(oscillation, variable_type, pooler, result):
     assert np.isclose(eval_func(band_spec[0,:,:]), result, rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         band_spec = pool_freq_bands(spec, bands, func=pooler, foo=None, **extra_args)
 
 
@@ -507,5 +512,54 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
     assert np.isclose(eval_func(epoch_spec[:,0,:]), result, rtol=1e-4, atol=1e-4)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         epoch_spec = pool_time_epochs(spec, epochs, func=pooler, foo=None, **extra_args)
+
+
+# =============================================================================
+# Unit tests for plotting functions
+# =============================================================================
+@pytest.mark.parametrize('method', [('multitaper'), ('wavelet'), ('bandfilter')])
+def test_plot_spectrum(oscillation, method):
+    """ Unit tests for plot_spectrum function with different frequency sampling """
+    data = oscillation
+    smp_rate = 1000
+
+    spec, freqs = spectrum(data, smp_rate, axis=0, method=method, spec_type='power')
+    print(freqs)
+    mean = spec.mean(axis=-1)
+    spec_orig = mean.copy()
+    if method == 'wavelet':         freqs_result = np.log2(freqs)
+    elif method == 'bandfilter':    freqs_result = np.arange(len(freqs))
+    else:                           freqs_result = freqs
+
+    # Basic test that plotted data == input data
+    lines, _ = plot_spectrum(freqs, mean)
+    assert np.array_equal(mean, spec_orig) # Ensure input data isn't altered by function
+    assert np.allclose(lines[0].get_xdata(), freqs_result)
+    assert np.allclose(lines[0].get_ydata(), mean)
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        lines, _ = plot_spectrum(freqs, mean, foo=None)
+        
+
+@pytest.mark.parametrize('method', [('multitaper'), ('wavelet'), ('bandfilter')])
+def test_plot_spectrogram(oscillation, method):
+    """ Unit tests for plot_spectrogram function with different frequency sampling """
+    data = oscillation
+    smp_rate = 1000
+
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method, spec_type='power')
+    spec = spec.mean(axis=-1)
+    spec_orig = spec.copy()
+
+    # Basic test that plotted data == input data
+    img, _ = plot_spectrogram(timepts, freqs, spec)
+    assert np.array_equal(spec, spec_orig) # Ensure input data isn't altered by function
+    assert np.allclose(img.get_array().data, spec)
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        img, _ = plot_spectrogram(freqs, spec, foo=None)
+            

@@ -2,6 +2,9 @@
 """
 spikes  A module for preprocessing, basic analyses, and plotting of neural spiking activity
 
+Functionality includes computing spike rates (using binning or spike density methods), spike rate 
+statistics, inter-spike interval statistics, and spike data preprocessing and plotting.
+
 Most functions expect one of two formats of spiking data:
 bool        Binary spike trains where 1's label times of spikes and 0's = no spike
             in a Numpy ndarray of dtype bool, where one axis corresponds to time

@@ -72,7 +72,7 @@ one_sided_to_two_sided  Converts 1-sided Fourier transform output to 2-sided equ
 
 ### Plotting ###
 plot_spectrum       Plots frequency spectrum as a line plot, handling freq axis properly
-plot_spectrogram    Plots time-frequency spectrogram as a pseudocolor plot
+plot_spectrogram    Plots time-frequency spectrogram as a heatmap plot
 
 ### Data simulation ###
 simulate_oscillation Generates simulated oscillation-in-noise data
@@ -666,16 +666,16 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     SOURCE  Adapted from Cronux function dpsschk.m
     """
     # Time-frequency bandwidth product 'TW' (s*Hz)
-    TW  = time_width*freq_width
+    time_freq_prod  = time_width*freq_width
 
     # Up to 2TW-1 tapers are bounded; this is both the default and max value for n_tapers
-    n_tapers_max = floor(2*TW - 1)
+    n_tapers_max = floor(2*time_freq_prod - 1)
     if n_tapers is None: n_tapers = n_tapers_max
 
     assert n_tapers <= n_tapers_max, \
-        ValueError("For TW = %.1f, %d tapers are tightly bounded in" \
+        ValueError("For time-freq product = %.1f, %d tapers are tightly bounded in" \
                     "frequency (n_tapers set = %d)" \
-                    % (TW,n_tapers_max,n_tapers))
+                    % (time_freq_prod,n_tapers_max,n_tapers))
 
     # Convert time bandwidth from s to window length in number of samples
     n_samples = int(round(time_width*smp_rate))
@@ -685,7 +685,7 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     #       converts this to integral of squares (see Chronux function dpsschk())
     # Note: You might imagine you'd want sym=False, but sym=True gives same values
     #       as Chronux dpsschk() function...
-    return dpss(n_samples, TW, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
+    return dpss(n_samples, time_freq_prod, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
 
 
 # =============================================================================
@@ -1710,7 +1710,7 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     """
     Plots frequency spectrum as a line plot.
 
-    ax,lines = plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
+    lines,ax = plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
 
     ARGS
     freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
@@ -1729,11 +1729,11 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     **kwargs All other keyword args passed directly to plt.plot()
 
     ACTION
-    Plots spectrum data into current axes using plt.plot()
+    Plots spectrum data into given axes using plt.plot()
 
     RETURNS
-    ax      Pyplot Axis object. Axis for plot
     lines   List of Line2D objects. Output of plt.plot()
+    ax      Pyplot Axis object. Axis for plot    
     """
     freqs   = np.asarray(freqs)
     if ax is None: ax = plt.gca()
@@ -1756,14 +1756,14 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
     plt.xticks(fticks,fticklabels)
 
-    return ax, lines
+    return lines, ax
 
 
 def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', **kwargs):
     """
-    Plots time-frequency spectrogram as a pseudocolor plot.
+    Plots time-frequency spectrogram as a heatmap plot.
 
-    ax,img = plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
+    img,ax = plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
 
     ARGS
     timepts (n_timepts,) array-like. Time sampling vector for data
@@ -1783,11 +1783,11 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     **kwargs All other keyword args passed directly to plt.imshow()
 
     ACTION
-    Plots spectrogram data into current axes using plt.imshow()
+    Plots spectrogram data into given axes using plt.imshow()
 
     RETURNS
-    ax      Pyplot Axis object. Axis for plot
     img     AxesImage object. Output of plt.imshow()
+    ax      Pyplot Axis object. Axis for plot    
     """
     timepts = np.asarray(timepts)
     freqs   = np.asarray(freqs)
@@ -1796,7 +1796,7 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     if clim is None: clim = (data.min(), data.max())
 
     freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-
+        
     df      = np.diff(freqs).mean()
     flim    = [freqs[0]-df/2, freqs[-1]+df/2]
 
@@ -1809,11 +1809,15 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
     plt.yticks(fticks,fticklabels)
 
-    return ax, img
+    return img, ax
 
 
 def frequency_plot_settings(freqs):
     """ Returns settings for plotting a frequency axis: plot freqs, ticks, tick labels """
+    freqs = np.asarray(freqs).squeeze()
+    # For freqs given as (low,high) bands, convert to band means
+    if (freqs.ndim == 2) and (freqs.shape[1] == 2): freqs = freqs.mean(axis=1)
+    
     freq_scale = _infer_freq_scale(freqs)
 
     # For log-sampled freqs, plot in log2(freq) but label with actual freqs
