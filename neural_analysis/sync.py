@@ -794,11 +794,12 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
                       transform=transform, return_phase=return_phase)
     if spec_method == 'multitaper': extra_args.update(taper_axis=taper_axis)
 
+    # TODO Add keepdims options to spike-field functions and remove hard-coding below
     if return_phase:
-        coh,_,_,phi = coherence(spkdata, lfpdata, **extra_args)
+        coh,_,_,phi = coherence(spkdata, lfpdata, keepdims=False, **extra_args)
         return coh,freqs,timepts,None,phi
     else:
-        coh,_,_ = coherence(spkdata, lfpdata, **extra_args)
+        coh,_,_ = coherence(spkdata, lfpdata, keepdims=False, **extra_args)
         return coh,freqs,timepts,None
 
 

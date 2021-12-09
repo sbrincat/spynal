@@ -4,83 +4,11 @@ import pytest
 import numpy as np
 import xarray as xr
 
-from scipy.stats import bernoulli
-
-from neural_analysis.spectra import simulate_oscillation, spectrum, spectrogram, itpc, \
+from neural_analysis.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
+                                                oscillatory_data, MISSING_ARG_ERRS
+from neural_analysis.spectra import spectrum, spectrogram, itpc, \
                                     cut_trials, realign_data, pool_freq_bands, pool_time_epochs, \
                                     plot_spectrum, plot_spectrogram
-
-# Possible errors to expect when inputting a missing/misspelled argument
-MISSING_ARG_ERRS = (TypeError,AttributeError,AssertionError)
-
-
-# =============================================================================
-# Fixtures for generating simulated data
-# =============================================================================
-@pytest.fixture(scope='session')
-def oscillation():
-    """
-    Fixture simulates set of instances of oscillatory data for all unit tests
-
-    RETURNS
-    data    (1000,4) ndarray. Simulated oscillatory data.
-            (eg simulating 1000 timepoints x 4 trials or channels)
-    """
-    # Note: seed=1 makes data reproducibly match output of Matlab
-    frequency = 32
-    return simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0,
-                                n_trials=4, time_range=1.0, smp_rate=1000, seed=1)
-
-
-@pytest.fixture(scope='session')
-def bursty_oscillation():
-    """
-    Fixture simulates set of instances of bursty oscillatory data for all unit tests
-
-    RETURNS
-    data    (1000,4) ndarray. Simulated bursty oscillatory data.
-            (eg simulating 1000 timepoints x 4 trials or channels)
-    """
-    # Note: seed=1 makes data reproducibly match output of Matlab
-    frequency = 32
-    return simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, burst_rate=0.4,
-                                time_range=1.0, n_trials=4, smp_rate=1000, seed=1)
-
-
-@pytest.fixture(scope='session')
-def spiking_oscillation(oscillation):
-    """
-    Fixture simulates set of instances of oscillatory spiking data for all unit tests
-
-    RETURNS
-    data    (1000,4) ndarray of bool. Simulated oscillatory spiking data,
-            expressed as binary (0/1) spike trains.
-            (eg simulating 1000 timepoints x 4 trials or channels)
-    """
-    # todo code up something actually proper (rate-modulated Poisson process?)
-    data = oscillation
-
-    # Convert continuous oscillation to probability (range 0-1)
-    data = (data - data.min()) / data.ptp()
-    data = data**2  # Sparsen high rates some
-
-    # Use probabilities to generate Bernoulli random variable at each time point
-    return bernoulli.ppf(0.5, data).astype(bool)
-
-
-@pytest.fixture(scope='session')
-def oscillatory_data(oscillation, bursty_oscillation, spiking_oscillation):
-    """
-    "Meta-fixture" that returns standard analog oscillations, bursty oscillations,
-    and spiking oscillations in a single dict.
-
-    RETURNS
-    data_dict   {'data_type' : data} dict containing outputs from
-                each of constituent fixtures
-
-    SOURCE      https://stackoverflow.com/a/42400786
-    """
-    return {'lfp': oscillation, 'burst': bursty_oscillation, 'spike':spiking_oscillation}
 
 
 # =============================================================================
@@ -526,16 +454,17 @@ def test_plot_spectrum(oscillation, method):
     smp_rate = 1000
 
     spec, freqs = spectrum(data, smp_rate, axis=0, method=method, spec_type='power')
-    print(freqs)
     mean = spec.mean(axis=-1)
-    spec_orig = mean.copy()
+    mean_orig = mean.copy()
+    freqs_orig = freqs.copy()
     if method == 'wavelet':         freqs_result = np.log2(freqs)
     elif method == 'bandfilter':    freqs_result = np.arange(len(freqs))
     else:                           freqs_result = freqs
 
     # Basic test that plotted data == input data
     lines, _ = plot_spectrum(freqs, mean)
-    assert np.array_equal(mean, spec_orig) # Ensure input data isn't altered by function
+    assert np.array_equal(freqs, freqs_orig) # Ensure input data isn't altered by function    
+    assert np.array_equal(mean, mean_orig)
     assert np.allclose(lines[0].get_xdata(), freqs_result)
     assert np.allclose(lines[0].get_ydata(), mean)
     
@@ -552,11 +481,13 @@ def test_plot_spectrogram(oscillation, method):
 
     spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method, spec_type='power')
     spec = spec.mean(axis=-1)
+    freqs_orig = freqs.copy()
     spec_orig = spec.copy()
 
     # Basic test that plotted data == input data
     img, _ = plot_spectrogram(timepts, freqs, spec)
-    assert np.array_equal(spec, spec_orig) # Ensure input data isn't altered by function
+    assert np.array_equal(freqs, freqs_orig) # Ensure input data isn't altered by function
+    assert np.array_equal(spec, spec_orig)
     assert np.allclose(img.get_array().data, spec)
     
     # Ensure that passing a nonexistent/misspelled kwarg raises an error

@@ -11,7 +11,7 @@ Options to return full complex spectral data, spectral power, or spectral phase.
 
 Also includes functions for preprocessing, postprocessing, and plotting of analog/spectral data.
 
-Most functions perform operations in a mass-univariate manner. This means that 
+Most functions perform operations in a mass-univariate manner. This means that
 rather than embedding function calls in for loops over channels, trials, etc., like this:
 
 for channel in channels:
@@ -661,7 +661,8 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
                 the max number of spectrally delimited tapers. Default: 2TW-1
 
     RETURNS
-    tapers (n_samples,n_tapers) ndarray. Computed dpss taper functions (n_samples = T*smp_rate)
+    tapers      (n_samples,n_tapers) ndarray. Computed dpss taper functions
+                (n_samples = T*smp_rate)
 
     SOURCE  Adapted from Cronux function dpsschk.m
     """
@@ -1486,19 +1487,23 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
 intertrial_phase_clustering = itpc
 
 
-def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
-                   freq_exp=None, bands=((20,35),(40,65),(55,90),(70,100)),
-                   window=None, timepts=None, threshold=2, min_cycles=3, **kwargs):
+def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycles=3,
+                   method='wavelet', spec_type='power', freq_exp=None,
+                   bands=((20,35),(40,65),(55,90),(70,100)),
+                   window=None, timepts=None, **kwargs):
     """
     Computes oscillatory burst analysis of Lundqvist et al 2016.
+    Default argument values approximate analysis as implemented in there.
 
+    Computes oscillatory power
     To compute burst rate, simply take mean across trial axis.
 
-    Default argument values approximate analysis as implemented in Lundqvist 2016.
 
-    bursts,freqs,timepts = burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
-                                          freq_exp=None, bands=((20,35),(40,65),(55,90),(70,100)),
-                                          window=None, timepts=None, threshold=2, min_cycles=3,
+    bursts,freqs,timepts = burst_analysis(data, smp_rate, axis=0, trial_axis=-1,
+                                          threshold=2, min_cycles=3,
+                                          method='wavelet', spec_type='power', freq_exp=None,
+                                          bands=((20,35),(40,65),(55,90),(70,100)),
+                                          window=None, timepts=None,
                                           **kwargs)
 
     ARGS
@@ -1513,6 +1518,13 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     trial_axis  Int. Axis of <data> corresponding to trials/observations.
                 Default: -1 (last axis of data)
 
+    threshold   Scalar. Threshold power level for detecting bursts, given in SDs above the mean.
+                Default: 2 SDs
+
+    min_cycles  Scalar. Minimal length of contiguous above-threshold period to be counted as a
+                burst, given in number of oscillatory cycles at each frequency (or band center).
+                Default: 3
+
     method      String. Underlying time-frequency spectral analysis method to use,
                 which burst analysis is computed on.
                 'wavelet' :     Continuous Morlet wavelet analysis [default]
@@ -1520,6 +1532,10 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
                 'bandfilter' :  Band-pass filtering and Hilbert transform
                 Note: In the original paper, multitaper was used, but all three
                 methods were claimed to produced similar results.
+
+    spec_type   String. Type of spectral signal to compute. Default: 'power'
+                'power' : Spectral power, ie square of signal envelope
+                'magnitude' : Square root of power, ie signal envelope
 
     freq_exp    Float. This can be used to normalize out 1/f^a effects in power before
                 band-pooling and burst detection). This gives the exponent on the frequency
@@ -1540,13 +1556,6 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     timepts     (n_timepts,) array-like. Time sampling vector for data (usually in s).
                 Necessary if <window> is set, but unused otherwise.  Default: None
 
-    threshold   Scalar. Threshold power level for detecting bursts, given in SDs above the mean.
-                Default: 2 SDs
-
-    min_cycles  Scalar. Minimal length of contiguous above-threshold period to be counted as a
-                burst, given in number of oscillatory cycles at each frequency (or band center).
-                Default: 3
-
     **kwargs    Any other kwargs passed directly to power_spectrogram() function
 
     RETURNS
@@ -1565,28 +1574,37 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     Lundqvist, ..., & Miller (2018) Nature Comm "Gamma and beta bursts during working memory
                                                 readout suggest roles in its volitional control"
     """
-    # todo  Add optional sliding trial window for mean,SD
     # todo  Gaussian fits for definining burst f,t extent?
     # todo  Option input of spectral data?
+    # todo  Add optional sliding trial window for mean,SD
+    method = method.lower()
+    spec_type = spec_type.lower()
+    if bands is not None: bands = np.asarray(bands)
+    if axis < 0: axis = data.ndim + axis
+    if (trial_axis is not None) and (trial_axis < 0):  trial_axis = data.ndim + trial_axis
+
     assert axis != trial_axis, \
-        ValueError("Data must have distinct time and trial axes for computing across-trial z-score")
+        ValueError("Time and trial axes can't be same. Set trial_axis=None if no trials in data.")
     if window is not None:
         assert len(window) == 2, \
             ValueError("Window for computing mean,SD should be given as (start,end) (len=2)")
         assert timepts is not None, \
             ValueError("Need to input <timepts> to set a window for computing mean,SD")
-
-    method = method.lower()
-    if bands is not None: bands = np.asarray(bands)
-    if axis < 0:        axis = data.ndim + axis
-    if trial_axis < 0:  trial_axis = data.ndim + trial_axis
+    assert spec_type in ['power','magnitude'], \
+        ValueError("spec_type must be 'power'|'magnitude' for burst analysis (%s given)"
+                   % spec_type)
 
     # Move array axes so time axis is 1st and trials last (n_timepts,...,n_trials)
     if (axis == data.ndim-1) and (trial_axis == 0):
-        data = np.swapaxes(data,axis,trial_axis)
+        data = np.swapaxes(data, axis, trial_axis)
     else:
-        if axis != 0:                   data = np.moveaxis(data,axis,0)
-        if trial_axis != data.ndim-1:   data = np.moveaxis(data,trial_axis,-1)
+        if axis != 0:
+            data = np.moveaxis(data,axis,0)
+        # If data has no trial axis, temporarily append singleton to end to simplify code
+        if trial_axis is None:
+            data = data[...,np.newaxis]
+        elif trial_axis != data.ndim-1:
+            data = np.moveaxis(data, trial_axis, -1)
     data_shape = data.shape
     data_ndim = data.ndim
     # Standardize data array to shape (n_timepts,n_data_series,n_trials)
@@ -1605,7 +1623,8 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         if ('freqs' not in kwargs) and (bands is not None): kwargs['freqs'] = bands
 
     # Compute time-frequency power from raw data -> (n_freqs,n_timepts,n_data_series,n_trials)
-    data,freqs,times = power_spectrogram(data, smp_rate, axis=0, method=method, **kwargs)
+    data,freqs,times = spectrogram(data, smp_rate, axis=0, method=method, spec_type=spec_type,
+                                   **kwargs)
     timepts = times + timepts[0] if timepts is not None else times
     n_timepts = len(times)
     dt = np.mean(np.diff(times))
@@ -1621,55 +1640,63 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
         freqs = bands
     n_freqs = data.shape[0]
 
-    # Compute mean,SD of each frequency band across all trials (axis -1) and timepoints (axis 1)
+    # Compute mean,SD of each frequency band and data series (eg channel)
+    # across all trials (axis -1) and timepoints (axis 1)
     if window is None:
         mean = data.mean(axis=(1,-1), keepdims=True)
         sd   = data.std(axis=(1,-1), ddof=0, keepdims=True)
 
-    # Compute mean,SD of each frequency band across all trials and timepoints in time window
+    # Compute mean,SD of each freq band/channel across all trials and timepoints w/in time window
     else:
         tbool = (timepts >= window[0]) & (timepts <= window[1])
         mean = data.compress(tbool,axis=1).mean(axis=(1,-1), keepdims=True)
         sd   = data.compress(tbool,axis=1).std(axis=(1,-1), ddof=0, keepdims=True)
 
     # Compute z-score of data and threshold -> boolean array of candidate burst times
-    bursts = ((data - mean) / sd) > threshold
+    z = (data - mean) / sd
+    bursts = z > threshold
 
     tsmps = np.arange(n_timepts)
+    
 
-    def _screen_bursts(data, min_samples, start):
+    def _screen_bursts(burst_bool, min_samples, start):
         """ Subfunction to evaluate/detect bursts in boolean time series of candidate bursts """
         # Find first candidate burst in trial (timepoints of all candidate burst times)
-        if start is None:   on_times = np.nonzero(data)[0]
+        if start is None:   on_times = np.nonzero(burst_bool)[0]
         # Find next candidate burst in trial
-        else:               on_times = np.nonzero(data & (tsmps > start))[0]
+        else:               on_times = np.nonzero(burst_bool & (tsmps > start))[0]
 
         # If no (more) bursts in time series, return data as is, we are done
-        if len(on_times) == 0:  return data
-        # Onset index of first/next candidate burst (if there is one)
+        if len(on_times) == 0:  return burst_bool
+        # Otherwise, get onset index of first/next candidate burst
         else:                   onset = on_times[0]
 
         # Find non-burst timepoints in remainder of time series
-        off_times = np.nonzero(~data & (tsmps > onset))[0]
+        off_times = np.nonzero(~burst_bool & (tsmps > onset))[0]
 
-        # Offset index of current burst = next off time - 1
-        if len(off_times) != 0: offset = off_times[0] - 1
         # If no offset found, burst must extend to end of data
-        else:                   offset = len(data)
+        if len(off_times) == 0: offset = len(burst_bool)
+        # Otherwise, get index of offset of current burst = next off time - 1
+        else:                   offset = off_times[0] - 1
 
         # Determine if length of current candidate burst meets minimum duration
         # If not, delete it from data (set all timepoints w/in it to False)
         burst_len = offset - onset + 1
-        if burst_len < min_samples:  data[onset:(offset+1)] = False
+        if burst_len < min_samples:  burst_bool[onset:(offset+1)] = False
 
         # todo trim bursts to half-max point? (using Gaussian fits or raw power?)
 
-        # If offset is less than minimum burst length from end of data, we are done, return data
-        if (len(data) - offset) < min_samples:  return data
+        # If offset is less than minimum burst length from end of data, we are done.
+        # Ensure no further timepoints are labelled "burst on" and return data
+        if (len(burst_bool) - offset) < min_samples:
+            burst_bool[(offset+1):] = False
+            return burst_bool
         # Otherwise, call function recursively, now starting search just after current burst offset
-        else:                                   return _screen_bursts(data,min_samples,offset+1)
+        else: 
+            return _screen_bursts(burst_bool,min_samples,offset+1)
 
-    # Screen all candidate burst to ensure they meet minimum duration
+
+    # Screen all candidate bursts across freqs/trials/chnls to ensure they meet minimum duration
     for i_freq,freq in enumerate(freqs):
         # Compute center frequency of frequency band
         if not np.isscalar(freq): freq = np.mean(freq)
@@ -1688,19 +1715,19 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, method='wavelet',
     if data_ndim > 3:       bursts = bursts.reshape((n_freqs,n_timepts,data_shape[1:-1],n_trials))
     elif data_ndim == 2:    bursts = bursts.squeeze(axis=2)
 
-    # Move array axes back to original locations (n_timepts,...,n_trials)
+    # Move array axes back to original locations
     if (axis == data_ndim-1) and (trial_axis == 0):
         bursts = np.moveaxis(bursts,-1,0)   # Move trial axis back to 0
         bursts = np.moveaxis(bursts,1,-1)   # Move freq axis to end
         bursts = np.moveaxis(bursts,1,-1)   # Move time axis to end (after freq)
     else:
         if axis != 0:                   bursts = np.moveaxis(bursts,(0,1),(axis,axis+1))
-        if trial_axis != data_ndim-1:
+        if trial_axis is None:          bursts = np.squeeze(bursts,-1)
+        elif trial_axis != data_ndim-1:
             if trial_axis > axis:       bursts = np.moveaxis(bursts,-1,trial_axis+1)
             else:                       bursts = np.moveaxis(bursts,-1,trial_axis)
 
     return bursts, freqs, timepts
-
 
 
 # =============================================================================
@@ -1733,7 +1760,7 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
 
     RETURNS
     lines   List of Line2D objects. Output of plt.plot()
-    ax      Pyplot Axis object. Axis for plot    
+    ax      Pyplot Axis object. Axis for plot
     """
     freqs   = np.asarray(freqs)
     if ax is None: ax = plt.gca()
@@ -1787,7 +1814,7 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
 
     RETURNS
     img     AxesImage object. Output of plt.imshow()
-    ax      Pyplot Axis object. Axis for plot    
+    ax      Pyplot Axis object. Axis for plot
     """
     timepts = np.asarray(timepts)
     freqs   = np.asarray(freqs)
@@ -1796,7 +1823,7 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     if clim is None: clim = (data.min(), data.max())
 
     freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-        
+
     df      = np.diff(freqs).mean()
     flim    = [freqs[0]-df/2, freqs[-1]+df/2]
 
@@ -1817,7 +1844,7 @@ def frequency_plot_settings(freqs):
     freqs = np.asarray(freqs).squeeze()
     # For freqs given as (low,high) bands, convert to band means
     if (freqs.ndim == 2) and (freqs.shape[1] == 2): freqs = freqs.mean(axis=1)
-    
+
     freq_scale = _infer_freq_scale(freqs)
 
     # For log-sampled freqs, plot in log2(freq) but label with actual freqs
@@ -2178,7 +2205,7 @@ def complex_to_spec_type(data, spec_type):
     spec_type   String. Type of spectral signal to return:
                 'power'     Spectral power of data
                 'phase'     Phase of complex spectral data (in radians)
-                'magnitude' Magnitude (square root of power) of complex data
+                'magnitude' Magnitude (square root of power) of complex data = signal envelope
                 'real'      Real part of complex data
                 'imag'      Imaginary part of complex data
 
@@ -2676,4 +2703,3 @@ def _str_to_pool_func(func):
         elif func == 'sum': return lambda x: np.sum(x, axis=0)
         else:
             raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)
-        

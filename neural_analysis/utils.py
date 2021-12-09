@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-utils   A module of Python utilities helpful for data
+utils   A module of Python utilities helpful for data preprocessing and analysis
 
-Includes numerical methods, such as interpolation, z-scoring, and signal-to-noise measures;
-functions to reshape data arrays and dynamically index into specific array axes;
-functions for comparison and concatenation of Numpy "object" arrays (similar to Matlab
-cell arrays); and various other useful little utilities.
+Includes:
+- numerical methods: interpolation, correlation, z-scoring, signal-to-noise measures
+- functions to reshape data arrays and dynamically index into specific array axes
+- functions for dealing w/ Numpy "object" arrays (similar to Matlab cell arrays)
+- various other useful little utilities
 
 FUNCTIONS
 ### Numerical utility functions ###
@@ -281,7 +282,7 @@ def correlation(data1, data2, axis=None, keepdims=True):
     keepdims    Bool. If False, correlation <axis> is removed (squeezed out) from output.
                 If True [default], <axis> is kept in output as singleton axis.
 
-    OUTPUTS
+    RETURNS
     r           Float | (...,[1,]...) ndarray. Correlation between data1 & data2. 
                 For 1-d data, r is a float. For multi-d data, r is same shape as data, but with
                 <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
@@ -338,7 +339,7 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
     keepdims    Bool. If False, correlation <axis> is removed (squeezed out) from output.
                 If True [default], <axis> is kept in output as singleton axis.
 
-    OUTPUTS
+    RETURNS
     rho         Float | (...,[1,]...) ndarray. Rank correlation between data1 & data2. 
                 For 1-d data, rho is a float. For multi-d data, rho is same shape as data, but with
                 <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
@@ -788,7 +789,7 @@ def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.al
                 across entire array.
                 Default: np.all (True iff ALL objects in array are elementwise True)
 
-    OUTPUTS
+    RETURNS
     equal       ndarray | bool. Reflects equality of each object element in data1,2.
                 If reduce_func is None, this is the elementwise equality of each object,
                 and has same shape as data1,2.
@@ -844,7 +845,7 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
                 across entire array.
                 Default: None (don't perform any reduction on result)
 
-    OUTPUTS
+    RETURNS
     equal       ndarray | bool. Reflects comparison of each object element in data1,2.
                 If reduce_func is None, this is the elementwise comparison of each object,
                 and has same shape as data1,2.
@@ -898,7 +899,7 @@ def concatenate_object_array(data, axis=None, sort=False):
 
     sort    Bool. If True, sorts items in concatenated list objects. Default: False
 
-    OUTPUTS
+    RETURNS
     data    Concatenated object(s).
             If axis is None, returns as single list extracted from object array.
             Otherwise, returns as object ndarray with all concatenated axes
