@@ -2,13 +2,17 @@
 import pytest
 import numpy as np
 
+from neural_analysis.utils import data_labels_to_data_groups
+
 from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data, \
                                                 one_way_data, two_way_data
 from neural_analysis.randstats import one_sample_tstat, one_sample_test, \
                                       paired_tstat, paired_sample_test, paired_sample_test_labels, \
+                                      paired_sample_association_test, paired_sample_association_test_labels, \
                                       two_sample_tstat, two_sample_test, two_sample_test_labels, \
                                       one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
                                       one_sample_confints, paired_sample_confints, two_sample_confints
+
 
 # =============================================================================
 # Unit tests
@@ -95,21 +99,28 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
 
 
 @pytest.mark.parametrize('stat, method, result_p, result_obs, result_resmp',
-                         [('paired', 'permutation', 0.05, -2.97, -0.35),
-                          ('paired', 'bootstrap', 0.05, -2.97, -0.54),
-                          ('two_sample', 'permutation', 0.05, -3.39, -0.28),
-                          ('two_sample', 'bootstrap', 0.05, -3.39, -0.49)])
+                         [('paired_diff',   'permutation',  0.05, -2.97, -0.35),
+                          ('paired_diff',   'bootstrap',    0.05, -2.97, -0.54),
+                          ('paired_assoc',  'permutation',  0.35, -0.33, -0.09),
+                          ('paired_assoc',  'bootstrap',    0.25, -0.33, -0.05),                          
+                          ('two_sample',    'permutation',  0.05, -3.39, -0.28),
+                          ('two_sample',    'bootstrap',    0.05, -3.39, -0.49)])
 def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, result_resmp):
     """ Unit tests for paired_sample_test and two_sample_test func's for paired/2-sample stats """
     data, labels = two_sample_data
     data_orig = data.copy()
 
-    data1 = data[labels == 0]
-    data2 = data[labels == 1]
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=0, groups=[0,1])
     data1_orig = data1.copy()
     data2_orig = data2.copy()
 
-    test_func = paired_sample_test if stat == 'paired' else two_sample_test
+    if stat == 'paired_diff':   
+        test_func, test_func_labels = paired_sample_test, paired_sample_test_labels
+    elif stat == 'paired_assoc':
+        test_func, test_func_labels = paired_sample_association_test, paired_sample_association_test_labels
+    else:
+        test_func, test_func_labels = two_sample_test, two_sample_test_labels
+    
     n = int(10)
     n_chnls = int(4)
     n_resamples = int(20)
@@ -118,6 +129,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     # Only test values for 1st simulated channel for simplicity
     p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, seed=1,
                                         n_resamples=n_resamples, return_stats=True)
+    print(np.round(p[0,0],2), np.round(stat_obs[0,0],2), np.round(stat_resmp[:,0].mean(),2))
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert p.shape == (1,n_chnls)
@@ -136,7 +148,6 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     assert np.allclose(p, p2)
 
     # Test for consistent output with (data,labels) version
-    test_func_labels = paired_sample_test_labels if stat == 'paired' else two_sample_test_labels
     p2, stat_obs2, stat_resmp2 = test_func_labels(data, labels, axis=0, method=method, seed=1,
                                                   n_resamples=n_resamples, return_stats=True)
     assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
@@ -521,8 +532,8 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
 def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_obs, result_resmp):
     """ Unit tests for paired/two_sample_confints function for paired/two-sample CI's """
     data, labels = two_sample_data
-    data1 = data[labels == 0]
-    data2 = data[labels == 1]
+    
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=0, groups=[0,1])
     data1_orig = data1.copy()
     data2_orig = data2.copy()
 

@@ -10,6 +10,7 @@ the form of the data distribution(s).
 Includes tests/confints for several common data schemes:
 - one-sample (are data values different from 0 or baseline?)
 - paired-sample difference (are paired data observations different?)
+- paired-sample association (are paired data observations correlated?)
 - two-sample difference (are two groups/conditions of data different?)
 - one-way difference (is there some difference between multiple groups/conditions of data?)
 - two-way analysis (for data varying along 2 dims, are there diff's along each and/or interaction?)
@@ -42,11 +43,17 @@ one_sample_test                 Wrapper for all 1-sample tests (~ 1-sample t-tes
 one_sample_randomization_test   Randomized-sign 1-sample test
 one_sample_bootstrap_test       Bootstrap 1-sample test
 
-### Paired-sample tests (analogs of paired-sample t-test)  ###
-paired_sample_test              Wrapper for all paired-sample tests (~ paired-sample t-test)
+### Paired-sample difference tests (analogs of paired-sample t-test)  ###
+paired_sample_test              Wrapper for all paired-sample difference tests (~ paired t-test)
 paired_sample_test_labels       Same, but with (data,labels) arg format instead of (data1,data2)
-paired_sample_permutation_test  Permutation paired-sample test
-paired_sample_bootstrap_test    Bootstrap paired-sample test
+paired_sample_permutation_test  Permutation paired-sample difference test
+paired_sample_bootstrap_test    Bootstrap paired-sample difference test
+
+### Paired-sample association tests (analogs of correlation tests)  ###
+paired_sample_association_test  Wrapper for all paired-sample association tests (~ correlation)
+paired_sample_association_test_labels       Same, but with (data,labels) arg format
+paired_sample_association_permutation_test  Permutation paired-sample association test
+paired_sample_association_bootstrap_test    Bootstrap paired-sample association test
 
 ### Two-sample tests (analogs of 2-sample t-test) ###
 two_sample_test                 Wrapper for all 2-sample tests (~ 2-sample t-test)
@@ -89,7 +96,8 @@ from math import sqrt
 from warnings import warn
 import numpy as np
 
-from neural_analysis.utils import set_random_seed, axis_index_slices
+from neural_analysis.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
+                                  correlation, rank_correlation
 
 
 # =============================================================================
@@ -123,7 +131,7 @@ def one_sample_test(data, axis=0, method='randomization', **kwargs):
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
     """
@@ -195,7 +203,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
     stat_obs    Float | (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but (...,n_resamples,...) has length n_resamples-1.
 
@@ -237,7 +245,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
             # Compute statistic on resampled data
             stat_resmp[stat_slices] = stat_func(data, **kwargs)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
@@ -252,10 +260,10 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
             data_slices = axis_index_slices(axis, resample, ndim)
             # Randomly flip signs of obervations flagged by random variables above
             data[data_slices] *= -1
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs, stat_func(data, **kwargs))
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     # For vector-valued data, extract value from scalar array -> float for output
@@ -333,7 +341,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
 
@@ -353,7 +361,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     # Compute statistic of interest on actual observed data
     stat_obs = stat_func(data, **kwargs)
 
-    # Create generators with n_resamples-1 length-n independent Bernoulli RV's
+    # Create generators with n_resamples-1 random bootstrap resamplings with replacement
     resamples = bootstraps(n, n_resamples-1, seed)
 
     if return_stats:
@@ -391,10 +399,10 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
             # Subtract observed statistic from distribution of resampled statistics
             stat_resmp -= stat_obs
 
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs - mu, stat_resmp, **kwargs)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     # For vector-valued data, extract value from scalar array -> float for output
@@ -407,7 +415,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 
 
 # =============================================================================
-# Paired-sample randomization tests
+# Paired-sample difference randomization tests
 # =============================================================================
 def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     """
@@ -419,8 +427,7 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but
-                otherwise arbitrary shape.
+                Shape is arbitrary, but must be same for data1,2.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
@@ -440,7 +447,7 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
     """
@@ -459,13 +466,8 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
 
 def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups=None, **kwargs):
     """
-    Mass univariate paired-sample test of whether any arbitrary statistic
-    differs between paired samples (analogous to paired-sample t-test)
-
-    Wrapper around functions for specific paired-sample tests. See those for details.
-
-    This version is an alternative interface to paired_sample_test() with (data,labels)
-    arguments instead of (data1,data2)
+    Convenience wrapper around paired_sample_test() that allows arguments of form (data,labels)
+    instead of (data1,data2). See paired_sample_test for details.
 
     ARGS
     data        (...,N,...) ndarray. Data from both groups to run test on.
@@ -495,27 +497,12 @@ def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
     """
-    labels = np.asarray(labels)
-    if groups is None: groups = np.unique(labels)
-
-    assert len(groups) == 2, "Must have only 2 groups (conditions) in labels"
-
-    group1_bool = labels == groups[0]
-    group2_bool = labels == groups[1]
-    
-    n1 = group1_bool.sum()
-    n2 = group2_bool.sum()
-
-    assert n1 == n2, \
-        "Two groups must have same number of observations/trials (%d != %d)" % (n1,n2)
-
-    return paired_sample_test(data.compress(group1_bool, axis=axis),
-                              data.compress(group2_bool, axis=axis),
-                              axis=axis, method=method, **kwargs)
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=axis, groups=groups, max_groups=2)
+    return paired_sample_test(data1, data2, axis=axis, method=method, **kwargs)
 
 
 def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='both',
@@ -533,8 +520,7 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but
-                otherwise arbitrary shape.
+                Shape is arbitrary, but must be same for data1,2.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
@@ -587,9 +573,9 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
     if axis < 0: axis = data1.ndim + axis
 
     _paired_sample_data_checks(data1, data2)
-            
+
     if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
-        
+
     return one_sample_randomization_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                          tail=tail, n_resamples=n_resamples,
                                          return_stats=return_stats, seed=seed, **kwargs)
@@ -608,7 +594,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1
+                Shape is arbitrary, but must be same for data1,2.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
@@ -661,12 +647,345 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
     if axis < 0: axis = data1.ndim + axis
 
     _paired_sample_data_checks(data1, data2)
-        
+
     if isinstance(stat,str) and (stat.lower == 'meandiff'): stat = 'mean'
-        
+
     return one_sample_bootstrap_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                      tail=tail, n_resamples=n_resamples,
                                      return_stats=return_stats, seed=seed, **kwargs)
+
+
+# =============================================================================
+# Paired-sample association (correlation) randomization tests
+# =============================================================================
+def paired_sample_association_test(data1, data2, axis=0, method='permutation', **kwargs):
+    """
+    Mass bivariate test of association (eg correlation) between two paired samples
+
+    Wrapper around functions for specific paired-sample tests. See those for details.
+
+    ARGS
+    data1       (...,n,...) ndarray. Data from one group to compare.
+    data2       (...,n,...) ndarray. Data from a second group to compare.
+                Shape is arbitrary, but must be same for data1,2.
+
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+
+    method      String. Resampling paradigm to use for test:
+                'permutation'   : Permutation test in paired_sample_association_permutation_test
+                'bootstrap'     : Bootstrap test in paired_sample_association_bootstrap_test
+                Default: 'permutation'
+
+    See specific test functions for further arguments.
+
+    RETURNS
+    p           (...,1,...) ndarray. p values from randomization test. Same size as data,
+                except for (...,n_resamples,...) reduced to a singleton.
+                For vector data, returns as a single float.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as <p>.
+
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data, but <axis> has length n_resamples-1.
+    """
+    method = method.lower()
+
+    if method in ['randomization','permutation','sign']:
+        test_func = paired_sample_association_permutation_test
+    elif method == 'bootstrap':
+        test_func = paired_sample_association_bootstrap_test
+    else:
+        raise ValueError("Unsupported test type '%s'. Should be 'permutation' or 'bootstrap'"
+                         % method)
+
+    return test_func(data1, data2, axis=axis, **kwargs)
+
+
+def paired_sample_association_test_labels(data, labels, axis=0, method='permutation', groups=None,
+                                          **kwargs):
+    """
+    Convenience wrapper around paired_sample_association_test() that allows arguments of form
+    (data,labels) instead of (data1,data2). See paired_sample_association_test for details.
+
+    ARGS
+    data        (...,N,...) ndarray. Data from both groups to run test on.
+                Arbitrary shape, but both groups must have the same n (n1 = n2 = N/2).
+
+    labels      (N,) array-like. Group labels for each observation (trial),
+                identifying which group/condition each observation belongs to.
+
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+
+    method      String. Resampling paradigm to use for test:
+                'permutation'   : Permutation test in paired_sample_permutation_test [default]
+                'bootstrap'     : Bootstrap test in paired_sample_bootstrap_test
+
+    groups      (n_groups,) array-like. List of labels for each group (condition).
+                Default: set of unique values in <labels> (np.unique(labels))
+
+    See specific test functions for further arguments.
+
+    RETURNS
+    p           (...,1,...) ndarray. p values from randomization test. Same size as data,
+                except for (...,n_resamples,...) reduced to a singleton.
+                For vector data, returns as a single float.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as <p>.
+
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data, but <axis> has length n_resamples-1.
+    """
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=axis, groups=groups, max_groups=2)
+    return paired_sample_association_test(data1, data2, axis=axis, method=method, **kwargs)
+
+
+def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', tail='both',
+                                               n_resamples=10000, seed=None, return_stats=False,
+                                               **kwargs):
+    """
+    Mass bivariate permutation test of association (eg correlation) between two paired samples
+
+    Observations are randomly permuted across one of the paired samples (data1 vs data2) relative
+    to the other, to eliminate any association between them while preserving the marginal
+    distributions of each sample.  The same stat is then computed on the resampled data to estimate
+    the distrubution under the null hypothesis, and the stat value for the actual observed data
+    is compared to this.
+
+    ARGS
+    data1       (...,n,...) ndarray. Data from one group to compare.
+    data2       (...,n,...) ndarray. Data from a second group to compare.
+                Shape is arbitrary, but must be same for data1,2.
+
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+
+    stat        String | Callable. String specifier for statistic to resample:
+                'r'/'pearson'   : Standard Pearson product-moment correlation [default]
+                'rho'/'spearman': Spearman rank correlation
+
+                -or- Custom function to generate resampled statistic of interest.
+                Should take two array arguments (data1,data2) with <axis> corresponding
+                to trials/observations and return a scalar value for each independent
+                data series.
+
+    tail        String. Specifies tail of test to perform:
+                'both'  : 2-tail test -- test for abs(stat_obs) > abs(stat_resmp)
+                'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
+                'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
+                Default: 'both' (2-tailed test)
+
+    n_resamples Int. Number of random resamplings to perform for test
+                (should usually be >= 10000 if feasible). Default: 10000
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+
+    return_stats Bool. If False, only returns p values. If True, returns p values,
+                observed stats, and resampled stats. Default: False
+
+    Any additional kwargs passed directly to stat function.
+
+    RETURNS
+    p           (...,1,...) ndarray. p values from permutation test. Same size as
+                data1/data2, except for <axis> reduced to a singleton.
+                For vector data, returns as a single float.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs     (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as <p>.
+
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data1/data2, but <axis> has length n_resamples-1.
+    """
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
+
+    _paired_sample_data_checks(data1, data2)
+
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_assoc_stat(stat,axis)    # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+
+    ndim = data1.ndim
+    n = data1.shape[axis]
+
+    # Compute statistic of interest on actual observed data
+    stat_obs = stat_func(data1, data2, **kwargs)
+
+    # Create generators with n_resamples-1 random permutations of ints 0:n-1
+    resamples = permutations(n, n_resamples-1, seed)
+
+    if return_stats:
+        # Compute statistic under <n_resamples> random resamplings
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data1.shape)]
+        stat_resmp = np.empty(stat_shape)
+        for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
+            # Compute statistic on resampled data. Only need to permute one sample
+            stat_resmp[stat_slices] = stat_func(data1, data2[data_slices], **kwargs)
+
+        # p value = proportion of resampled test statistic values
+        #  >= observed value (+ observed value itself)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
+
+    else:
+        # Compute statistic under <n_resamples> random resamplings and
+        # tally values exceeding given criterion (more extreme than observed)
+        # Note: Init count to 1's to account for observed value itself
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data1.shape)]
+        count = np.ones(stat_shape)
+        for resample in resamples:
+            # Index into <axis> of data, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            # Compute statistic on resampled data1,data2
+            stat_resmp  = stat_func(data1, data2[data_slices], **kwargs)
+            # Compare observed and resampled stats, and tally values passing criterion
+            count += compare_func(stat_obs, stat_resmp)
+
+        # p value = proportion of resampled test statistic values passing criterion
+        p = count / n_resamples
+
+    # For vector-valued data, extract value from scalar array -> float for output
+    if p.size == 1:
+        p = p.item()
+        if return_stats and isinstance(stat_obs,np.ndarray): stat_obs = stat_obs.item()
+
+    if return_stats:    return p, stat_obs, stat_resmp
+    else:               return p
+
+
+def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tail='both',
+                                             n_resamples=10000, seed=None, return_stats=False,
+                                             **kwargs):
+    """
+    Mass bivariate boostrap test of association (eg correlation) between two paired samples
+
+    Observations are bootstrap resampled in pairs, and stat is recomputed on each.
+    Stat computed on observed data is subtracted off resamples, to center them at 0 and estimate
+    null distribution. p value is proportion of centered resampled values exceeding observed value.
+
+    ARGS
+    data1       (...,n,...) ndarray. Data from one group to compare.
+    data2       (...,n,...) ndarray. Data from a second group to compare.
+                Shape is arbitrary, but must be same for data1,2.
+
+    axis        Int. Axis of data corresponding to distinct trials/observations.
+                Default: 0 (1st axis)
+
+    stat        String | Callable. String specifier for statistic to resample:
+                'r'/'pearson'   : Standard Pearson product-moment correlation [default]
+                'rho'/'spearman': Spearman rank correlation
+
+                -or- Custom function to generate resampled statistic of interest.
+                Should take two array arguments (data1,data2) with <axis> corresponding
+                to trials/observations and return a scalar value for each independent
+                data series.
+
+    tail        String. Specifies tail of test to perform:
+                'both'  : 2-tail test -- test for abs(stat_obs) > abs(stat_resmp)
+                'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
+                'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
+                Default: 'both' (2-tailed test)
+
+    n_resamples Int. Number of random resamplings to perform for test
+                (should usually be >= 10000 if feasible). Default: 10000
+
+    seed        Int. Random generator seed for repeatable results.
+                Set=None [default] for unseeded random numbers.
+
+    return_stats Bool. If False, only returns p values. If True, returns p values,
+                observed stats, and resampled stats. Default: False
+
+    Any additional kwargs passed directly to stat function.
+
+    RETURNS
+    p           (...,1,...) ndarray. p values from permutation test. Same size as
+                data1/data2, except for <axis> reduced to a singleton.
+                For vector data, returns as a single float.
+
+    - Following variables are only returned if return_stats is True -
+    stat_obs     (...,1,...) ndarray. Statistic values for actual observed data.
+                Same size as <p>.
+
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
+                for all resamplings of data.
+                Same size as data1/data2, but <axis> has length n_resamples-1.
+    """
+    # Wrap negative axis back into 0 to ndim-1
+    if axis < 0: axis = data1.ndim + axis
+
+    _paired_sample_data_checks(data1, data2)
+
+    # Convert string specifiers to callable functions
+    stat_func    = _str_to_assoc_stat(stat,axis)    # Statistic (includes default)
+    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+
+    ndim = data1.ndim
+    n = data1.shape[axis]
+
+    # Compute statistic of interest on actual observed data
+    stat_obs = stat_func(data1,data2, **kwargs)
+
+    # Create generators with n_resamples random bootstrap resamplings with replacement
+    resamples = bootstraps(n, n_resamples-1, seed)
+
+    if return_stats:
+        # Compute statistic under <n_resamples> random resamplings
+        stat_shape = [axlen if ax != axis else n_resamples-1 for ax,axlen in enumerate(data1.shape)]
+        stat_resmp = np.empty(stat_shape)
+        for i_resmp,resample in enumerate(resamples):
+            # Index into <axis> of data and stat, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            stat_slices = axis_index_slices(axis, [i_resmp], ndim)
+            # Compute statistic on resampled data. Only need to permute one sample
+            stat_resmp[stat_slices] = stat_func(data1[data_slices], data2[data_slices], **kwargs)
+
+        # Center each resampled statistic on their mean to approximate null disttribution
+        # TODO Need to determine which of these is more apropriate (and align ~return_stats option)
+        stat_resmp -= stat_obs
+        # stat_resmp -= stat_resmp.mean(axis=axis,keepdims=True)
+
+        # p value = proportion of bootstrap-resampled test statistic values
+        #  >= observed value (+ observed value itself)
+        p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
+
+    else:
+        # Compute statistic under <n_resamples> random resamplings and
+        # tally values exceeding given criterion (more extreme than observed)
+        # Note: Init count to 1's to account for observed value itself
+        stat_shape = [axlen if ax != axis else 1 for ax,axlen in enumerate(data1.shape)]
+        count = np.ones(stat_shape)
+        for resample in resamples:
+            # Index into <axis> of data, with ':' for all other axes
+            data_slices = axis_index_slices(axis, resample, ndim)
+            # Compute statistic on resampled data1,data2
+            stat_resmp  = stat_func(data1[data_slices], data2[data_slices], **kwargs)
+            # Subtract observed statistic from resampled statistics
+            stat_resmp -= stat_obs
+            # Compare observed and resampled stats, and tally values passing criterion
+            count += compare_func(stat_obs, stat_resmp)
+
+        # p value = proportion of resampled test statistic values passing criterion
+        p = count / n_resamples
+
+    # For vector-valued data, extract value from scalar array -> float for output
+    if p.size == 1:
+        p = p.item()
+        if return_stats and isinstance(stat_obs,np.ndarray): stat_obs = stat_obs.item()
+
+    if return_stats:    return p, stat_obs, stat_resmp
+    else:               return p
 
 
 # =============================================================================
@@ -703,7 +1022,7 @@ def two_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
     """
@@ -719,13 +1038,8 @@ def two_sample_test(data1, data2, axis=0, method='permutation', **kwargs):
 
 def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=None, **kwargs):
     """
-    Mass univariate two-sample test of whether any arbitrary statistic
-    differs between two non-paired samples (analogous to 2-sample t-test)
-
-    Wrapper around functions for specific two-sample tests. See those for details.
-
-    This version is an alternative interface to two_sample_test() with (data,labels)
-    arguments instead of (data1,data2)
+    Convenience wrapper around two_sample_test() that allows arguments of form (data,labels)
+    instead of (data1,data2). See two_sample_test for details.
 
     ARGS
     data        (...,N,...) ndarray. Data from both groups to run test on. Arbitrary shape.
@@ -754,18 +1068,12 @@ def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=No
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as <p>.
 
-    stat_resmp (...,n_resamples-1,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples-1,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> has length n_resamples-1.
     """
-    labels = np.asarray(labels)
-    if groups is None: groups = np.unique(labels)
-
-    assert len(groups) == 2, "Must have only 2 groups (conditions) in labels"
-
-    return two_sample_test(data.compress(labels == groups[0], axis=axis),
-                           data.compress(labels == groups[1], axis=axis),
-                           axis=axis, method=method, **kwargs)
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=axis, groups=groups, max_groups=2)
+    return two_sample_test(data1, data2, axis=axis, method=method, **kwargs)
 
 
 def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
@@ -872,7 +1180,7 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
             # Compute statistic on resampled data1,data2
             stat_resmp[stat_slices] = stat_func(data1_resmp, data2_resmp, **kwargs)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
@@ -893,10 +1201,10 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
             data2_resmp   = data_pool[data2_slices]
             # Compute statistic on resampled data1,data2
             stat_resmp    = stat_func(data1_resmp, data2_resmp, **kwargs)
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs, stat_resmp)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     # For vector-valued data, extract value from scalar array -> float for output
@@ -968,7 +1276,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     REFERENCE
     Manly _Randomization, Bootstrap and Monte Carlo Methods in Biology_ ch.3.10, 6.3
-    """    
+    """
     # Wrap negative axis back into 0 to ndim-1
     if axis < 0: axis = data1.ndim + axis
 
@@ -1010,7 +1318,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
         stat_resmp -= stat_obs
         # stat_resmp -= stat_resmp.mean(axis=axis,keepdims=True)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
@@ -1030,10 +1338,10 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
             # Subtract observed statistic from distribution of resampled statistics
             stat_resmp -= stat_obs
 
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs,stat_resmp)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     # For vector-valued data, extract value from scalar array -> float for output
@@ -1199,7 +1507,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
             # Note: Only need to resample labels
             stat_resmp[stat_slices] = stat_func(data, labels[resample], **kwargs)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs, stat_resmp, axis, compare_func)
 
@@ -1213,10 +1521,10 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
             # Compute statistic on data and resampled labels
             # Note: Only need to resample labels
             stat_resmp = stat_func(data,labels[resample], **kwargs)
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs,stat_resmp)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     # For vector-valued data, extract value from scalar array -> float for output
@@ -1386,11 +1694,11 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
             # Compute statistic on data and resampled label rows
             stat_resmp[...,i_resmp] = stat_func(data,labels[resample,:], **kwargs)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values
         #  >= observed value (+ observed value itself)
         p = resamples_to_pvalue(stat_obs[...,np.newaxis],
                                 stat_resmp, -1, compare_func).squeeze(axis=-1)
-        
+
     else:
         # Compute statistic under <n_resamples> random resamplings and
         # tally values exceeding given criterion (more extreme than observed)
@@ -1400,10 +1708,10 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
         for resample in resamples:
             # Compute statistic on data and resampled label rows
             stat_resmp = stat_func(data,labels[resample,:], **kwargs)
-            # Compute statistic on resampled data and tally values passing criterion
+            # Compare observed and resampled stats, and tally values passing criterion
             count += compare_func(stat_obs,stat_resmp)
 
-        # p value = proportion of permutation-resampled test statistic values
+        # p value = proportion of resampled test statistic values passing criterion
         p = count / n_resamples
 
     if return_stats:    return p, stat_obs, stat_resmp
@@ -1461,7 +1769,7 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as data, but <axis> reduced to length 1.
 
-    stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> now has length n_resamples.
     """
@@ -1521,8 +1829,7 @@ def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_re
     ARGS
     data1       (...,n,...) ndarray. Data from one group to compare.
     data2       (...,n,...) ndarray. Data from a second group to compare.
-                Must have same number of observations (trials) n as data1, but
-                otherwise arbitrary shape.
+                Shape is arbitrary, but must be same for data1,2.
 
     axis        Int. Axis of data corresponding to distinct trials/observations.
                 Default: 0 (1st axis)
@@ -1563,7 +1870,7 @@ def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_re
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as data, but <axis> reduced to length 1.
 
-    stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> now has length n_resamples.
     """
@@ -1623,13 +1930,13 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
     stat_obs    (...,1,...) ndarray. Statistic values for actual observed data.
                 Same size as data, but <axis> reduced to length 1.
 
-    stat_resmp (...,n_resamples,...) ndarray. Distribution of statistic values
+    stat_resmp  (...,n_resamples,...) ndarray. Distribution of statistic values
                 for all resamplings of data.
                 Same size as data, but <axis> now has length n_resamples.
     """
     # Wrap negative axis back into 0 to ndim-1
     if axis < 0: axis = data1.ndim + axis
-    
+
     _two_sample_data_checks(data1, data2, axis)
 
 
@@ -1665,7 +1972,7 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
         stat_resmp[stat_slices] = stat_func(data1[data1_slices], data2[data2_slices], **kwargs)
 
     # Sort boostrap resampled stats and extract confints from them
-    stat_slices = axis_index_slices(axis, conf_indexes, ndim)    
+    stat_slices = axis_index_slices(axis, conf_indexes, ndim)
     if return_stats and not return_sorted:
         # Sort copy of stat_resmp, so we can return original unsorted version
         stat_resmp_sorted = np.sort(stat_resmp, axis=axis)
@@ -1844,7 +2151,7 @@ def paired_tstat(data1, data2, axis=0, d=0):
     ARGS
     data1   (...,n,...) ndarray. Data from one group to compare.
     data2   (...,n,...) ndarray. Data from a second group to compare.
-            Must have same number of observations (trials) n as data1
+            Shape is arbitrary, but must be same for data1,2.
 
     axis    Int. Data axis corresponding to distinct observations. Default: 0
 
@@ -2173,6 +2480,20 @@ def _str_to_one_sample_stat(stat,axis):
         raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
 
 
+def _str_to_assoc_stat(stat,axis):
+    """ Convert string specifier to function to compute paired-sample association statistic """
+    if isinstance(stat,str):  stat = stat.lower()
+
+    if callable(stat):
+        return stat
+    elif stat in ['r','pearson','pearsonr']:
+        return lambda data1,data2: correlation(data1, data2, axis=axis)
+    elif stat in ['r','pearson','pearsonr']:
+        return lambda data1,data2: rank_correlation(data1, data2, axis=axis)
+    else:
+        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
+
+
 def _str_to_two_sample_stat(stat,axis):
     """ Convert string specifier to function to compute 2-sample statistic """
     if isinstance(stat,str):  stat = stat.lower()
@@ -2222,7 +2543,7 @@ def _paired_sample_data_checks(data1, data2):
 
 def _two_sample_data_checks(data1, data2, axis):
     """ Checks data format requirements for two-sample data """
-    
+
     assert (data1.ndim == data2.ndim), \
         "data1 and data2 must have same shape except for observation/trial axis (<axis>)"
 

@@ -128,8 +128,9 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     **kwargs All other kwargs passed directly to information method function
 
     RETURNS
-    info    (...,n_terms,...). Measure of information in data about labels
-            Shape is same as data, with observation axis reduced to length = n_terms.
+    info    (...,1,...). Measure of information in data about labels
+            Shape is same as data, with observation axis reduced to length = 1
+            (or = n_terms for pev/regression method).
     """
     method = method.lower()
     info_func = _string_to_info_func(method)
