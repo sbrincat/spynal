@@ -118,6 +118,7 @@ from neural_analysis.utils import set_random_seed, iarange, index_axis, axis_ind
                                   standardize_array, undo_standardize_array, interp1
 from neural_analysis.helpers import _check_window_lengths
 from neural_analysis.spikes import _spike_data_type, times_to_bool
+from neural_analysis.plots import plot_line_with_error_fill, plot_heatmap
 
 
 # Set default arguments for pyfftw functions: Fast planning, use all available threads
@@ -1762,27 +1763,16 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     lines   List of Line2D objects. Output of plt.plot()
     ax      Pyplot Axis object. Axis for plot
     """
-    freqs   = np.asarray(freqs)
-    if ax is None: ax = plt.gca()
-    plt.sca(ax)
-    if ylim is None:
-        ylim = (data.min(), data.max())
-        ylim = (ylim[0]-0.05*np.diff(ylim), ylim[1]+0.05*np.diff(ylim))
-
     freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-
-    df      = np.diff(freqs).mean()
-    flim    = [freqs[0]-df/2, freqs[-1]+df/2]
-
-    if color is None: color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
-
-    lines = plt.plot(freqs, data, '-', color=color, **kwargs)
-
-    plt.xlim(flim)
-    plt.ylim(ylim)
+    
+    lines, _, ax = plot_line_with_error_fill(freqs, data, ax=ax, ylim=ylim, color=color, **kwargs)
+    
     plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
-    plt.xticks(fticks,fticklabels)
-
+    ax.set_xticks(fticks)
+    ax.set_xticklabels(fticklabels)
+    # No need to return list of lists if only plotting one data series
+    if (data.ndim == 1) or (data.shape[0] == 1): lines = lines[0]    
+    
     return lines, ax
 
 
@@ -1816,25 +1806,14 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     img     AxesImage object. Output of plt.imshow()
     ax      Pyplot Axis object. Axis for plot
     """
-    timepts = np.asarray(timepts)
-    freqs   = np.asarray(freqs)
-    if ax is None: ax = plt.gca()
-    plt.sca(ax)
-    if clim is None: clim = (data.min(), data.max())
-
     freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-
-    df      = np.diff(freqs).mean()
-    flim    = [freqs[0]-df/2, freqs[-1]+df/2]
-
-    dt      = np.diff(timepts).mean()
-    tlim    = [timepts[0]-dt/2, timepts[-1]+dt/2]
-
-    img = plt.imshow(data, extent=[*tlim,*flim], vmin=clim[0], vmax=clim[1],
-                     aspect='auto', origin='lower', cmap=cmap, **kwargs)
+    
+    img, ax = plot_heatmap(timepts, freqs, data, ax=ax, clim=clim, cmap=cmap,
+                           origin='lower', **kwargs)
 
     plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
-    plt.yticks(fticks,fticklabels)
+    ax.set_yticks(fticks)
+    ax.set_yticklabels(fticklabels)
 
     return img, ax
 

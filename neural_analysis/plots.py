@@ -30,7 +30,7 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
     """
     Plots 1d data as line plot(s) +/- error(s) as a semi-transparent fill in given axis using
     matplotlib.pyplot.plot and .fill
-    
+
     Can plot multiple lines/errors in same axis by inputting multiple data series,
     as decribed below.
 
@@ -119,15 +119,8 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
         TypeError("Incorrect or misspelled variable(s) in keyword args: " +
                     ', '.join(kwargs.keys()))
 
-    # Set plotting colors. If only 1 color input, replicate it for all line plots (eg channels)
-    if color is None:
-        color = ['C'+str(j) for j in range(n_lines)]
-    else:
-        color = np.atleast_1d(color)
-        if (len(color) == 1) or ((len(color) == 3) and (n_lines != 3)):
-            color = np.tile(color, (n_lines,))
-        else:
-            assert len(color) == n_lines, "color must have single value or 1 value per line (channel)"
+    # Set plotting colors, including defaults
+    color = _set_plot_colors(color, n_lines)
 
     ax.set_xlim(xlim)
     ax.set_ylim(ylim)
@@ -311,12 +304,8 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
 
     if 'linewidth' not in kwargs: kwargs.update(linewidth=1)
 
-    # Set plotting colors. If only 1 color input, replicate it for all line plots (eg channels)
-    color = np.atleast_1d(color)
-    if (len(color) == 1) or ((len(color) == 3) and (n_lines != 3)):
-        color = np.tile(color, (n_lines,))
-    else:
-        assert len(color) == n_lines, "color must have single value or 1 value per line (channel)"
+    # Set plotting colors, including defaults
+    color = _set_plot_colors(color, n_lines)
 
     # Scale data so max range of data = <scale>*offset btwn lines on plot
     max_val = np.abs(data).max()
@@ -494,3 +483,29 @@ def maximize_figure():
     """
     fig_manager = plt.get_current_fig_manager()
     if hasattr(fig_manager, 'window'): fig_manager.window.showMaximized()
+    
+    
+# =============================================================================
+# Helper functions
+# =============================================================================    
+def _set_plot_colors(color, n_plot_objects):
+    """ Sets plotting colors, including defaults and expanding colors to # of plot objects """
+    # If no color set, set default = ['C0','C1',...,'CN'] = default matplotlib plotting color order
+    if color is None:
+        color = ['C'+str(j) for j in range(n_plot_objects)]
+        
+    # Otherwise, ensure number of colors matches number of plotting objects, expanding if necessary        
+    else:
+        color = np.atleast_1d(color)
+        # If a RBG triplet is input, enclose it in an outer array, to simplify downstream code
+        if ((len(color) == 3) and (n_plot_objects != 3)): color = [color]
+        
+        # If only 1 color input, replicate it for all plot objects (ie lines,dots,fills,etc.)
+        if (len(color) == 1) and (n_plot_objects != 1):
+            color = np.tile(color, (n_plot_objects,))
+        else:
+            assert len(color) == n_plot_objects, \
+                ValueError("color must have one value per plot obect (line/fill/etc)" \
+                           " or a single value that is used for all plot objects")
+    
+    return color

@@ -10,13 +10,13 @@ Well-documented: function docstrings explain usage and input/output format
 Vectorized mass-univariate analysis: runs in parallel across all channels, no for loops needed  
 
 ### Package includes the following modules:
-matIO -- Simple, painless loading of MATLAB .mat data files into Python  
-spikes -- Basic preprocessing and analyses of neural spiking activity  
+matIO -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
+spikes -- Preprocessing and analyses of neural spiking activity  
 spectra -- Spectral analysis and LFP/continuous data preprocessing  
 sync -- Analysis of oscillatory neural synchrony (field-field and spike-field)  
 info -- Measures of neural information about task/behavior variables  
-randstats -- Nonparametric randomization, permutation, and bootstrap stats  
-plots -- Generation of common plot types, and plotting utilities  
+randstats -- Nonparametric randomization, permutation, and bootstrap statistics  
+plots -- Generation of common plot types; plotting utilities  
 
 
 ## Download & installation instructions

@@ -882,9 +882,9 @@ def _dprime_2groups(data1, data2, axis=0, signed=True):
     sd1	= data1.std(axis=axis,ddof=1,keepdims=True)
     sd2	= data2.std(axis=axis,ddof=1,keepdims=True)
     # Compute pooled standard deviation across two groups, using standard formula
-    sdPooled = np.sqrt( ((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2) )
+    sd_pooled = np.sqrt( ((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2) )
 
-    d = d / sdPooled
+    d = d / sd_pooled
 
     # Deal w/ special case of mu1-mu2 = 0 and both SD's = 0
     # (identical distributions for 2 cond's) -> d' = 0

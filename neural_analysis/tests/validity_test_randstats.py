@@ -24,8 +24,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from neural_analysis.tests.data_fixtures import simulate_dataset
-from neural_analysis.randstats import one_sample_test, paired_sample_test, two_sample_test, \
-                                      one_way_test, two_way_test, \
+from neural_analysis.randstats import one_sample_test, paired_sample_test, paired_sample_association_test, \
+                                      two_sample_test, one_way_test, two_way_test, \
                                       one_sample_confints, paired_sample_confints, two_sample_confints
 
 
@@ -47,7 +47,8 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
 
     ARGS
     stat    String. Type of statistical test to evaluate:
-            'one_sample' | 'paired_sample' | 'two_sample' | 'one_way' | 'two_way'
+            'one_sample' | 'paired_sample' | 'paired_sample_assoc' | 
+            'two_sample' | 'one_way' | 'two_way'
 
     method  String. Resampling paradigm to use for test: 'permutation' | 'bootstrap'
 
@@ -126,8 +127,9 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         elif term == 2: gain_pattern = np.asarray([0,1,1,0])
     else:
         gain_pattern = 1
+        
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
-                    distribution=distribution, seed=None)
+                    distribution=distribution, correlation=0, seed=None)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -143,12 +145,19 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         test_values = [25,50,100,200,400,800] if test_values is None else test_values
         if test == 'bias': sim_args.update(offset=0, gain=0)    # Set gain,offset=0 for bias test
         del sim_args['n']                           # Delete preset arg so uses arg to lambda below
+        # Set model correlation != 0 for paired_sample_assoc stat to see effects of changing n
+        if test in ['n','n_trials'] and (stat == 'paired_sample_assoc'): sim_args['correlation'] = 0.2
         gen_data = lambda n_trials: simulate_dataset(**sim_args,n=n_trials)
 
     elif test == 'n_conds':
         test_values = [2,4,8] if test_values is None else test_values
         del sim_args['n_conds']                     # Delete preset arg so uses arg to lambda below
         gen_data = lambda n_conds: simulate_dataset(**sim_args,n_conds=n_conds)
+
+    elif test == 'correlation':
+        test_values = [0,0.25,0.5,0.75,1] if test_values is None else test_values
+        del sim_args['correlation']                 # Delete preset arg so uses arg to lambda below
+        gen_data = lambda correlation: simulate_dataset(**sim_args,correlation=correlation)
 
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
@@ -230,25 +239,31 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     # Determine if test actually produced the expected values
     # 'gain' : Test if p values decrease and stat increases monotonically with between-group gain
     if test == 'gain':
-        evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                    "Significance does not increase monotonically with btwn-cond mean diff"),
-                 ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                    "p values do not decrease monotonically with btwn-cond mean diff"),
-                 ((np.diff(means['stat_obs'][term,:]) > 0).all(),
-                    "Statistic does not increase monotonically with btwn-cond mean diff"),
-                 (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
-                    "Resampled stat has larger than expected range with btwn-cond mean diff")]
-
+        if stat != 'paired_sample_assoc':
+            evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
+                        "Significance does not increase monotonically with btwn-cond mean diff"),
+                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                        "p values do not decrease monotonically with btwn-cond mean diff"),
+                    ((np.diff(means['stat_obs'][term,:]) > 0).all(),
+                        "Statistic does not increase monotonically with btwn-cond mean diff"),
+                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
+                        "Resampled stat has larger than expected range with btwn-cond mean diff")]
+        else:
+            evals = [] # todo should we test for no change here?
+            
     # 'spread' : Test if p val's increase and stat decreases monotonically with within-group spread
     elif test in ['spread','spreads','sd']:
-        evals = [((np.diff(means['signif'][term,:]) > 0).all(),
-                    "Signif does not decrease monotonically with within-cond spread increase"),
-                 ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                    "p values do not increase monotonically with within-cond spread increase"),
-                 ((np.diff(means['stat_obs'][term,:]) < 0).all(),
-                    "Statistic does not decrease monotonically with within-cond spread increase"),
-                 (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'].max(),
-                    "Resampled stat has > than expected range with within-cond spread increase")]
+        if stat != 'paired_sample_assoc':
+            evals = [((np.diff(means['signif'][term,:]) > 0).all(),
+                        "Signif does not decrease monotonically with within-cond spread increase"),
+                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                        "p values do not increase monotonically with within-cond spread increase"),
+                    ((np.diff(means['stat_obs'][term,:]) < 0).all(),
+                        "Statistic does not decrease monotonically with within-cond spread increase"),
+                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'].max(),
+                        "Resampled stat has > than expected range with within-cond spread increase")]
+        else:
+            evals = [] # todo should we test for no change here?
 
     # 'n' : Test if p values decrease, but statistic is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
@@ -260,7 +275,8 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
                     "Statistic does not decrease monotonically with n"),
                  (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'].max(),
                     "Resampled stat has > expected range across n's (likely biased by n)")]
-
+        if stat == 'paired_sample_assoc': del evals[2]
+        
     # 'bias': Test that statistic is not > 0 and p value ~ alpha if gain = 0, for varying n
     elif test == 'bias':
         evals = [(((np.abs(means['signif'][term,:].mean()) - alpha) < sds['signif'][term,:]).all(),
@@ -271,6 +287,22 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
                  ((np.abs(means['stat_obs'][term,:]) < sds['stat_obs'][term,:]).all(),
                     "Statistic is above 0 when no mean diff between conds")]
 
+    # 'correlation': Test that correlation stat monotonically increases with correction,
+    # that other statistics are ~ same for all values of correlation
+    elif test == 'correlation':
+        if stat == 'paired_sample_assoc':
+            evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
+                        "Significance does not increase monotonically with correlation"),
+                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                        "p values do not decrease monotonically with correlation"),
+                    ((np.diff(means['stat_obs'][term,:]) > 0).all(),
+                        "Statistic does not increase monotonically with correlation"),
+                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
+                        "Resampled stat has larger than expected range with correlation")]                     
+        else:
+            evals = [] # todo Should we test for no change otherwise
+            
+        
     passed = True
     for cond,message in evals:
         if not cond:    passed = False
@@ -283,8 +315,10 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     return means, sds, passed
 
 
-def stat_test_battery(stats=('one_sample','paired_sample','two_sample','one_way','two_way'),
-                      methods=('permutation','bootstrap'), tests=('gain','n','bias'),
+def stat_test_battery(stats=('one_sample','paired_sample','paired_sample_assoc',
+                             'two_sample','one_way','two_way'),
+                      methods=('permutation','bootstrap'),
+                      tests=('gain','spread','n','bias','correlation'),
                       do_tests=True, **kwargs):
     """
     Runs a battery of given tests on given randomization statistic computation methods
@@ -294,14 +328,14 @@ def stat_test_battery(stats=('one_sample','paired_sample','two_sample','one_way'
 
     ARGS
     stats       Array-like. List of statistical tests to evaluate.
-                Default: ('one_sample','paired_sample','two_sample','one_way','two_way')
-                (all supported methods)
+                Default: ('one_sample','paired_sample','paired_sample_assoc',
+                          'two_sample','one_way','two_way') (all supported methods)
 
     methods     Array-like. List of resampling paradigms to run.
                 Default: ('permutation','bootstrap') (all supported methods)
 
     tests       Array-like. List of tests to run.
-                Default: ('gain','n','bias') (all supported tests)
+                Default: ('gain','spread','n','bias','correlation') (all supported tests)
 
     do_tests    Bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
@@ -332,7 +366,7 @@ def stat_test_battery(stats=('one_sample','paired_sample','two_sample','one_way'
                     passed = passed.all()
 
                 else:
-                    _,_,passed = test_randstats(stat, method, test=test, do_tests=do_tests
+                    _,_,passed = test_randstats(stat, method, test=test, do_tests=do_tests,
                                                 **kwargs)
 
                 print('%s' % 'PASSED' if passed else 'FAILED')
@@ -646,11 +680,12 @@ def confint_test_battery(stats=['one_sample','paired_sample','two_sample'],
 def _str_to_stat_func(stat):
     """ Converts string specifier for statistic to function for computing it """
     stat = stat.lower()
-    if stat == 'one_sample':        return one_sample_test
-    elif stat == 'paired_sample':   return paired_sample_test
-    elif stat == 'two_sample':      return two_sample_test
-    elif stat == 'one_way':         return one_way_test
-    elif stat == 'two_way':         return two_way_test
+    if stat == 'one_sample':            return one_sample_test
+    elif stat == 'paired_sample':       return paired_sample_test
+    elif stat == 'paired_sample_assoc': return paired_sample_association_test
+    elif stat == 'two_sample':          return two_sample_test
+    elif stat == 'one_way':             return one_way_test
+    elif stat == 'two_way':             return two_way_test
     else:
         raise ValueError("Unknown stat type '%s'" % stat)
 

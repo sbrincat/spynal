@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 
 from scipy.stats import norm, poisson, bernoulli
+from scipy.stats.mstats import gmean
 
 from neural_analysis.spectra import simulate_oscillation
 
@@ -223,13 +224,13 @@ def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
 
 
 def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='normal',
-                     spreads=1.0, seed=None):
+                     spreads=1.0, correlation=0, seed=None):
     """
     Simulates random data across multiple conditions/groups with given condition effect size,
     distribution and parameters
 
     data,labels = simulate_dataset(gain=5.0,offset=5.0,n_conds=2,n=100,
-                                   distribution='normal',seed=None)
+                                   distribution='normal',correlation=0,seed=None)
 
     ARGS
     gain    Scalar | (n_conds,) array-like. Sets the effect size (difference
@@ -253,6 +254,10 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
             If scalar, the same spread is used for all conditions.
             If vector, one spread value should be given for each condition.
 
+    correlation Float in range[-1,+1]. Correlation between data in each condition.
+            Note: Currently only supported for 2 conditions with normal distribution
+            (simulated as multivariate normal w/ covariance matrix based on correlation,spreads)
+    
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
 
@@ -286,13 +291,34 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
         ValueError("Vector-valued <spreads> must have length == n_conds (%d != %d)" \
                     % (len(spreads), n_conds))
 
+    assert (correlation >= -1) and (correlation <= 1), \
+        ValueError("Correlation must be in range [-1,+1] (%.2f input)" % correlation)
+
+    if correlation == 0:
+        assert (n_conds == 2) and (distribution == 'normal'), \
+            ValueError("correlation currently only supported for 2 conds, normal distribution")
+        
     # Final mean value = baseline + condition-specific gain
     means = offset + gains
 
     # Generate data for each condition and stack together -> (n_trials*n_conds,) array
-    data = np.hstack([simulate_data(distribution=distribution, mean=mean, spread=spread,
-                                    n=n, seed=None)
-                      for mean,spread in zip(means,spreads)])
+    if correlation == 0:
+        data = np.hstack([simulate_data(distribution=distribution, mean=mean, spread=spread,
+                                        n=n, seed=None)
+                        for mean,spread in zip(means,spreads)])
+        
+    # Generate data for both condition using single multivariate normal distribution        
+    else:
+        # Convert SDs -> variances and compute pooled variance = geometric mean
+        variances = np.asarray(spreads)**2
+        var_pooled = gmean(variances)
+        # Covariance matrix = variances and covariance = pooled variance * correlation
+        cov_mx = [[variances[0], var_pooled*correlation], [var_pooled*correlation, variances[1]]]
+        
+        # Generate multivariate normal data with given means and covariance matrix
+        data = np.random.multivariate_normal(means, cov_mx, (n,))
+        # Reshape (n,n_conds) -> (n*n_conds,)
+        data = data.reshape((n*n_conds,), order='F')
 
     # Create (n_trials_total,) vector of group labels (ints in set 0-n_conds-1)
     labels = np.hstack([i_cond*np.ones((n,)) for i_cond in range(n_conds)])
