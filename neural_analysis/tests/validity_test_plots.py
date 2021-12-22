@@ -66,32 +66,44 @@ def test_plot_line_with_error_fill(plot_dir=None):
     # Basic test plot
     plt.figure()
     plot_line_with_error_fill(timepts, data, err=errs, events=events)
+    plt.title('Basic test plot')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill.png'))
 
     # Test w/ different plot colors
     plt.figure()
     plot_line_with_error_fill(timepts, data, err=errs, events=events, color=['C1','C2','C3'])
+    plt.title('Different plot colors')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-colors.png'))
 
     # Test w/ different x/ylims
     plt.figure()
     plot_line_with_error_fill(timepts, data, err=errs, events=events, xlim=(-0.1,1.1), ylim=(-3,3))
-    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_lims.png'))
+    plt.title('Different x/ylims')
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error-lims.png'))
+
+    # Test w/ different x/y indexing
+    plt.figure()
+    plot_line_with_error_fill(timepts-0.5, data+1, err=errs, events=events)
+    plt.title('Changed x/y sampling values')    
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error-xyvalues.png'))
 
     # Test w/ no error fills
     plt.figure()
     plot_line_with_error_fill(timepts, data, events=events)
+    plt.title('No error fills')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-noevents.png'))
 
     # Test w/ x/ylabels and no event markers
     plt.figure()
     plot_line_with_error_fill(timepts, data, err=errs, xlabel='Time (s)', ylabel='Rate (spk/s)')
+    plt.title('x/y labels, no event markers')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-noevents.png'))
 
     # Test w/ event markers at and beyond plot edge
     events.extend([(950e-3,1050e-3), (1500e-3,1600e-3)])
     plt.figure()
     plot_line_with_error_fill(timepts, data, err=errs, events=events)
+    plt.title('Events at the edge')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-edge_events.png'))
 
 
@@ -114,43 +126,57 @@ def test_plot_lineseries(plot_dir=None):
     # Basic test plot
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events)
+    plt.title('Basic test plot')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries.png'))
 
     # Test w/ different plot colors
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events,
                     color=['C'+str(j) for j in range(n_chnls)])
+    plt.title('Different line colors')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-colors.png'))
 
     # Test w/ different channel labels
     plt.figure()
     plot_lineseries(timepts, ['channel '+str(j+1) for j in range(n_chnls)], data, events=events)
+    plt.title('Different channel labels')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-colors.png'))
 
     # Test w/ smaller scale
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events, scale=0.75)
-    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-scale1.png'))
+    plt.title('Smaller y-axis scale')
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-scale75.png'))
 
     # Test w/ different x/ylims
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events, xlim=(-0.1,1.1), ylim=(-2,n_chnls+1))
+    plt.title('Different x/y lims')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-lims.png'))
+
+    # Test w/ different x/y indexing
+    plt.figure()
+    plot_lineseries(timepts-0.5, channels+1, data, events=events)
+    plt.title('Changed x/y sampling values')    
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-xyvalues.png'))
 
     # Test w/ inverted y-axis
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events, origin='lower')
+    plt.title('Inveted y-axis')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-origin_lower.png'))
 
     # Test w/ x/ylabels and no event markers
     plt.figure()
     plot_lineseries(timepts, channels, data, xlabel='Time (s)', ylabel='Channels')
+    plt.title('x/y labels, no event markers')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-noevents.png'))
 
     # Test w/ event markers at and beyond plot edge
     events.extend([(950e-3,1050e-3), (1500e-3,1600e-3)])
     plt.figure()
     plot_lineseries(timepts, channels, data, events=events)
+    plt.title('Events at the edge')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_lineseries-edge_events.png'))
     
 
@@ -171,29 +197,52 @@ def test_plot_heatmap(plot_dir=None):
 
     # Basic test plot
     plt.figure()
-    plot_heatmap(timepts, channels, data, events=events, cmap='seismic')
+    plot_heatmap(timepts, channels, data, events=events)
+    plt.title('Basic test')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap.png'))
 
     # Test w/ inverted y-axis
     plt.figure()
-    plot_heatmap(timepts, channels, data, events=events, cmap='seismic', origin='upper')
+    plot_heatmap(timepts, channels, data, events=events, origin='upper')
+    plt.title('Inverted y-axis')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-origin_upper.png'))
+
+    # Test w/ different x/ylims
+    plt.figure()
+    plot_heatmap(timepts, channels, data, events=events, xlim=(-0.1,1.1), ylim=(-1.5,n_chnls+0.5))
+    plt.title('Different x/y lims')        
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-lims.png'))
+
+    # Test w/ different x/y indexing
+    plt.figure()
+    plot_heatmap(timepts-0.5, channels+1, data, events=events)
+    plt.title('Changed x/y sampling values')    
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-xyvalues.png'))
 
     # Test w/ different colormap
     plt.figure()
     plot_heatmap(timepts, channels, data, events=events, cmap='jet')
+    plt.title('jet colormap')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-cmap_jet.png'))
 
     # Test w/ squashed color range
     plt.figure()
     clim = (data.min(), data.max())
     clim = (clim[0]+0.25*np.diff(clim), clim[1]-0.25*np.diff(clim))
-    plot_heatmap(timepts, channels, data, events=events, clim=clim, cmap='seismic')
+    plot_heatmap(timepts, channels, data, events=events, clim=clim)
+    plt.title('Squashed color range')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-clim_squash.png'))
 
+    # Test w/ x/ylabels and no event markers
+    plt.figure()
+    plot_heatmap(timepts, channels, data, xlabel='Time (s)', ylabel='Channels')
+    plt.title('x/y labels; no events')        
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-noevents.png'))
+    
     # Test w/ event markers at and beyond plot edge
     events.extend([(950e-3,1050e-3), (1500e-3,1600e-3)])
     plt.figure()
-    plot_heatmap(timepts, channels, data, events=events, cmap='seismic')
+    plot_heatmap(timepts, channels, data, events=events)
+    plt.title('Edge event markers')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-edge_events.png'))
     

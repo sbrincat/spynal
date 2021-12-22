@@ -383,8 +383,16 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
                         keep_tapers=False, tapers=None, pad=True, **kwargs):
     """
-    Multitaper Fourier spectrum computation for continuous (eg LFP)
-    or point process (eg spike) data
+    Multitaper Fourier spectrum computation for continuous (eg LFP) or point process (spike) data
+    
+    Multitaper methods project the data onto orthogonal Slepian (DPSS) "taper" functions, which
+    increases the data's effective signal-to-noise. It allows a principled tradeoff btwn time
+    resolution (data.shape[axis]), frequency resolution (freq_width), and the number of taper
+    functions (n_tapers), which determines the signal-to-noise increase (see ARGS for details).
+    
+    Note: By default, data is zero-padded to the next power of 2 greater than its input length.
+    This will change the frequency sampling (number of freqs and exact freqs sampled) from what
+    would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
     spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
                                      freq_range=None,removeDC=True,freq_width=4,n_tapers=None,
@@ -440,7 +448,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     REFERENCE   Mitra & Pesaran (1999) "Analysis of dynamic brain imaging data"
                 Jarvis & Mitra (2001) Neural Computation
 
-    SOURCE  Adapted from Chronux functions mtfftc.m, mtfftpb.m
+    SOURCE      Adapted from Chronux functions mtfftc.m, mtfftpb.m
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -534,6 +542,15 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     """
     Computes multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
+
+    Multitaper methods project the data onto orthogonal Slepian (DPSS) "taper" functions, which
+    increases the data's effective signal-to-noise. It allows a principled tradeoff btwn time
+    resolution (data.shape[axis]), frequency resolution (freq_width), and the number of taper
+    functions (n_tapers), which determines the signal-to-noise increase (see ARGS for details).
+    
+    Note: By default, data is zero-padded to the next power of 2 greater than its input length.
+    This will change the frequency sampling (number of freqs and exact freqs sampled) from what
+    would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
     spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,data_type='lfp',
                                                 spec_type='complex',freq_range=None,removeDC=True,
@@ -763,7 +780,6 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
                         wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1, **kwargs):
     """
     Computes continuous time-frequency wavelet transform of data at given frequencies.
-
 
     spec,freqs,timepts = wavelet_spectrogram(data,smp_rate,axis=0,data_type='lfp',
                                              spec_type='complex',freqs=2**np.arange(1,7.5,0.25),

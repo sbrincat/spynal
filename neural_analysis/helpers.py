@@ -72,6 +72,13 @@ def _has_method(obj, method):
     return callable(getattr(obj, method, None))
 
 
+def _merge_dicts(dict1, dict2):
+    """ Merges two dictionaries, with values in dict2 overriding (default) values in dict1 """
+    dict_out = dict1.copy()
+    dict_out.update(dict2)
+    return dict_out
+
+
 def _standardize_to_axis_0(data, axis=0):
     """
     Reshapes multi-dimensional data array to standardized 2D array (matrix-like) form,

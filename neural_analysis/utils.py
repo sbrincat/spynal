@@ -30,6 +30,7 @@ undo_standardize_array Undoes effect of standardize_array after analysis
 iarange             np.arange(), but with an inclusive endpoint
 unsorted_unique     np.unique(), but without sorting values
 isarraylike         Tests if variable is "array-like" (ndarray, list, or tuple)
+isnumeric           Tests if array dtype is numeric (int, float, or complex)
 setup_sliding_windows Generates set of sliding windows using given parameters
 object_array_compare Compare each object within an object array
 concatenate_object_array Concatenates objects across one/more axes of object array
@@ -691,6 +692,14 @@ def isarraylike(x):
     Returns True if x is array-like, False otherwise
     """
     return isinstance(x, (list, tuple, np.ndarray))
+
+
+def isnumeric(x):
+    """
+    Tests if dtype of ndarray <x> is numeric (some subtype of int,float,complex)
+    Returns True if x.dtype is numeric, False otherwise
+    """
+    return np.issubdtype(np.asarray(x).dtype, np.number)
 
 
 def setup_sliding_windows(width, lims, step=None, reference=None,

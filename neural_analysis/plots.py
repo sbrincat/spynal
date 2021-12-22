@@ -21,12 +21,32 @@ Created on Tue Nov 23 14:22:47 2021
 import numpy as np
 import matplotlib.pyplot as plt
 
+from matplotlib.axes import Axes
+from matplotlib.lines import Line2D
+from matplotlib.image import AxesImage
+from matplotlib.patches import Polygon
+
+from neural_analysis.utils import isnumeric
+from neural_analysis.helpers import _merge_dicts
+
+# Lambda returns list of all settable attributes of given plotting object
+# Find all methods starting with 'set_***', strip out the 'set_', and place in a list
+_settable_attributes = lambda obj: ['_'.join(attr.split('_')[1:]) for attr in dir(obj) \
+                                    if attr.startswith('set_')]
+
+# Create list of all settable attributes/parameters of plotting objects/functions used in module
+AXES_PARAMS = _settable_attributes(Axes)
+PLOT_PARAMS = ['scalex', 'scaley'] + _settable_attributes(Line2D)
+FILL_PARAMS = _settable_attributes(Polygon)
+# For some reason, imshow has several settable params that aren't AxesImage attributes...
+# this seems to be a way to get them (though not for other functions...?)
+IMSHOW_PARAMS = list(plt.imshow.__signature__.parameters.keys()) + _settable_attributes(AxesImage)
+
 
 # =============================================================================
 # Functions to generate specific plot types
 # =============================================================================
-def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25, linewidth=1.5,
-                              events=None, **kwargs):
+def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=None, **kwargs):
     """
     Plots 1d data as line plot(s) +/- error(s) as a semi-transparent fill in given axis using
     matplotlib.pyplot.plot and .fill
@@ -35,7 +55,7 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
     as decribed below.
 
     lines,patches,ax = plot_line_with_error_fill(x,data,err=None,ax=plt.gca(),color=['C0',...,'CN'],
-                                                 alpha=0.25,linewidth=1.5,events=None, **kwargsf)
+                                                 events=None, **kwargs)
 
     ARGS
     x       (n,) array-like. x-axis sampling vector for both data and err.
@@ -57,15 +77,20 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
     color   Color specification(s). Color to plot both line(s) and error fill(s) in.
             Default: standard matplotlib color order (['C0',...,'C<n_lines>'])
 
-    alpha   Float, range(0-1). Alpha value for plotting error fill(s). 1=fully opaque, 0=fully
-            transparent. Default: 0.25
-
-    linewidth Scalar. Line width to plot data line(s) in. Default: 1.5
-
     events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
             List of event values (eg times) to plot markers on x-axis for
             -or- callable function that will plot the event markers itself.
             Markers plotted underneath line + fill. See plot_markers() for details.
+            
+    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
+            (settable Axes object attributes), plt.plot() (Line2D object attributes),
+            or plt.fill() (Polygon object attributes), including the following
+            (with given default values):            
+
+    linewidth Scalar. Line width to plot data line(s) in. Default: 1.5
+
+    alpha   Float, range(0-1). Alpha value for plotting error fill(s). 1=fully opaque, 0=fully
+            transparent. Default: 0.25
 
     ACTION
     Generate semi-transparent fill + overlaid line plot in same color, in given axis.
@@ -105,25 +130,22 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
 
     # Default ylim to data range +/- 2.5%
     ylim = (ylim[0]-0.025*np.diff(ylim), ylim[1]+0.025*np.diff(ylim))
+    xlim = (x.min(),x.max())
 
     # Set axis to plot into (default to current axis)
     if ax is None: ax = plt.gca()
 
-    # Set defaults for axis parameters
-    xlim = kwargs.pop('xlim', (x.min(),x.max()))
-    ylim = kwargs.pop('ylim', ylim)
-    xlabel = kwargs.pop('xlabel', None)
-    ylabel = kwargs.pop('ylabel', None)
-    # todo should we allow additional kwargs as input to ax.plot (but what about ax.fill???)
-    assert len(kwargs) == 0, \
-        TypeError("Incorrect or misspelled variable(s) in keyword args: " +
-                    ', '.join(kwargs.keys()))
-
+    # Sort any keyword args to their appropriate plotting object        
+    axes_args, plot_args, fill_args = _hash_kwargs(kwargs, [AXES_PARAMS, PLOT_PARAMS, FILL_PARAMS])
+    # Merge any input parameters with default values
+    axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
+    plot_args = _merge_dicts(dict(linewidth=1.5), plot_args)
+    fill_args = _merge_dicts(dict(alpha=0.25), fill_args)
+    
     # Set plotting colors, including defaults
     color = _set_plot_colors(color, n_lines)
-
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    
+    ax.set(**axes_args) # Set axes parameters
 
     # Plot event markers (if input)
     if events is not None:
@@ -134,28 +156,23 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, alpha=0.25
     lines = []
     patches = []
     for j in range(n_lines):
-        line = ax.plot(x, data[j,:], '-', color=color[j], linewidth=linewidth)
-        lines.append(line)
-
         if err is not None:
             patch = ax.fill(np.hstack((x,np.flip(x))),
                             np.hstack((upper[j,:], np.flip(lower[j,:]))),
-                            facecolor=color[j], edgecolor=None, alpha=alpha)
+                            facecolor=color[j], **fill_args)
             patches.append(patch)
 
-    if xlabel is not None: ax.set_xlabel(xlabel)
-    if ylabel is not None: ax.set_ylabel(ylabel)
+        line = ax.plot(x, data[j,:], '-', color=color[j], **plot_args)
+        lines.append(line)
 
     return lines, patches, ax
 
 
-def plot_heatmap(x, y, data, ax=None, clim=None, cmap='viridis', origin='lower', events=None,
-                 **kwargs):
+def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     """
     Plots 2d data as a heatmap (aka pseudocolor) plot in given axis using matplotlib.pyplot.imshow
 
-    img,ax = plot_heatmap(x,y,data,ax=plt.gca(),clim=(data.min,data.max),cmap='viridis',
-                          origin='lower', events=None,**kwargs)
+    img,ax = plot_heatmap(x,y,data,ax=plt.gca(),clim=(data.min,data.max),events=None,**kwargs)
 
     ARGS
     x       (n_x,) array-like. Sampling vector for data dimension to be plotted along x-axis
@@ -169,19 +186,21 @@ def plot_heatmap(x, y, data, ax=None, clim=None, cmap='viridis', origin='lower',
 
     clim    (2,) array-like. [low,high] limits of color axis. Default: [min(data),max(data)]
 
+    events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
+            List of event values (eg times) to plot markers on x-axis for
+            -or- callable function that will plot the event markers itself.
+            Markers plotted overlaid on heatmap. See plot_markers() for details.
+
+    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
+            (settable Axes object attributes) or plt.imshow() (AxesImage object attributes),
+            including the following (with given default values):
+
     cmap    String | Colormap object. Colormap to plot heatmap in, given either as name of
             matplotlib colormap or custom matplotlib.colors.Colormap object instance.
             Default: 'viridis' (perceptually uniform dark-blue to yellow colormap)
 
     origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'='top'.
             Default: 'lower'
-
-    events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
-            List of event values (eg times) to plot markers on x-axis for
-            -or- callable function that will plot the event markers itself.
-            Markers plotted overlaid on heatmap. See plot_markers() for details.
-
-    **kwargs    Any additional keyword args passed directly into ax.imshow
 
     ACTIONS
     Plots a heatmap plot in given axis, with given parameters. Unless set in kwargs,
@@ -204,24 +223,27 @@ def plot_heatmap(x, y, data, ax=None, clim=None, cmap='viridis', origin='lower',
     # Default color range to data min/max
     if clim is None: clim = (data.min(), data.max())
 
-    xlim = kwargs.pop('xlim',None)
-    ylim = kwargs.pop('ylim',None)
-    aspect = kwargs.pop('aspect','auto')
-
     # Find sampling intervals for x, y axes
     dx      = np.diff(x).mean()
     dy      = np.diff(y).mean()
-    # Setting plotting extent for each axis = full sampling range +/- 1/2 sampling interval
+    # Set default plotting extent for each axis = full sampling range +/- 1/2 sampling interval
     # This allows for viewing the entire cells at the edges of the plot, which sometimes makes
     # a difference for sparsely sampled dimensions
-    if xlim is None:    xlim = [x[0]-dx/2, x[-1]+dx/2]
-    if ylim is None:    ylim = [y[0]-dy/2, y[-1]+dy/2]
+    xlim = [x[0]-dx/2, x[-1]+dx/2]
+    ylim = [y[0]-dy/2, y[-1]+dy/2]
+        
+    # Sort any keyword args to their appropriate plotting object        
+    axes_args, imshow_args = _hash_kwargs(kwargs, [AXES_PARAMS, IMSHOW_PARAMS])
+    # Merge any input parameters with default values
+    axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
+    imshow_args = _merge_dicts(dict(extent=[*xlim,*ylim], vmin=clim[0], vmax=clim[1],
+                                    cmap='viridis', origin='lower', aspect='auto'), imshow_args)
 
-    img = ax.imshow(data, extent=[*xlim,*ylim], vmin=clim[0], vmax=clim[1], cmap=cmap,
-                    origin=origin, aspect=aspect, **kwargs)
+    img = ax.imshow(data, **imshow_args)
 
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    ax.set(**axes_args) # Set axes parameters
+    
+    # TODO Fix this
     # Have to manually invert y-axis tick labels if plotting w/ origin='upper'
     # if origin == 'upper':
     #     yticks = ax.get_yticks()
@@ -233,7 +255,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, cmap='viridis', origin='lower',
     # Plot event markers (if input)
     if events is not None:
         if callable(events):    events
-        else:                   plot_markers(events, axis='x', ax=ax, xlim=xlim, ylim=ylim)
+        else:                   plot_markers(events, axis='x', ax=ax,
+                                             xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
     return img, ax
 
@@ -275,8 +298,12 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
             -or- callable function that will plot the event markers itself.
             Markers plotted underneath lineseries. See plot_markers() for details.
 
-    **kwargs All other keyword args passed directly to ax.plot()
-
+    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
+            (settable Axes object attributes) or plt.plot() (Line2D object attributes),
+            including the following (with given default values):
+            
+    linewidth Scalar. Line width to plot data line(s) in. Default: 1
+            
     ACTION
     Plots line series data into given axes using multiple calls to ax.plot()
 
@@ -288,22 +315,24 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
     y = np.asarray(y)
     data = np.asarray(data)
     n_lines = len(y)
-
+    
     assert data.ndim == 2, ValueError("data must be 2-dimensional (%d-d data given)" % data.ndim)
     assert data.shape == (len(y),len(x)), \
         ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)" \
                     % (*data.shape,len(y),len(x)))
+            
+    # If y is numeric, use it to plot y-axis; otherwise (eg if string labels) use 0:n_lines-1
+    y_plot = y if isnumeric(y) else np.arange(n_lines)
 
     if ax is None: ax = plt.gca()
 
-    # Set defaults for axis parameters and line parameters
-    xlim = kwargs.pop('xlim', (x.min(),x.max()))
-    ylim = kwargs.pop('ylim', (-1,n_lines))
-    xlabel = kwargs.pop('xlabel', None)
-    ylabel = kwargs.pop('ylabel', None)
-
-    if 'linewidth' not in kwargs: kwargs.update(linewidth=1)
-
+    # Sort any keyword args to their appropriate plotting object        
+    axes_args, plot_args = _hash_kwargs(kwargs, [AXES_PARAMS, PLOT_PARAMS])
+    # Merge any input parameters with default values
+    xlim = (x.min(),x.max())
+    ylim = (y_plot[0]-1,y_plot[-1]+1)
+    axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
+    plot_args = _merge_dicts(dict(linewidth=1), plot_args)
     # Set plotting colors, including defaults
     color = _set_plot_colors(color, n_lines)
 
@@ -311,25 +340,24 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
     max_val = np.abs(data).max()
     data = scale * data / max_val
 
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    ax.set(**axes_args) # Set axes parameters
 
     # Plot event markers (if input)
     if events is not None:
         if callable(events):    events
-        else:                   plot_markers(events, axis='x', ax=ax, xlim=xlim, ylim=ylim)
+        else:                   plot_markers(events, axis='x', ax=ax,
+                                             xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
     # Plot each line plot (eg channel) in data with appropriate offset
     lines = []
     for j in range(n_lines):
-        offset = n_lines - (j+1) if origin == 'upper' else j
-        tmp_lines = ax.plot(x, data[j,:] + offset, color=color[j], **kwargs)
+        offset = y_plot[n_lines - (j+1)] if origin == 'upper' else y_plot[j]
+        # offset = n_lines - (j+1) if origin == 'upper' else j
+        tmp_lines = ax.plot(x, data[j,:] + offset, color=color[j], **plot_args)
         lines.append(tmp_lines)
 
-    ax.set_yticks(np.arange(n_lines))
+    ax.set_yticks(y_plot)
     ax.set_yticklabels(y if origin == 'lower' else np.flip(y))
-    if xlabel is not None: ax.set_xlabel(xlabel)
-    if ylabel is not None: ax.set_ylabel(ylabel)
 
     return lines, ax
 
@@ -483,23 +511,64 @@ def maximize_figure():
     """
     fig_manager = plt.get_current_fig_manager()
     if hasattr(fig_manager, 'window'): fig_manager.window.showMaximized()
-    
-    
+
+
 # =============================================================================
 # Helper functions
-# =============================================================================    
+# =============================================================================
+def _hash_kwargs(args_dict, attr_lists):
+    """
+    Given a dict of keyword args input into a plotting function, determines which
+    are attributes of each of a given set of plot objects (eg Axes, Lines2D, etc.).
+    
+    ARGS
+    args_dict   Dict. List of all keyword args (name:value pairs) input into a plotting function.
+    attr_lists  List of lists. Set of lists of attributes of plotting objects that keywords args
+                may be attributes of. Function matches each args to its proper attribute list
+                (and thus, to its corresponding plotting object).
+                
+    OUTPUTS
+    **hashed_attrs Tuple of dicts. Each dict contains name:value pairs for all keyword args
+                corresponding to each attr_list/plotting object (ie 1st output = args
+                corresponding to attr_lists[0], 2nd output ~ attr_lists[1], etc.)
+                
+                Any keyword args not matched to any attr_list will raise an error.
+    """
+    # Create list of empty dictionaries to hash arguments into
+    hashed_attrs = [{} for _ in range(len(attr_lists))]
+
+    # Step thru each key,value pair in arguments dictionary
+    for key,value in args_dict.items():
+        # Step thru each passed list of object attributes to hash arguments into,
+        # determining if key can be found in its attribute list
+        found = False
+        for i_list,attr_list in enumerate(attr_lists):            
+            # If we found a match, save k,v pair into corresponding output hashed dict
+            # and break out of for att_lists loop            
+            if key in attr_list:
+                hashed_attrs[i_list].update({key:value})
+                found = True
+                break
+            
+        # If we failed to find a match in any attribute list, raise an error
+        if found == False:
+            raise AttributeError("Incorrect or misspelled variable in keyword args: %s" % key)
+        
+    return tuple(hashed_attrs)
+
+        
 def _set_plot_colors(color, n_plot_objects):
     """ Sets plotting colors, including defaults and expanding colors to # of plot objects """
     # If no color set, set default = ['C0','C1',...,'CN'] = default matplotlib plotting color order
     if color is None:
         color = ['C'+str(j) for j in range(n_plot_objects)]
-        
-    # Otherwise, ensure number of colors matches number of plotting objects, expanding if necessary        
+
+    # Otherwise, ensure number of colors matches number of plotting objects, expanding if necessary
     else:
         color = np.atleast_1d(color)
         # If a RBG triplet is input, enclose it in an outer array, to simplify downstream code
         if ((len(color) == 3) and (n_plot_objects != 3)): color = [color]
-        
+
         # If only 1 color input, replicate it for all plot objects (ie lines,dots,fills,etc.)
         if (len(color) == 1) and (n_plot_objects != 1):
             color = np.tile(color, (n_plot_objects,))
@@ -507,5 +576,5 @@ def _set_plot_colors(color, n_plot_objects):
             assert len(color) == n_plot_objects, \
                 ValueError("color must have one value per plot obect (line/fill/etc)" \
                            " or a single value that is used for all plot objects")
-    
+
     return color
