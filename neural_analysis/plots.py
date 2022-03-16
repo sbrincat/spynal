@@ -40,7 +40,7 @@ PLOT_PARAMS = ['scalex', 'scaley'] + _settable_attributes(Line2D)
 FILL_PARAMS = _settable_attributes(Polygon)
 # For some reason, imshow has several settable params that aren't AxesImage attributes...
 # this seems to be a way to get them (though not for other functions...?)
-IMSHOW_PARAMS = list(plt.imshow.__signature__.parameters.keys()) + _settable_attributes(AxesImage)
+IMSHOW_PARAMS = ['aspect','origin'] + _settable_attributes(AxesImage)
 
 
 # =============================================================================
@@ -81,11 +81,11 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
             List of event values (eg times) to plot markers on x-axis for
             -or- callable function that will plot the event markers itself.
             Markers plotted underneath line + fill. See plot_markers() for details.
-            
+
     **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
             (settable Axes object attributes), plt.plot() (Line2D object attributes),
             or plt.fill() (Polygon object attributes), including the following
-            (with given default values):            
+            (with given default values):
 
     linewidth Scalar. Line width to plot data line(s) in. Default: 1.5
 
@@ -135,22 +135,23 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
     # Set axis to plot into (default to current axis)
     if ax is None: ax = plt.gca()
 
-    # Sort any keyword args to their appropriate plotting object        
+    # Sort any keyword args to their appropriate plotting object
     axes_args, plot_args, fill_args = _hash_kwargs(kwargs, [AXES_PARAMS, PLOT_PARAMS, FILL_PARAMS])
     # Merge any input parameters with default values
     axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
     plot_args = _merge_dicts(dict(linewidth=1.5), plot_args)
     fill_args = _merge_dicts(dict(alpha=0.25), fill_args)
-    
+
     # Set plotting colors, including defaults
     color = _set_plot_colors(color, n_lines)
-    
+
     ax.set(**axes_args) # Set axes parameters
 
     # Plot event markers (if input)
     if events is not None:
         if callable(events):    events
-        else:                   plot_markers(events, axis='x', ax=ax, xlim=xlim, ylim=ylim)
+        else:                   plot_markers(events, axis='x', ax=ax,
+                                             xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
     # Plot line(s) and error fill(s) if input
     lines = []
@@ -199,7 +200,7 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
             matplotlib colormap or custom matplotlib.colors.Colormap object instance.
             Default: 'viridis' (perceptually uniform dark-blue to yellow colormap)
 
-    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'='top'.
+    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'=top.
             Default: 'lower'
 
     ACTIONS
@@ -231,8 +232,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     # a difference for sparsely sampled dimensions
     xlim = [x[0]-dx/2, x[-1]+dx/2]
     ylim = [y[0]-dy/2, y[-1]+dy/2]
-        
-    # Sort any keyword args to their appropriate plotting object        
+
+    # Sort any keyword args to their appropriate plotting object
     axes_args, imshow_args = _hash_kwargs(kwargs, [AXES_PARAMS, IMSHOW_PARAMS])
     # Merge any input parameters with default values
     axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
@@ -242,7 +243,7 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     img = ax.imshow(data, **imshow_args)
 
     ax.set(**axes_args) # Set axes parameters
-    
+
     # TODO Fix this
     # Have to manually invert y-axis tick labels if plotting w/ origin='upper'
     # if origin == 'upper':
@@ -290,7 +291,7 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
             line in line series. Must input 1 value per line OR a single value that will be used
             for ALL lines plotted. Default: 'C0' (blue for all lines)
 
-    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'='top'.
+    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'=top.
             Default: 'upper' (so plot has same order as a probe numbered from topmost contact)
 
     events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
@@ -301,9 +302,9 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
     **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
             (settable Axes object attributes) or plt.plot() (Line2D object attributes),
             including the following (with given default values):
-            
+
     linewidth Scalar. Line width to plot data line(s) in. Default: 1
-            
+
     ACTION
     Plots line series data into given axes using multiple calls to ax.plot()
 
@@ -315,18 +316,18 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
     y = np.asarray(y)
     data = np.asarray(data)
     n_lines = len(y)
-    
+
     assert data.ndim == 2, ValueError("data must be 2-dimensional (%d-d data given)" % data.ndim)
     assert data.shape == (len(y),len(x)), \
         ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)" \
                     % (*data.shape,len(y),len(x)))
-            
+
     # If y is numeric, use it to plot y-axis; otherwise (eg if string labels) use 0:n_lines-1
     y_plot = y if isnumeric(y) else np.arange(n_lines)
 
     if ax is None: ax = plt.gca()
 
-    # Sort any keyword args to their appropriate plotting object        
+    # Sort any keyword args to their appropriate plotting object
     axes_args, plot_args = _hash_kwargs(kwargs, [AXES_PARAMS, PLOT_PARAMS])
     # Merge any input parameters with default values
     xlim = (x.min(),x.max())
@@ -520,18 +521,18 @@ def _hash_kwargs(args_dict, attr_lists):
     """
     Given a dict of keyword args input into a plotting function, determines which
     are attributes of each of a given set of plot objects (eg Axes, Lines2D, etc.).
-    
+
     ARGS
     args_dict   Dict. List of all keyword args (name:value pairs) input into a plotting function.
     attr_lists  List of lists. Set of lists of attributes of plotting objects that keywords args
                 may be attributes of. Function matches each args to its proper attribute list
                 (and thus, to its corresponding plotting object).
-                
+
     OUTPUTS
     **hashed_attrs Tuple of dicts. Each dict contains name:value pairs for all keyword args
                 corresponding to each attr_list/plotting object (ie 1st output = args
                 corresponding to attr_lists[0], 2nd output ~ attr_lists[1], etc.)
-                
+
                 Any keyword args not matched to any attr_list will raise an error.
     """
     # Create list of empty dictionaries to hash arguments into
@@ -542,21 +543,21 @@ def _hash_kwargs(args_dict, attr_lists):
         # Step thru each passed list of object attributes to hash arguments into,
         # determining if key can be found in its attribute list
         found = False
-        for i_list,attr_list in enumerate(attr_lists):            
+        for i_list,attr_list in enumerate(attr_lists):
             # If we found a match, save k,v pair into corresponding output hashed dict
-            # and break out of for att_lists loop            
+            # and break out of for att_lists loop
             if key in attr_list:
                 hashed_attrs[i_list].update({key:value})
                 found = True
                 break
-            
+
         # If we failed to find a match in any attribute list, raise an error
         if found == False:
             raise AttributeError("Incorrect or misspelled variable in keyword args: %s" % key)
-        
+
     return tuple(hashed_attrs)
 
-        
+
 def _set_plot_colors(color, n_plot_objects):
     """ Sets plotting colors, including defaults and expanding colors to # of plot objects """
     # If no color set, set default = ['C0','C1',...,'CN'] = default matplotlib plotting color order

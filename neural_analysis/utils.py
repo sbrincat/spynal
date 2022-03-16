@@ -19,6 +19,9 @@ lv                  Computes Local Variation (Shinomoto 2009) of data
 zscore              Z-scores data along given axis (or whole array)
 correlation         Pearson product-moment correlation btwn two variables
 rank_correlation    Spearman rank correlation btwn two variables
+gaussian            Evaluates parameterized 1D Gaussian function at given datapoint(s)
+gaussian_2d         Evaluates parameterized 2D Gaussian function at given datapoint(s)
+gaussian_nd         Evaluates parameterized N-D Gaussian function at given datapoint(s)
 
 ### Data indexing and reshaping functions ###
 index_axis          Dynamically index into arbitrary axis of ndarray
@@ -41,6 +44,7 @@ Created on Fri Apr  9 13:28:15 2021
 """
 import time
 import random
+from math import cos, sin
 import numpy as np
 
 from scipy.interpolate import interp1d
@@ -259,10 +263,10 @@ def correlation(data1, data2, axis=None, keepdims=True):
     """
     Computes Pearson product-moment (standard) correlation between two variables,
     in mass-bivariate fashion
-    
+
     Pearson correlation only identifies linear relationships between variables.
     If a nonlinear (monotonic) relationship is suspected, consider using rank_correlation instead.
-    
+
     Correlations range from -1 (perfect anti-correlation) to +1 (perfect positive correlation),
     with 0 indicating a lack of correlation.
 
@@ -284,7 +288,7 @@ def correlation(data1, data2, axis=None, keepdims=True):
                 If True [default], <axis> is kept in output as singleton axis.
 
     RETURNS
-    r           Float | (...,[1,]...) ndarray. Correlation between data1 & data2. 
+    r           Float | (...,[1,]...) ndarray. Correlation between data1 & data2.
                 For 1-d data, r is a float. For multi-d data, r is same shape as data, but with
                 <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
     """
@@ -305,7 +309,7 @@ def correlation(data1, data2, axis=None, keepdims=True):
     r = (data1_c*data2_c).sum(axis=axis,keepdims=keepdims) / np.sqrt(norm1*norm2)
 
     # Deal with any possible floating point errors that push r outside [-1,1]
-    np.maximum(np.minimum(r,1.0), -1.0)
+    r = np.maximum(np.minimum(r,1.0), -1.0)
     # For vector-valued data, extract value from scalar array -> float for output
     if r.size == 1: r = r.item()
 
@@ -318,11 +322,11 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
 
     Each data is sorted into rank-order separately, and the resulting ranks are entered
     into a standard (Pearson) correlation. This identifies any monotonic relationship
-    between variables, and thus should be favored when a nonlinear relationship is suspected.  
-    
+    between variables, and thus should be favored when a nonlinear relationship is suspected.
+
     Correlations range from -1 (perfect anti-correlation) to +1 (perfect positive correlation),
     with 0 indicating a lack of correlation.
-    
+
     Input <axis> is treated as observations (eg trials), which correlation is computed over.
     Correlations are computed separately across all other array dims (eg, timepoints, freqs, etc).
     If axis is None, correlations are computed across entire 1-d flattened (unrolled) arrays.
@@ -341,7 +345,7 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
                 If True [default], <axis> is kept in output as singleton axis.
 
     RETURNS
-    rho         Float | (...,[1,]...) ndarray. Rank correlation between data1 & data2. 
+    rho         Float | (...,[1,]...) ndarray. Rank correlation between data1 & data2.
                 For 1-d data, rho is a float. For multi-d data, rho is same shape as data, but with
                 <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
     """
@@ -355,7 +359,164 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
 
     # Compute Spearman rho = standard Pearson correlation on data ranks
     return correlation(data1_ranks, data2_ranks, axis=axis, keepdims=keepdims)
+
+
+def gaussian(points, center=0, width=1, amplitude=1, baseline=0):
+    """
+    Evaluates a 1D Gaussian function with given parameters at given datapoint(s)
+
+    Parameter values can be set for Gaussian center (mean), width (SD), amplitude,
+    and additive baseline. Defaults are set to generate standard normal function
+    (mean=0, sd=1, amp=1, baseline-0).
+
+    f_x = gaussian(points, center=0, width=1, amplitude=1, baseline=0)
     
+    ARGS
+    points      (n_datapoints,) ndarray. Datapoints to evaluate Gaussian function at.
+
+    center      Scalar. Center (mean) of Gaussian function. Default: 0
+
+    width       Scalar. Width (std dev) of Gaussian function. Default: 1
+
+    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+
+    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
+
+    RETURNS
+    f_x         (n_datapoints,) ndarray. Gaussian function evaluated at each given datapoint.
+    """
+    points = np.asarray(points)
+
+    assert points.ndim == 1, ValueError("points must be 1d array with shape (n_datapoints,)")
+
+    # Compute Gaussian function = exp(-(z**2)/2), where z = (x-mu)/sd
+    f_x = np.exp(-0.5*((points - center)/width)**2)
+
+    # Scale by amplitude and add in any baseline
+    f_x = amplitude*f_x + baseline
+
+    return f_x
+
+
+gaussian_1d = gaussian
+""" Alias gaussian() to gaussian_1d() to match format of other gaussian_*d() functions """
+
+
+def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
+                amplitude=1, baseline=0, orientation=0):
+    """
+    Evaluates an 2D Gaussian function with given parameters at given datapoint(s)
+
+    Parameter values can be set for Gaussian centers (means), widths (SDs), amplitude,
+    additive baseline, and rotation. Defaults are set to generate unrotated 2D standard normal
+    function (mean=(0,0), sd=(1,1), amp=1, no baseline offset, no rotation).
+
+    f_x = gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
+                      amplitude=1, baseline=0, orientation=0)
+    ARGS
+    points      (n_datapoints,2=[x,y]) ndarray. Datapoints to evaluate 2D Gaussian function at.
+                Each row is a distinct datapoint x to evaluate f(x) at, and the 2 columns
+                correspond to the 2 dimensions (x and y) of the 2D Gaussian function.
+
+    center_x/y  Scalar. Center (mean) of Gaussian function along x and y dims. Default: 0
+
+    width_x/y   Scalar. Width (std dev) of Gaussian function along x and y dims. Default: 1
+
+    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+
+    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
+
+    orientation Scalar. Orientation (radians CCW from + x-axis) of 2D Gaussian. 0=oriented along
+                standard x/y axes (non-rotated); 45=oriented along positive diagonal.  Default: 0
+
+    RETURNS
+    f_x         (n_datapoints,) ndarray. 2D Gaussian function evaluated at each given datapoint.
+    """
+    # Expand datapoints to (n_datapoints,n_dimensions=2)
+    if (points.ndim == 1) and (len(points) == 2): points = points[np.newaxis,:]
+
+    assert (points.ndim == 2) and (points.shape[1] == 2), \
+        ValueError("points must have shape (n_datapoints,2=[x,y]), not: ", points.shape)
+
+    # Compute difference d btwn datapoints and corresponding Gaussian means (x - mu_x, y - mu_y)
+    d = points - np.asarray([center_x,center_y])[np.newaxis,:]
+
+    # Rotate position (x-mu)'s by (negative of) orientation
+    # Note that this is done AFTER subtracting off mu's, so mu's are NOT fitted in rotated coords
+    # (ie x,y mu's = center positions in original reference frame, not rotated reference frame)
+    if orientation != 0:
+        theta = -orientation
+        # Create rotation matrix
+        rot_mx = np.asarray([[cos(theta), sin(theta)], 
+                             [-sin(theta), cos(theta)]])
+        # Rotate mean-referenced data with rotation matrix
+        d = np.matmul(d, rot_mx)
+
+    # Compute 2D Gaussian function = exp(-(z_x**2 + z_y**2)/2), where z = (x-mu)/sd
+    f_x = np.exp(-((d[:,0]/width_x)**2 + (d[:,1]/width_y)**2)/2)
+
+    # Scale by amplitude and add in any baseline
+    f_x = amplitude*f_x + baseline
+
+    return f_x
+
+
+def gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0):
+    """
+    Evaluates an N-D Gaussian function with given parameters at given datapoint(s).
+
+    Parameter values can be set for Gaussian center (mean), width (SD), amplitude, and
+    additive baseline. Defaults are set to generate N-D standard normal function (mean=0,
+    sd=1, amp=1, no baseline offset).
+
+    f_x = gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0)
+
+    ARGS
+    points      (n_datapoints,n_dims) ndarray. Datapoints to evaluate N-D Gaussian function at.
+                Each row is a distinct datapoint x to evaluate f(x) at, and each column is
+                a distinct dimension of the N-dimensional Gaussian function.
+
+    center      (n_dims,) ndarray | scalar. Center (mean) of Gaussian function along each dim.
+                Scalar value expanded to n_dims. Default: (0,...,0) (0 for all dims)
+
+    width       (n_dims,) ndarray | scalar. Width (std dev) of Gaussian function along each dim.
+                Scalar value expanded to n_dims. Default: (1,...,1) (1 for all dims)
+
+    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+
+    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
+
+    RETURNS
+    f_x         (n_datapoints,) ndarray. N-D Gaussian function evaluated at each given datapoint.
+    """
+    # Expand datapoints to (n_datapoints,n_dimensions)
+    if points.ndim == 1: points = points[np.newaxis,:]
+    n_datapoints,n_dims = points.shape
+
+    # Set defaults for center and width, expand scalars to n_dims
+    if center is None:                          center = np.zeros((n_dims,))
+    elif np.isscalar(center) and (n_dims > 1):  center = np.tile(center, (n_dims,))
+    else:
+        assert len(center) == n_dims, \
+            ValueError("points is %d-dimensional, but center is %d-dim" % (n_dims,len(center)))
+
+    if width is None:                           width = np.ones((n_dims,))
+    elif np.isscalar(width) and (n_dims > 1):   width = np.tile(width, (n_dims,))
+    else:
+        assert len(width) == n_dims, \
+            ValueError("points is %d-dimensional, but width is %d-dim" % (n_dims,len(width)))
+
+    f_x = np.zeros((n_datapoints,))
+    # Step thru each dimension in N-D Gaussian
+    for dim in range(n_dims):
+        # Compute and cumulate z**2 = ((x-mu)/sd)**2 for current dimension
+        f_x += ((points[:,dim] - center[dim]) / width[dim])**2
+
+    # Compute exp(-1/2*z**2), scale by amplitude and add in any baseline
+    f_x = amplitude*np.exp(-f_x/2) + baseline
+
+    return f_x
+
 
 # =============================================================================
 # Pre/post-processing utility functions

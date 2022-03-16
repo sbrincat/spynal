@@ -1597,6 +1597,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
     method = method.lower()
     spec_type = spec_type.lower()
     if bands is not None: bands = np.asarray(bands)
+    if bands.ndim == 1: bands = bands[np.newaxis,:] # Ensure bands is (n_bands,2) even if n_bands=1
     if axis < 0: axis = data.ndim + axis
     if (trial_axis is not None) and (trial_axis < 0):  trial_axis = data.ndim + trial_axis
 

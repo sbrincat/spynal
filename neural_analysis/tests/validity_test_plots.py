@@ -91,7 +91,7 @@ def test_plot_line_with_error_fill(plot_dir=None):
     plt.figure()
     plot_line_with_error_fill(timepts, data, events=events)
     plt.title('No error fills')
-    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-noevents.png'))
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_line_with_error_fill-noerrors.png'))
 
     # Test w/ x/ylabels and no event markers
     plt.figure()

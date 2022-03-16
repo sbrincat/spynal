@@ -2,11 +2,14 @@
 import pytest
 import numpy as np
 
+from neural_analysis.tests.data_fixtures import MISSING_ARG_ERRS
 from neural_analysis.utils import setup_sliding_windows, unsorted_unique, \
                                   object_array_equal, concatenate_object_array
 from neural_analysis.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
                                    cut_trials, realign_data, pool_electrode_units, \
-                                   rate, rate_stats, isi, isi_stats
+                                   rate, rate_stats, isi, isi_stats, \
+                                   plot_mean_waveforms, plot_waveform_heatmap
+from neural_analysis.spectra import compute_tapers
 
 
 # =============================================================================
@@ -530,4 +533,63 @@ def test_pool_electrode_units(spike_data, data_type):
     assert data_mua.shape == (out_shape[1],out_shape[0],*out_shape[2:])
     assert (elec_idxs == np.array([0,2])).all()
     assert (_count_all_spikes(data,electrodes) == np.array([result,result])).all()
-    
+
+
+# =============================================================================
+# Unit tests for plotting functions
+# =============================================================================
+def test_plot_mean_waveforms():
+    """ Unit tests for plot_mean_waveforms function """
+    n_units = 3
+    n_spikes = 100
+    n_timepts = 1000
+
+    # Use dpss tapers as data to plot, since they are all very distinct looking
+    means = compute_tapers(n_timepts, time_width=1.0, freq_width=4, n_tapers=n_units)
+    waveforms = np.empty((n_units,), dtype=object)
+    for unit in range(n_units):
+        waveforms[unit] = means[:,[unit]] + 0.1*np.random.standard_normal((n_timepts,n_spikes))
+    waveforms_orig = waveforms.copy()
+
+    # Basic test that plotted data == input data
+    lines, _, _ = plot_mean_waveforms(waveforms, plot_sd=True)
+    assert object_array_equal(waveforms, waveforms_orig)
+    for unit in range(n_units):
+        assert np.allclose(lines[unit][0].get_ydata(), waveforms[unit].mean(axis=1))
+        
+    # Test w/o SD plot (mean only)
+    lines, _, _ = plot_mean_waveforms(waveforms, plot_sd=False)
+    assert object_array_equal(waveforms, waveforms_orig)
+    for unit in range(n_units):
+        assert np.allclose(lines[unit][0].get_ydata(), waveforms[unit].mean(axis=1))        
+        
+    # Test with data from only one unit
+    lines, _, _ = plot_mean_waveforms(waveforms[0], plot_sd=True)
+    assert object_array_equal(waveforms, waveforms_orig)
+    assert np.allclose(lines[0][0].get_ydata(), waveforms[0].mean(axis=1))        
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        lines, _, _ = plot_mean_waveforms(waveforms, foo=None)
+        
+        
+def test_plot_waveform_heatmap():
+    """ Unit tests for plot_waveform_heatmap function """
+    n_units = 1
+    n_spikes = 100
+    n_timepts = 1000
+
+    # Use dpss tapers as data to plot, since they are all very distinct looking
+    means = compute_tapers(n_timepts, time_width=1.0, freq_width=4, n_tapers=n_units)
+    waveforms = np.empty((n_units,), dtype=object)
+    for unit in range(n_units):
+        waveforms[unit] = means[:,[unit]] + 0.1*np.random.standard_normal((n_timepts,n_spikes))
+    waveforms_orig = waveforms.copy()
+
+    # Basic test that plotted data == input data
+    patch, _ = plot_waveform_heatmap(waveforms)
+    assert object_array_equal(waveforms, waveforms_orig)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        patch, _ = plot_waveform_heatmap(waveforms, foo=None)        

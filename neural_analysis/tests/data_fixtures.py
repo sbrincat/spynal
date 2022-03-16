@@ -326,6 +326,9 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     return data, labels
 
 
+# =============================================================================
+# Helper functions
+# =============================================================================
 def _distribution_name_to_func(name):
     """ Converts name of distribution to scipy.stats-based function to generate random variables """
     # Random variables generated in a way that reproducibly matches output of Matlab

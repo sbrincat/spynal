@@ -28,8 +28,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from neural_analysis.tests.data_fixtures import simulate_dataset
-from neural_analysis.spikes import simulate_spike_trains, times_to_bool, rate_stats, \
-                                   isi, isi_stats
+from neural_analysis.spikes import simulate_spike_trains, times_to_bool, \
+                                   rate_stats, isi, isi_stats, \
+                                   plot_mean_waveforms, plot_waveform_heatmap
+from neural_analysis.spectra import compute_tapers
+
 
 # =============================================================================
 # Tests for rate computation functions
@@ -502,3 +505,73 @@ def isi_stat_test_battery(stats=('Fano','CV','CV2','LV','burst_fract'), tests=('
 
             print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
             if 'plot_dir' in kwargs: plt.close('all')
+
+
+# =============================================================================
+# Tests for plotts functions
+# =============================================================================
+def test_plot_mean_waveforms(plot_dir=None):
+    """
+    Basic testing for plotting function plot_mean_waveforms()
+
+    ARGS
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+
+    ACTIONS Creates a plot and optionally saves it to PNG file
+    """
+    n_units = 3
+    n_spikes = 100
+    n_timepts = 1000
+
+    # Use dpss tapers as data to plot, since they are all very distinct looking
+    means = compute_tapers(n_timepts, time_width=1.0, freq_width=4, n_tapers=n_units)
+    waveforms = np.empty((n_units,), dtype=object)
+    for unit in range(n_units):
+        waveforms[unit] = means[:,[unit]] + np.random.standard_normal((n_timepts,n_spikes))
+        
+    # Basic test plot
+    plt.figure()
+    plot_mean_waveforms(waveforms, plot_sd=True)
+    plt.title('Basic test plot')
+    plt.show()
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_mean_waveforms.png'))
+            
+    # Plot w/o SDs (means only)
+    plt.figure()
+    plot_mean_waveforms(waveforms, plot_sd=False)
+    plt.title('Means-only plot')
+    plt.show()
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_mean_waveforms-noSD.png'))
+            
+            
+def test_plot_waveform_heatmap(plot_dir=None):
+    """
+    Basic testing for plotting function plot_waveform_heatmap()
+
+    ARGS
+    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+
+    ACTIONS Creates a plot and optionally saves it to PNG file
+    """
+    n_units = 1
+    n_spikes = 100
+    n_timepts = 1000
+
+    # Use dpss tapers as data to plot, since they are all very distinct looking
+    means = compute_tapers(n_timepts, time_width=1.0, freq_width=4, n_tapers=n_units)
+    waveforms = np.empty((n_units,), dtype=object)
+    for unit in range(n_units):
+        waveforms[unit] = means[:,[unit]] + np.random.standard_normal((n_timepts,n_spikes))
+        
+    # Basic test plot
+    plt.figure()
+    plot_waveform_heatmap(waveforms)
+    plt.title('Basic test plot')
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_waveform_heatmap.png'))
+            
+    # Basic test plot
+    plt.figure()
+    plot_waveform_heatmap(waveforms, n_ybins=50)
+    plt.title('Fine-grained bins')
+    if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_waveform_heatmap-50bins.png'))
+                        

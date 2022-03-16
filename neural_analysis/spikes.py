@@ -2,7 +2,7 @@
 """
 spikes  A module for preprocessing, basic analyses, and plotting of neural spiking activity
 
-Functionality includes computing spike rates (using binning or spike density methods), spike rate 
+Functionality includes computing spike rates (using binning or spike density methods), spike rate
 statistics, inter-spike interval statistics, and spike data preprocessing and plotting.
 
 Most functions expect one of two formats of spiking data:
@@ -16,7 +16,7 @@ timestamp   Explicit spike timestamps in a Numpy ndarray of dtype object (analog
             which can optionally be represented on the containing array's axes (or
             a single 1D array/list may be given instead).
 
-Most functions perform operations in a mass-univariate manner. This means that 
+Most functions perform operations in a mass-univariate manner. This means that
 rather than embedding function calls in for loops over units, trials, etc., like this:
 
 for unit in units:
@@ -75,7 +75,8 @@ from neural_analysis.utils import set_random_seed, unsorted_unique, index_axis, 
                                   standardize_array, undo_standardize_array, \
                                   setup_sliding_windows, concatenate_object_array, \
                                   fano, cv, cv2, lv
-from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array
+from neural_analysis.helpers import _check_window_lengths, _enclose_in_object_array, _merge_dicts
+from neural_analysis.plots import plot_line_with_error_fill, plot_heatmap
 
 
 # =============================================================================
@@ -739,7 +740,6 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     ACTION      Plots raster plot from spike time data
     """
     if ax is None: ax = plt.gca()
-    plt.sca(ax)
 
     def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
         """ Plots single line of raster plot """
@@ -777,13 +777,13 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     return ax
 
 
-def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
-                        ax=None, plot_colors=None):
+def plot_mean_waveforms(spike_waves, timepts=None, plot_sd=True,
+                        ax=None, **kwargs):
     """
     Plots mean spike waveform for each of one or more units
 
-    ax = plot_mean_waveforms(spike_waves,timepts=None,sd=True,
-                             ax=None,plot_colors=None)
+    lines,patches,ax = plot_mean_waveforms(spike_waves,timepts=None,sd=True,
+                                           ax=None,color=None,**kwargs)
 
     ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
@@ -792,57 +792,61 @@ def plot_mean_waveforms(spike_waves, timepts=None, sd=True,
     timepts     (n_timepts,) array-like. Common time sampling vector for each
                 spike waveform. Default: 0:n_timepts
 
-    sd          Bool. If True, also plots standard deviation of waves as fill.
+    plot_sd     Bool. If True, also plots standard deviation of waves as fill.
                 Default: True
-
-    plot_colors (n_units_max,3) array. Color to plot each unit in.
-                Default: Colors from Blackrock Central Spike grid plots
 
     ax          Pyplot Axis object. Axis to plot into. Default: plt.gca()
 
+    **kwargs    Any additional keyword args are interpreted as parameters of plt.axes()
+                (settable Axes object attributes), plt.plot() (Line2D object attributes),
+                or plt.fill() (Polygon object attributes), including the following
+                (with given default values):
+                xlim        (2,) array-like. x-axis limits. Default: (timepts[0],timepts[-1])
+                x/yticklabels Array-like. Labels for x/y ticks. Default: [] (no labels)
+
     RETURNS
-    ax          Pyplot Axis object. Axis for plot
+    lines       List of Line2D objects. ax.plot output. Allows access to line properties of line.
+    patches     List of Polygon objects. ax.fill output. Allows access to patch properties of fill.
+    ax          Axis object. Axis plotted into.
     """
-    # TODO  Setup to handle single array of 1 unit's wfs instead of object array of units
+    if 'sd' in kwargs:
+        print("'sd' argument has been replaced with 'plot_sd' and will be removed in a future release")
+        plot_sd = kwargs.pop('sd')
+
+    if spike_waves.dtype != object: spike_waves = _enclose_in_object_array(spike_waves)
     n_units      = len(spike_waves)
     n_timepts    = spike_waves[0].shape[0]
 
     # If no time sampling vector given, default to 0:n_timepts
     if timepts is None: timepts = np.arange(n_timepts)
-    if plot_colors is None:
-        # Default plot colors from Blackrock Central software Spike plots
-        plot_colors = np.asarray([[1,1,1], [1,0,1], [0,1,1], [1,1,0]])
     if ax is None: ax = plt.gca()
-    plt.sca(ax)
+
+    # Merge any input parameters with default values
+    kwargs = _merge_dicts(dict(xlim=(timepts[0],timepts[-1]),
+                               xticklabels=[], yticklabels=[]), kwargs)
+
+    # Compute mean and SD of waveforms for each unit
+    mean = np.full((n_units,n_timepts), fill_value=np.nan)
+    if plot_sd: sd = np.full((n_units,n_timepts), fill_value=np.nan)
+    else:       sd = None
 
     for unit in range(n_units):
-        if spike_waves[unit] is None:  continue
+        if spike_waves[unit] is None: continue
+        mean[unit,:] = spike_waves[unit].mean(axis=1).T
+        if plot_sd: sd[unit,:] = spike_waves[unit].std(axis=1).T
 
-        mean = np.mean(spike_waves[unit], axis=1)
+    lines, patches, ax = plot_line_with_error_fill(timepts, mean, err=sd, ax=ax, **kwargs)
 
-        if sd:
-            sd = np.std(spike_waves[unit], axis=1)
-            ax.fill(np.hstack((timepts,np.flip(timepts))),
-                    np.hstack((mean+sd,np.flip(mean-sd))),
-                    facecolor=plot_colors[unit,:], edgecolor=None, alpha=0.25)
-
-        ax.plot(timepts, mean, '-', color=plot_colors[unit,:], linewidth=1)
-
-    ax.set_xlim(timepts[0],timepts[-1])
-    ax.set_facecolor('k')
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-
-    return ax
+    return lines, patches, ax
 
 
-def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
-                          ax=None, cmap=None):
+def plot_waveform_heatmap(spike_waves, timepts=None, ylim=None, n_ybins=20,
+                          ax=None, cmap='jet', **kwargs):
     """
     Plots heatmap (2D hist) of all spike waveforms across one or more units
 
-    ax = plot_waveform_heatmap(spike_waves,timepts=None,wf_range=None,
-                               ax=None,cmap=None)
+    ax = plot_waveform_heatmap(spike_waves,timepts=None,ylim=None,
+                               ax=None,cmap='jet',**kwargs)
 
     ARGS
     spike_waves (n_units,) object array of (n_timepts,n_spikes) arrays.
@@ -851,8 +855,10 @@ def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
     timepts     (n_timepts,) array-like. Common time sampling vector for each spike
                 waveform. Default: 0:n_timepts
 
-    wf_range    (2,) array-like. [min,max] waveform amplitude for generating
+    ylim        (2,) array-like. [min,max] waveform amplitude for generating
                 2D histograms. Default: [min,max] of given waveforms
+                
+    n_ybins     Int. Number of histogram bins to use for y (amplitude) axis. Default: 20
 
     ax          Pyplot Axis object. Axis to plot into. Default: plt.gca()
     cmap        String | Colormap object. Colormap to plot heat map. Default: jet
@@ -860,10 +866,11 @@ def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
     RETURNS
     ax          Pyplot Axis object. Axis for plot
     """
-    # TODO  Setup to handle single array of 1 unit's wfs instead of object array of units
-    if cmap is None:    cmap = 'jet'
-    if ax is None:      ax = plt.gca()
-    plt.sca(ax)
+    if 'wf_range' in kwargs:
+        print("'wf_range' argument has been replaced with 'ylim' and will be removed in a future release")
+        ylim = kwargs.pop('wf_range')
+    if spike_waves.dtype != object: spike_waves = _enclose_in_object_array(spike_waves)
+    if ax is None: ax = plt.gca()
 
     # Concatenate waveforms across all units -> (n_timepts,n_spikes_total) ndarray
     ok_idxs = np.asarray([unit_waveforms is not None for unit_waveforms in spike_waves])
@@ -873,28 +880,25 @@ def plot_waveform_heatmap(spike_waves, timepts=None, wf_range=None,
     # If no time sampling vector given, default to 0:n_timepts
     if timepts is None: timepts = np.arange(n_timepts)
     # If no waveform amplitude range given, default to [min,max] of set of waveforms
-    if wf_range is None: wf_range = [np.min(spike_waves),np.max(spike_waves)]
+    if ylim is None: ylim = [np.min(spike_waves),np.max(spike_waves)]
 
+    # Merge any input parameters with default values
+    kwargs = _merge_dicts(dict(aspect='auto', xticklabels=[], yticklabels=[]), kwargs)
 
     # Set histogram bins to sample full range of times,
-    xedges = np.linspace(timepts[0],timepts[-1],n_timepts)
-    yedges = np.linspace(wf_range[0],wf_range[1],20)
+    dt = np.mean(np.diff(timepts))
+    xedges = np.linspace(timepts[0]-dt/2, timepts[-1]+dt/2, n_timepts+1)
+    yedges = np.linspace(ylim[0], ylim[1], n_ybins)    
 
     # Compute 2D histogram of all waveforms
     wf_hist = np.histogram2d(np.tile(timepts,(n_spikes,)),
                              spike_waves.T.reshape(-1),
                              bins=(xedges,yedges))[0]
     # Plot heat map image
-    plt.imshow(wf_hist.T, cmap=cmap, origin='lower',
-               extent=[xedges[0],xedges[-1],yedges[0],yedges[-1]])
+    y = (yedges[:-1] + yedges[1:])/2
+    patch, ax = plot_heatmap(timepts, y, wf_hist.T, ax=ax, **kwargs)
 
-    ax.set_xlim(timepts[0],timepts[-1])
-    ax.set_ylim(wf_range[0],wf_range[-1])
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-    ax.set_aspect('auto')
-
-    return ax
+    return patch, ax
 
 
 # =============================================================================
