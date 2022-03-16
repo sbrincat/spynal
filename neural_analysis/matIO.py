@@ -23,8 +23,6 @@ Created on Mon Mar 12 17:20:26 2018
 
 @author: sbrincat
 """
-# TODO  Empty strings return garbage (eg '\x00\x00...') (maybe from mixed string/other cell arrays). Fix?
-
 import time
 import sys
 from types import SimpleNamespace
@@ -44,7 +42,10 @@ except ImportError:
 
 from neural_analysis.helpers import _enclose_in_object_array
 
-    
+# Uncomment to print out detailed debugging statements in loading functions
+DEBUG = False
+
+
 # =============================================================================
 # Matfile loading functions
 # =============================================================================
@@ -63,13 +64,13 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
     array               Numpy ndarray of appropriate dtype
     cell array          Numpy ndarray of object dtype
     struct              dict or Pandas Dataframe (for table-like structs; depends on typemap)
-    
+
     NOTE: Some proprietary or custom Matlab variables CANNOT be loaded, including:
     table/timetable, datetime, categorical, function_handle, map container, any custom object class
 
     Handles both older (v4-v7) and newer (v7.3) versions of MAT files,
     transparently to the user.
-    
+
     loadmat(filename,variables=None,typemap=None,asdict=False,extract_elem=True,
             order='Matlab',version=None,verbose=True)
 
@@ -90,11 +91,11 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
                     DataFrame, 'dict' = dictionary
                 Default: {'array':'array', 'cell':'array', 'struct':'dict'}
 
-    asdict      Bool. If True, returns variables in a {'variableName':value} dict.
+    asdict      Bool. If True, returns variables in a {'variable_name':value} dict.
                 If False [default], returns variables separately in tuple.
-                
+
     extract_elem Bool. If False, 1-item ndarrays are returned as such.
-                If True [default], the element value is extracted and returned as 
+                If True [default], the element value is extracted and returned as
                 the type implied by its array dtype (eg float/int/string).
 
     order       String. Dimension order of loaded/returned arrays (Default: Matlab):
@@ -142,7 +143,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
         for vbl in variables:
             if isinstance(data[vbl], np.ndarray) and (data[vbl].size == 1):
                 data[vbl] = data[vbl].item()
-        
+
     if verbose:
         for vbl in variables:
             if isinstance(data[vbl], np.ndarray):       # Numpy array variables
@@ -156,7 +157,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
                 vblstr = vbl + ' : dict with keys[' + \
                         ''.join('%s,' % x for x in data[vbl].keys()) + ']'
             else:                                       # Scalar variables (float/int/string)
-                vblstr = vbl            
+                vblstr = vbl
             vblstr = vblstr + '\n'
             print(vblstr)
 
@@ -278,7 +279,7 @@ def variables_to_mat(variables):
     new_vbl_dict = {}     # In case we need to create new variables in loop below
 
     def _size_general(x):
-        if isinstance(x,np.ndarray):        return x.size 
+        if isinstance(x,np.ndarray):        return x.size
         elif isinstance(x, (list,tuple)):   return len(x)
         else:                               return 1
 
@@ -293,7 +294,7 @@ def variables_to_mat(variables):
             # todo should we recurse here in case of nested lists?
             is_str = np.any([isinstance(item,str) for item in value])
             sizes = [_size_general(item) for item in value]
-            is_unequal_size = np.any(np.diff(sizes) != 0) 
+            is_unequal_size = np.any(np.diff(sizes) != 0)
             if is_str or is_unequal_size:
                 variables[variable] = np.asarray(value,dtype=object)
 
@@ -304,7 +305,7 @@ def variables_to_mat(variables):
         # Convert Pandas DataFrame to dict and call this func recursively on items (cols)
         elif isinstance(value,pd.DataFrame):
             variables[variable] = variables_to_mat(value.to_dict(orient='list'))
-            
+
         # Conversion from xarray -> numpy array + dict (skip if xarray not installed)
         # Extract metadata attributes as new dict variable called <variable>_attr
         elif _HAS_XARRAY and isinstance(value,xr.DataArray):
@@ -316,9 +317,463 @@ def variables_to_mat(variables):
     return {**variables, **new_vbl_dict}
 
 
+# =============================================================================
+# Functions for v7.3 (HDF5) mat files (using h5py)
+# =============================================================================
+def _load73(filename, variables=None, typemap=None, order='C'):
+    """
+    Loads data variables from a version 7.3 Matlab MAT file
+
+    Uses h5py to load data, as v7.3 MAT files are a type of HDF5 file
+    """
+    typemap = _parse_typemap(typemap)
+
+    # h5py returns arrays in row-major (Python/C) order by default
+    # Transpose/permute array axes if Matlab/Fortran/column-major requested
+    transpose = order.upper() in ['MATLAB','F','COL','COLMAJOR']
+
+    # Open datafile for reading
+    # For newer versions, can specify to maintain original object attribute order
+    #  (eg original order of struct fields)
+    if h5py.__version__ >= '2.9.0':
+        file = h5py.File(filename,'r',track_order=True)
+    else:
+        file = h5py.File(filename,'r')
+
+    # If <variables> not set, load all variables from datafile (keys for File object)
+    # Note: Get rid of header info ('#refs#' variable)
+    if variables is None:
+        variables = [vbl for vbl in file.keys() if vbl[0] != '#']
+
+    # If <variables> list was input, ensure file actually contains all requested variables
+    else:
+        for vbl in variables:
+            assert vbl in file.keys(), \
+                ValueError("Variable '%s' not present in file %s" % (vbl,filename))
+
+
+    def _process_h5py_object(obj, file, matlab_vbl_type=None, python_vbl_type=None, level=0):
+        """ Properly handles arbitrary objects loaded from HDF5 files in recursive fashion """
+        level += 1
+        # For h5py Dataset (contains Matlab array), extract and process array data
+        if isinstance(obj, h5py.Dataset):
+            if DEBUG: print('\t'*level, "Dataset", matlab_vbl_type)
+            if matlab_vbl_type is None: matlab_vbl_type = _h5py_matlab_type(obj)
+            return _process_h5py_object(obj[()], file, matlab_vbl_type=matlab_vbl_type, level=level)
+
+        # For h5py Group (Matlab struct), recurse thru fields and return as dict or DataFrame
+        elif isinstance(obj, h5py.Group):
+            if DEBUG: print('\t'*level, "Group", matlab_vbl_type)
+            converted = {}
+            for key in obj.keys():
+                if DEBUG: print('\t'*level, "'%s'" % key)
+                matlab_elem_type = _h5py_matlab_type(obj[key])
+                converted[key] = _process_h5py_object(obj[key], file,
+                                                      matlab_vbl_type=matlab_elem_type, level=level)
+
+            # If no specific output type requested for variable, default to type for structs
+            if python_vbl_type is None: python_vbl_type = typemap['struct']
+            # Convert entire (former Matlab struct) variable to a Pandas DataFrame
+            if python_vbl_type.lower() == 'dataframe':
+                converted = _dict_to_dataframe(converted)
+
+            return converted
+
+        # For a HDF5 Reference, get the name of the referenced object and read directly from file
+        # stackoverflow.com/questions/28541847/how-convert-this-type-of-data-hdf5-object-reference-to-something-more-readable
+        elif isinstance(obj, h5py.h5r.Reference):
+            if DEBUG: print('\t'*level, "Reference", matlab_vbl_type)
+            # For int-encoded string, convert to string
+            if _h5py_matlab_type(file[obj]) == 'char':  return _convert_string(file[obj][()])
+            else:                                       return file[obj][()]
+
+        # For an ndarray (Matlab array)
+        elif isinstance(obj,np.ndarray):
+            if DEBUG: print('\t'*level, "ndarray", matlab_vbl_type)
+
+            # BUGFIX For some reason, h5py seems to output empty cells in cell arrays as
+            #        (2,) ndarrays == [n,0] (where n is n_rows of other cells).
+            #        Fix that by properly setting = []
+            if ((obj.shape == (2,)) and (obj[1] == [0]).all()):
+                if DEBUG: print('\t'*level, "empty")
+                # Empty strings
+                if matlab_vbl_type == 'char':
+                    converted = str()
+                # General empty arrays
+                else:
+                    converted = np.ndarray(shape=(0,1),dtype='uint64')
+
+            # For length-1 ndarray, extract and process its single array element
+            # (but don't do this for Matlab char arrays, which are treated as strings)
+            elif (obj.size == 1) and not (matlab_vbl_type == 'char'):
+                if DEBUG: print('\t'*level, "size 1")
+                converted = _process_h5py_object(obj.item(), file,
+                                                 matlab_vbl_type=matlab_vbl_type, level=level)
+
+            # Matlab char arrays (strings) -- convert to Python string
+            elif matlab_vbl_type == 'char':
+                if DEBUG: print('\t'*level, "char")
+                converted = _convert_string(obj)
+
+            # Matlab logical arrays -- convert to Numpy ndarray of dtype bool
+            elif matlab_vbl_type == 'logical':
+                if DEBUG: print('\t'*level, "logical")
+                converted = obj.astype(bool)
+
+            # Matlab cell arrays -- convert to Numpy ndarray of dtype object
+            # Iterate thru and process each array element individually
+            elif matlab_vbl_type == 'cell':
+                if DEBUG: print('\t'*level, "cell array")
+                assert obj.ndim <= 2, "Cell arrays with > 2 dimensions not (yet) supported"
+
+                converted = np.ndarray(shape=obj.shape,dtype=object) # Create empty object array
+                for row,elem in enumerate(obj):
+                    for col in range(len(elem)):
+                        # print(row, col, len(elem))
+                        matlab_elem_type = _h5py_matlab_type(file[elem[col]])
+
+                        converted[row,col] = \
+                            _process_h5py_object(file[elem[col]][()], file,
+                                                 matlab_vbl_type=matlab_elem_type, level=level)
+
+            # Matlab numerical arrays -- straight copy to Numpy ndarray of appropriate dtype
+            else:
+                if DEBUG: print('\t'*level, "numerical")
+                converted = obj
+
+            # Note: Only do the following for variables output as arrays (ie not strings/scalars)
+            if isinstance(converted,np.ndarray):
+                # Squeeze out any singleton axes, eg: Reshape (1,n) ndarrays -> (n,) vectors
+                converted = converted.squeeze()
+
+                # Permute array axes if 'MATLAB'/column-major order requested
+                if transpose: converted = converted.T
+
+            return converted
+
+        # Scalar values
+        else:
+            # Convert logical scalar -> boolean
+            if matlab_vbl_type == 'logical':
+                if DEBUG: print('\t'*level, "bool scalar")
+                return bool(obj)
+
+            # Convert chars -> string
+            # Note: we shouldn't get here, but if we do, have to re-package obj in list
+            elif matlab_vbl_type == 'char':
+                if DEBUG: print('\t'*level, "char scalar")
+                return _convert_string([obj])
+
+            # Everything else (numerical types) -- return as-is
+            else:
+                if DEBUG: print('\t'*level, "numerical scalar")
+                return obj
+
+
+    # Load each requested variable and save as appropriate Python variable (based on typemap)
+    # into a {variable_name:variable_value} dict
+    data = {}
+    for vbl in variables:
+        # Extract Matlab variable type from h5py object attributes
+        matlab_vbl_type = _h5py_matlab_type(file[vbl])
+        if DEBUG: print("'%s'" % vbl, matlab_vbl_type)
+
+        # If specific variable name is listed in <typemap>, use given mapping
+        python_vbl_type = typemap[vbl] if vbl in typemap else None
+
+        # Process h5py object -- extract data, convert to appropriate Python type,
+        # traversing down into object (cell elements/struct fields) with recursive calls as needed
+        data[vbl] = _process_h5py_object(file[vbl], file, matlab_vbl_type=matlab_vbl_type,
+                                         python_vbl_type=python_vbl_type, level=0)
+
+    file.close()
+
+    return data
+
+
+def _who73(filename):
+    """ Lists data variables from a version 7.3 Matlab MAT file """
+    # Open datafile for reading
+    if h5py.__version__ >= '2.9.0':
+        file = h5py.File(filename,'r',track_order=True)
+    else:
+        file = h5py.File(filename,'r')
+
+    # Find all variables in file, save into list
+    # Note: Get rid of header info ('#refs#' variable)
+    variables = [vbl for vbl in file.keys() if vbl[0] != '#']
+    file.close()
+    return variables
+
+
+def _h5py_matlab_type(obj):
+    """ Returns variable type of Matlab variable encoded in h5py object """
+    assert 'MATLAB_class' in obj.attrs, \
+        AttributeError("Can't determine Matlab variable type. " \
+                       "No 'MATLAB_class' attribute in h5py object '%s'" % obj)
+
+    # Extract attribute with Matlab variable type, convert bytes -> string
+    return obj.attrs['MATLAB_class'].decode('UTF-8')
+
+
+def _convert_string(value, encoding='UTF-16'):
+    """ Converts integer-encoded strings in HDF5 files to strings """
+    return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
+
+    # Note: Alternative methods that tested much slower:
+    # return ''.join([chr(c) for c in value])               # time test ~ 7.2 s
+    # return ''.join(map(chr,value))                        # time test ~ 7.3 s
+
 
 # =============================================================================
-# Loading helper functions
+# Functions for v7 (and earlier) mat files (using scipy.io)
+# =============================================================================
+def _load7(filename, variables=None, typemap=None, order='Matlab'):
+    """
+    Loads data variables from a version 7 (or older) Matlab MAT file
+    Uses scipy.io.loadmat to load data
+    """
+    typemap = _parse_typemap(typemap)
+
+    # scipy.io returns arrays in column-major (Matlab/Fortran) order by default
+    # Transpose/permute array axes if Python/C/row-major requested
+    transpose = order.upper() in ['PYTHON','C','ROW','ROWMAJOR']
+
+    # If <variables> is set, convert to {variable_name:None} dict
+    # (otherwise leave = None, so it loads all variables from datafile)
+    if variables is not None:
+        variables = {vbl:None for vbl in variables}
+
+    # Load each requested variable and save each as Numpy array in a {variable_name:array} dict
+    data = scipy.io.loadmat(filename,variable_names=variables)
+
+    # Get rid of header info returned by loadmat() (variables starting with '_...')
+    data = {vbl:value for vbl,value in data.items() if vbl[0] != '_'}
+
+    # Ensure we actually loaded all requested variables
+    if variables is not None:
+        for vbl in variables:
+            assert vbl in data.keys(), \
+                ValueError("Variable '%s' not present in file %s" % (vbl,filename))
+
+    # If <variables> not set, load all variables in datafile
+    else:
+        variables = list(data.keys())
+
+    # Get data into desired output format
+    for vbl in variables:
+        # Infer Matlab variable type from object structure
+        matlab_vbl_type = _v7_matlab_type(data[vbl])
+        # If specific variable name is listed in <typemap>, use given mapping
+        python_vbl_type = typemap[vbl] if vbl in typemap else None
+
+        if DEBUG: print("'%s'" % vbl, matlab_vbl_type, python_vbl_type)
+
+        # Process loaded object -- extract data, convert to appropriate Python type,
+        # traversing down into object (cell elements/struct fields) with recursive calls as needed
+        data[vbl] = _process_v7_object(data[vbl], matlab_vbl_type=matlab_vbl_type,
+                                       python_vbl_type=python_vbl_type, typemap=typemap,
+                                       transpose=transpose, level=0)
+
+    return data
+
+
+def _who7(filename, **kwargs):
+    """  Lists data variables from a version 7 (or older) Matlab MAT file """
+    # Load list of 3-tuples of (variable,size,type) for each variable in file
+    variables = scipy.io.whosmat(filename, appendmat=True, **kwargs)
+    # Extract and return just the variable names
+    return [vbl[0] for vbl in variables]
+
+
+# NOTE: This function can't be nested in _load7 b/c _dict_to_dataframe() needs access
+def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
+                       typemap=None, transpose=False, level=0):
+    """ Properly handles arbitrary objects loaded from v7 mat files in recursive fashion """
+    level += 1
+
+    # Matlab class objects are returned as weird objects that are not parsable. Return as None.
+    if matlab_vbl_type == 'class':
+        converted = None
+
+    # Matlab scalar structs are returned as (1,1) Numpy structured arrays
+    #  Convert to dict or Pandas DataFrame (or leave as structured array)
+    elif matlab_vbl_type == 'struct':
+        if DEBUG: print('\t'*level, "struct")
+        if python_vbl_type is None: python_vbl_type = typemap['struct']
+
+        if python_vbl_type.lower() == 'dict':
+            converted = _structuredarray_to_dict(obj[0,0], typemap=typemap,
+                                                 transpose=transpose, level=level)
+
+        elif python_vbl_type.lower() == 'dataframe':
+            converted = _structuredarray_to_dataframe(obj[0,0], typemap=typemap,
+                                                      transpose=transpose, level=level)
+
+        else:
+            converted = obj[0,0]
+            assert python_vbl_type.lower() != 'structuredarray', \
+                ValueError("%s is an unsupported output type for Matlab structs. \n \
+                            Must be 'dict'|'dataFrame'|'structuredArray'" % python_vbl_type)
+
+    # Matlab struct arrays are returned as (m,n) Numpy structured arrays
+    #  Convert to dict (or leave as structured array)
+    elif matlab_vbl_type == 'structarray':
+        if DEBUG: print('\t'*level, "structarray")
+        if python_vbl_type is None: python_vbl_type = typemap['structarray']
+
+        if python_vbl_type.lower() == 'dict':
+            converted = _structuredarray_to_dict(obj, typemap=typemap,
+                                                 transpose=transpose, level=level)
+
+        else:
+            converted = obj
+            assert python_vbl_type.lower() != 'structuredarray', \
+                ValueError("%s is an unsupported output type for Matlab struct arrays. \n \
+                            Must be 'dict'|'structuredArray'" % python_vbl_type)
+
+    # Cell arrays are returned as object arrays. Squeeze out any singleton axes and
+    # Permute axes of each cell's contents if 'PYTHON' order requested
+    elif matlab_vbl_type == 'cellarray':
+        if DEBUG: print('\t'*level, "cellarray")
+        flatiter = obj.flat             # 1D iterator to iterate over arbitrary-shape array
+        converted = np.ndarray(shape=obj.shape,dtype=object) # Create empty object array
+        for _ in range(obj.size):
+            coords = flatiter.coords    # Multidim coordinates into array
+            # Infer Matlab variable type of cell array element
+            matlab_elem_type = _v7_matlab_type(obj[coords])            
+            converted[coords] = _process_v7_object(obj[coords], typemap=typemap,
+                                                   matlab_vbl_type=matlab_elem_type,
+                                                   transpose=transpose, level=level)
+            next(flatiter)              # Iterate to next element
+
+    # General numerical/logical and cell arrays
+    elif isinstance(obj,np.ndarray):
+        if DEBUG: print('\t'*level, "array")
+        # Logicals (binary-valued variables): Convert to bool type
+        if matlab_vbl_type == 'logical':
+            if DEBUG: print('\t'*level, "logical")
+            converted = obj.astype(bool)
+
+        # Strings: Extract string (dealing with empty strings appropriately)
+        elif obj.dtype.type == np.str_:
+            if DEBUG: print('\t'*level, "string")
+            # Empty strings
+            if len(obj) == 0:   converted = str()
+            # General strings: Convert to string type (from np.str_)
+            else:               converted = str(obj[0])
+
+        # General numerical array: Copy as-is
+        else:
+            if DEBUG: print('\t'*level, "numerical")
+            converted = obj
+
+    # Note: Only do the following for objects that remain output as ndarrays
+    if isinstance(converted,np.ndarray):
+        # Length-1 arrays: Extract single item as type <dtype>
+        if (converted.shape == ()) or (converted.size == 1):
+            converted = converted.item()
+
+        else:
+            # Squeeze out any singleton axes, eg: Reshape (1,n) ndarrays -> (n,) vectors
+            converted = converted.squeeze()
+
+            # Permute array axes if 'PYTHON'/'C'/'ROWMAJOR' order requested
+            if transpose: converted = converted.T
+
+    return converted
+
+
+def _structuredarray_to_dict(sarray, typemap=None, transpose=False, level=0):
+    """
+    Converts Numpy structured array (which Matlab structs are initially
+    imported as, using scipy.io.loadmat) to a dict, with type names as keys
+
+    dic = _structuredarray_to_dict(sarray)
+
+    INPUT
+    sarray   Numpy structured array
+
+    OUTPUT
+    dic      Dict. {keys = sarray.dtype.names : values = sarray[key]}
+    """
+    # Convert structured array to dict
+    dic = {name:sarray[name] for name in sarray.dtype.names}
+
+    for name in dic.keys():
+        if DEBUG: print('\t'*level, "'%s'" % name)
+        # Infer Matlab variable type of struct field
+        matlab_vbl_type = _v7_matlab_type(dic[name])
+        # If specific field name is listed in <typemap>, use given mapping
+        python_vbl_type = typemap[name] if name in typemap else None
+
+        dic[name] = _process_v7_object(dic[name], matlab_vbl_type=matlab_vbl_type,
+                                       python_vbl_type=python_vbl_type,
+                                       typemap=typemap, transpose=transpose, level=level)
+
+    return dic
+
+
+def _structuredarray_to_dataframe(sarray, typemap=None, transpose=False, level=0):
+    """
+    Convert Numpy structured array (which Matlab structs are initially imported
+    as, using scipy.io.loadmat) to a Pandas DataFrame, with type names as keys.
+    Intended for table-like Matlab scalar structs, which naturally fit into a
+    DataFrame (though Matlab table variables are not currently loadable in Python).
+
+    df = _structuredarray_to_dataframe(sarray)
+
+    INPUT
+    sarray  Numpy structured array
+
+    OUTPUT
+    df      Pandas DataFrame. Columns are names and values of all the sarray.dtype.names
+            whose associated values are vector-valued with length = modal length
+            of all names. Rows are each entry from these vectors
+
+    REFERENCE Based on code obtained from:
+    http://poquitopicante.blogspot.com/2014/05/loading-matlab-mat-file-into-pandas.html
+    """
+    # Convert structured array to dict {keys = sarray.dtype.names : values = sarray[key]}
+    dic = _structuredarray_to_dict(sarray, typemap=typemap, transpose=transpose, level=level)
+
+    # Convert dict to a Pandas DataFrame
+    df = _dict_to_dataframe(dic)
+
+    return df
+
+
+def _v7_matlab_type(obj):
+    """ Infer Matlab variable type of objects loaded from v7 mat files """
+    # Matlab class objects are returned as this weird object (which is unparsable)
+    if isinstance(obj,scipy.io.matlab.mio5_params.MatlabOpaque):    return 'class'
+    # Matlab scalar structs are returned as (1,1) Numpy structured arrays
+    elif _is_structured_array(obj) and (obj.size == 1):             return 'struct'
+    # Matlab struct arrays are returned as (m,n) Numpy structured arrays
+    elif _is_structured_array(obj) and (obj.size > 1):              return 'structarray'
+    elif isinstance(obj,np.ndarray):
+        # Cell arrays are returned as object arrays
+        if obj.dtype == object:                                     return 'cellarray'
+        # Heuristically assume arrays with only 0/1 (but not all 0's) are logicals
+        elif _isbinary(obj) and not (obj == 0).all():               return 'logical'
+        # General numeric array
+        else:                                                       return 'array'
+    else:
+        raise TypeError("Undetermined type of variable:", obj)
+
+
+def _isbinary(x):
+    """
+    Tests whether variable contains only binary values (True,False,0,1)
+    """
+    x = np.asarray(x)
+    return (x.dtype == bool) or \
+           (np.issubdtype(x.dtype,np.number) and \
+            np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
+
+
+# =============================================================================
+# Other helper functions
 # =============================================================================
 def _get_matfile_version(filename):
     """
@@ -350,458 +805,6 @@ def _get_matfile_version(filename):
     return version
 
 
-def _load7(filename, variables=None, typemap=None, order='Matlab'):
-    """
-    Loads data variables from a version 7 (or older) Matlab MAT file
-    Uses scipy.io.loadmat to load data
-    """
-    typemap = _parse_typemap(typemap)
-
-    # scipy.io returns arrays in column-major (Matlab/Fortran) order by default
-    # Transpose/permute array dim's if Python/C/row-major requested
-    transpose = order.upper() in ['PYTHON','C','ROW','ROWMAJOR']
-
-    # If <variables> is set, convert to {variableName:None} dict
-    # (otherwise leave = None, so it loads all variables from datafile)
-    if variables is not None:
-        variables = {vbl:None for vbl in variables}
-
-    # Load each requested variable and save as np array in a {variableName:array} dict
-    data = scipy.io.loadmat(filename,variable_names=variables)
-
-    # Ensure we actually loaded all requested variables
-    if variables is not None:
-        for vbl in variables:
-            if vbl not in data.keys():
-                raise ValueError('Variable "%s" not present in file %s' %
-                                 (vbl,filename))
-
-    # Get rid of header info returned by loadmat() (variables starting with '_...')
-    data = {vbl:value for vbl,value in data.items() if vbl[0] != '_'}
-
-    # Get data into desired output format
-    for vbl in data.keys():
-        # If specific variable name is listed in <typemap>, use given mapping
-        if vbl in typemap:  typeout = typemap[vbl]
-        else:               typeout = None
-
-        # Matlab scalar structs are returned as (1,1) Numpy structured arrays.
-        #  Convert to dict or Pandas DataFrame.
-        # Note: structured arrays are indicated by dtype type "np.void"
-        if (data[vbl].dtype.type is np.void) and (data[vbl].size == 1):
-            if typeout is None: typeout = typemap['struct']
-            if typeout == 'dict':
-                data[vbl] = _structuredarray_to_dict(data[vbl][0,0])
-            elif typeout.lower() == 'dataframe':
-                data[vbl] = _structuredarray_to_dataframe(data[vbl][0,0])
-            elif typeout.lower() != 'structuredarray':
-                raise ValueError("%s is an unsupported output type for Matlab structs. \n \
-                                 Must be 'dict'|'dataFrame'|'structuredArray'" % typeout)
-
-        # Matlab struct arrays are returned as (m,n) Numpy structured arrays.
-        #  Convert to dict.
-        elif (data[vbl].dtype.type is np.void) and (data[vbl].size > 1):
-            if typeout is None: typeout = typemap['structarray']
-            if typeout == 'dict':
-                data[vbl] = _structuredarray_to_dict(data[vbl])
-            elif typeout.lower() != 'structuredarray':
-                raise ValueError("%s is an unsupported output type for Matlab struct arrays. \n \
-                                 Must be 'dict'|'structuredArray'" % typeout)
-
-        # Cell arrays are returned as object arrays. Squeeze out any singleton dims and
-        # Permute dim's of each cell's contents if 'PYTHON' order requested
-        elif data[vbl].dtype == object:
-            flatiter = data[vbl].flat       # 1D iterator to iterate over arbitrary-shape array
-            for _ in range(data[vbl].size):
-                coords = flatiter.coords    # Multidim coordinates into array
-                if isinstance(data[vbl][coords],np.ndarray):
-                    data[vbl][coords] = data[vbl][coords].squeeze()
-                    if transpose: data[vbl][coords] = data[vbl][coords].T
-                next(flatiter)              # Iterate to next element
-
-        # DELETE? No way to know whether variable should be bool or not
-        # # Convert binary-valued variables to bool type
-        # elif isinstance(data[vbl],np.ndarray) and _isbinary(data[vbl]) and (data[vbl] != bool):
-        #     data[vbl] = data[vbl].astype(bool)
-
-        # Permute array axes if 'PYTHON' order requested
-        if transpose and isinstance(data[vbl],np.ndarray):
-            data[vbl] = data[vbl].T
-
-    return data
-
-
-def _load73(filename, variables=None, typemap=None, order='C'):
-    """
-    Loads data variables from a version 7.3 Matlab MAT file
-    Uses h5py to load data, as v7.3 MAT files are a type of HDF5 file
-    """
-    typemap = _parse_typemap(typemap)
-
-    # h5py returns arrays in row-major (Python/C) order by default
-    # Transpose/permute array dim's if Matlab/Fortran/column-major requested
-    transpose = order.upper() in ['MATLAB','F','COL','COLMAJOR']
-
-    # Open datafile for reading
-    # For newer versions, can specify to maintain original object attribute  order
-    #  (eg original order of struct fields)
-    if h5py.__version__ >= '2.9.0':
-        file = h5py.File(filename,'r',track_order=True)
-    else:
-        file = h5py.File(filename,'r')
-
-    # If <variables> not set, load all variables from datafile (keys for File object)
-    # Note: Get rid of header info ('#refs#' variable)
-    if variables is None:
-        variables = [vbl for vbl in file.keys() if vbl[0] != '#']
-
-    # Load each requested variable and save as np array in a {variableName:array} dict
-    # Access datafile variables using dict-like syntax
-    data = {}
-    for vbl in variables:
-        # Ensure we actually loaded all requested variables
-        assert vbl in file.keys(), \
-            ValueError("Variable '%s' not present in file %s" % (vbl,filename))
-
-        # If specific variable name is listed in <typemap>, use given mapping
-        typeout = typemap[vbl] if vbl in typemap else None
-
-        # Matlab arrays and cell arrays are loaded as h5py Datasets
-        if isinstance(file[vbl], h5py.Dataset):
-            # Matlab arrays -- Just extract their value and
-            #  save into np.ndarray w/in data dict
-            if file[vbl].dtype != object:
-                data[vbl] = file[vbl][()]
-
-                # Convert integer-encoded strings to strings
-                if ('MATLAB_int_decode' in file[vbl].attrs) and \
-                   (file[vbl].attrs['MATLAB_int_decode'] > 1):
-                    data[vbl] = _convert_string(data[vbl])
-                    
-                # Convert binary-valued variables to bool type
-                elif ('MATLAB_class' in file[vbl].attrs) and \
-                     (file[vbl].attrs['MATLAB_class'] == b'logical') and (data[vbl].dtype != bool):
-                    data[vbl] = data[vbl].astype(bool)
-
-            # Cell arrays -- Need to work a bit to extract values
-            else:
-                # Create empty object array
-                data[vbl] = np.ndarray(shape=file[vbl].shape,dtype=object)
-
-                for col,hdf5obj in enumerate(file[vbl]):
-                    for row in range(len(hdf5obj)):
-                        # BUGFIX For some reason, h5py seems to output empty cells as
-                        #       (2,) ndarrays == [n,0] (where n is nRows of other cells).
-                        #        Fix that by properly setting = []
-                        if ((file[hdf5obj[row]][()].shape == (2,)) and
-                            (file[hdf5obj[row]][()][1] == [0]).all()):
-                            data[vbl][col,row] = np.ndarray(shape=(0,1),dtype='uint64')
-                           
-                        # Convert integer-encoded strings to strings                            
-                        elif ('MATLAB_int_decode' in file[hdf5obj[row]].attrs) and \
-                             (file[hdf5obj[row]].attrs['MATLAB_int_decode'] > 1):
-                            data[vbl][col,row] = _convert_string(file[hdf5obj[row]][()])
-                                 
-                        # Permute array axes if 'MATLAB'/column-major order requested
-                        elif transpose:
-                            data[vbl][col,row] = file[hdf5obj[row]][()].T
-                            
-                        else:
-                            data[vbl][col,row] = file[hdf5obj[row]][()]
-                    
-            # Permute array axes if 'MATLAB'/column-major order requested
-            if transpose and isinstance(data[vbl],np.ndarray):
-                data[vbl] = data[vbl].T
-
-
-        # Matlab structs are loaded as h5py Groups. Iterate thru their Datasets, convert to dict.
-        elif isinstance(file[vbl], h5py.Group):
-            if typeout is None: typeout = typemap['struct']
-
-            data[vbl] = {}
-            # Iterate thru each Dataset in Group = each field in Struct
-            for key in file[vbl].keys():
-                # Nested struct
-                if isinstance(file[vbl][key], h5py.Group):
-                    data[vbl][key] = _process_h5py_object(file[vbl][key],file)
-
-                # Generic object (non-numeric) dtypes (Matlab struct fields)
-                elif file[vbl][key].dtype == object:
-                    n_elems = len(file[vbl][key])
-
-                    # Determine if objects are strings or something else
-                    # This is indicated by this 'MATLAB_int_decode' attribute in each h5py ref
-                    isstring = False
-                    for elem in range(n_elems):
-                        for ref in file[vbl][key][elem]:
-                            if 'MATLAB_int_decode' in file[ref].attrs:
-                                isstring = True
-                                break
-                        if isstring: break
-
-                    # Load each value, convert as needed, concatenate into a list
-                    # DEL tmp_list = []
-                    # String (Matlab char arrays) are loaded in h5py as ascii.
-                    # Convert ascii coded strings -> actual string, append to list
-                    if isstring:
-                        tmp_list = []
-                        for elem in range(n_elems):                            
-                            for ref in file[vbl][key][elem]:
-                                tmp_list.append(_convert_string(file[ref]))
-                                
-                        data[vbl][key] = np.asarray(tmp_list,dtype=object).reshape(file[vbl][key].shape)
-                        
-                    # Otherwise (other element types): Just append values to list
-                    else:
-                        data[vbl][key] = np.empty((file[vbl][key].size,), dtype=object)                        
-                        for elem in range(n_elems):
-                            tmp_list = []
-                            for ref in file[vbl][key][elem]:
-                                tmp_list.append(_process_h5py_object(file[ref],file))
-                            data[vbl][key][elem] = np.asarray(tmp_list,dtype=object).squeeze() # tmp_list # DEL np.asarray(tmp_list)
-
-                    # Reshape to original object array shape
-                    data[vbl][key] = data[vbl][key].reshape(file[vbl][key].shape)
-                    # Convert list -> Numpy array (of objects) and reshape to original shape
-                    # DEL data[vbl][key] = np.asarray(tmp_list,dtype=object).reshape(file[vbl][key].shape)                                            
-
-                # 1-item arrays -- extract item as array dtype
-                elif file[vbl][key].size == 1:
-                    data[vbl][key] = file[vbl][key][()].item()
-                    # Convert binary-valued variables to bool type
-                    if ('MATLAB_class' in file[vbl][key].attrs) and \
-                       (file[vbl][key].attrs['MATLAB_class'] == b'logical'):
-                        data[vbl][key] = bool(data[vbl][key])
-                    
-                # Numeric dtypes -- just load as is
-                else:
-                    data[vbl][key] = file[vbl][key][()]
-
-
-                # Convert binary-valued variables to bool type
-                if ('MATLAB_class' in file[vbl][key].attrs) and \
-                    (file[vbl][key].attrs['MATLAB_class'] == b'logical') and \
-                    isinstance(data[vbl][key],np.ndarray) and (data[vbl][key].dtype != bool):
-                    data[vbl][key] = data[vbl][key].astype(bool)
-
-                # Convert strings that are loaded as uint16 ascii vectors to strings
-                # (this is apparently indicated by this 'MATLAB_int_decode' attribute)
-                elif ('MATLAB_int_decode' in file[vbl][key].attrs) and \
-                     (file[vbl][key].attrs['MATLAB_int_decode'] > 1):
-                    # HACK Convert ascii from original HDF5 dataset bc scalar extract above messes it up
-                    data[vbl][key] = _convert_string(file[vbl][key][()])
-                    # DEL  _convert_string(file[vbl][key])
-
-                if isinstance(data[vbl][key],np.ndarray):
-                    # Single-items arrays: extract single value as type <dtype>
-                    if data[vbl][key].size == 1:
-                        data[vbl][key] = data[vbl][key].item()
-
-                    # 2d arrays: remove singleton dim and/or transpose if requested
-                    elif data[vbl][key].ndim > 1:
-                        # Transpose (k>1,n) -> (n,k>1) if requested,
-                        # or if putting into a DataFrame
-                        if (transpose or typeout == 'dataframe'):
-                           # DELETE: and (file[vbl][key].dtype != object):
-                            data[vbl][key] = data[vbl][key].T
-
-                        # Squeeze out any singleton axes
-                        # eg: Reshape (1,n) ndarrays -> (n,) vectors
-                        data[vbl][key] = data[vbl][key].squeeze()
-
-            # Convert entire (former Matlab struct) variable to a Pandas DataFrame
-            if typeout == 'dataframe':
-                data[vbl] = _dict_to_dataframe(data[vbl])
-
-    file.close()
-
-    return data
-
-
-def _convert_string(value, encoding='UTF-16'):
-    """ Converts integer-encoded strings in HDF5 files to strings """
-    # TODO can we always assume UTF-16 encoding?  How to know this?
-    return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
-    # return ''.join([chr(c) for c in value])               # time test ~ 7.2 s
-    # return ''.join(map(chr,value))                        # time test ~ 7.3 s
-
-
-def _process_h5py_object(value,file):
-    """ Properly handles arbitrary objects loaded from HDF5 files in recursive fashion """
-    # For h5py Dataset (contains Matlab array), extract and process data
-    if isinstance(value, h5py.Dataset):
-        return _process_h5py_object(value[()],file)
-
-    # For h5py Group (Matlab struct), recurse thru fields and return as dict
-    elif isinstance(value, h5py.Group):
-        return {key : _process_h5py_object(value[key],file) for key in value.keys()}
-
-    # For a HDF5 Reference, get the name of the referenced object and read directly from file
-    # stackoverflow.com/questions/28541847/how-convert-this-type-of-data-hdf5-object-reference-to-something-more-readable
-    elif isinstance(value, h5py.h5r.Reference):
-        isstring = ('MATLAB_int_decode' in file[value].attrs) and (file[value].attrs['MATLAB_int_decode'] > 1)
-        # For int-encoded string, convert to string
-        if isstring:    return _convert_string(file[value][()])
-        else:           return file[value][()]
-
-        # Note: This is *several orders of magnitude* slower
-        # name = h5py.h5r.get_name(value,file.id)
-        # if 'MATLAB_int_decode' in file[name].attrs: return _convert_string(file[name][()])
-        # else:                                       return file[name][()]
-
-    # For an ndarray (Matlab array)
-    elif isinstance(value,np.ndarray):
-        # For length-1 ndarray, extract and process its single array element
-        if value.size == 1:
-            return _process_h5py_object(value.item(),file)
-
-        # For object ndarray, iterate thru and process each array element individually
-        elif value.dtype == object:
-            obj = [_process_h5py_object(elem,file) for elem in value]
-            try:
-                return np.asarray(obj,dtype=object).reshape(value.shape).squeeze()
-            # HACK When each element of input has same length j, asarray creates an
-            # (i,j) array instead of (i,) array of (j,) objects (see lfpSchema.userData.removedFreqs).
-            # TEMP Workaround til I can find better way to deal with this
-            except:
-                out = np.empty(value.squeeze().shape,dtype=object)
-                for j in range(value.size): out[j] = obj[j]
-
-        # For general numerical ndarray, return array with any singleton axes removed
-        else:
-            return value.squeeze()
-
-    # Otherwise (scalar value), we assume object is OK to return as is
-    else:
-        return value
-
-
-def _who7(filename, **kwargs):
-    """  Lists data variables from a version 7 (or older) Matlab MAT file """
-    # Load list of 3-tuples of (variable,size,type) for each variable in file
-    variables = scipy.io.whosmat(filename, appendmat=True, **kwargs)
-    # Extract and return just the variable names
-    return [vbl[0] for vbl in variables]
-
-
-def _who73(filename):
-    """ Lists data variables from a version 7.3 Matlab MAT file """
-    # Open datafile for reading
-    if h5py.__version__ >= '2.9.0':
-        file = h5py.File(filename,'r',track_order=True)
-    else:
-        file = h5py.File(filename,'r')
-
-    # Find all variables in file, save into list
-    # Note: Get rid of header info ('#refs#' variable)
-    variables = [vbl for vbl in file.keys() if vbl[0] != '#']
-    file.close()
-    return variables
-
-
-# =============================================================================
-# Other helper functions
-# =============================================================================
-def _isbinary(x):
-    """
-    Tests whether variable contains only binary values (True,False,0,1)
-    """
-    x = np.asarray(x)
-    return (x.dtype == bool) or \
-           (np.issubdtype(x.dtype,np.number) and \
-            np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
-
-
-def _structuredarray_to_dict(sarray):
-    """
-    Converts Numpy structured array (which Matlab structs are initially
-    imported as, using scipy.io.loadmat) to a dict, with type names as keys
-
-    dic = _structuredarray_to_dict(sarray)
-
-    INPUT
-    sarray   Numpy structured array
-
-    OUTPUT
-    dic      Dict. {keys = sarray.dtype.names : values = sarray[key]}
-    """
-    # Convert structured array to dict
-    dic = {name:sarray[name] for name in sarray.dtype.names}
-
-    for name in dic.keys():
-        # For ndarrays, first remove redundant axes
-        if isinstance(dic[name],np.ndarray):
-            # 2d arrays: Squeeze out any singleton axes
-            if dic[name].ndim > 1:
-                dic[name] = dic[name].squeeze()
-
-            # Also squeeze out extra singleton axes in object arrays
-            if isinstance(dic[name].dtype.type,object):
-                flatiter = dic[name].flat       # 1D iterator to iterate arbitrary-shape array
-                for _ in range(dic[name].size):
-                    coords = flatiter.coords    # Multidim coordinates into array
-                    if isinstance(dic[name][coords],np.ndarray):
-                        dic[name][coords] = dic[name][coords].squeeze()
-                    next(flatiter)              # Iterate to next element
-
-        # Convert dict entries that are themselves structured arrays
-        # (ie Matlab sub-structs) also to dict via recursive call of this function
-        # Note: structured arrays in v7.3 return as ndarrays with dtype "np.void",
-        # but in v7 return as "np.void" type
-        if (isinstance(dic[name],np.ndarray) and (dic[name].dtype.type is np.void)) or \
-            isinstance(dic[name],np.void):
-            dic[name] = _structuredarray_to_dict(dic[name])
-
-        # If variable is any other ndarray, convert special case data types
-        elif isinstance(dic[name],np.ndarray):
-            # For single-item arrays: extract single value as type <dtype>
-            if dic[name].size == 1: dic[name] = dic[name].item()
-            
-            # Heuristically convert binary-valued variables to bool type
-            elif (dic[name].dtype != bool) and _isbinary(dic[name]) and not (dic[name] == 0).all():
-                dic[name] = dic[name].astype(bool)
-
-            # Cell-string array fields import as Numpy arrays of objects, where
-            # each object is a trivial (1-length) array containing a string.
-            # Just extract the strings, converting to array of string types
-            # TODO Need to deal with possibility of mixed-type cell arrays (some string, some other)
-            elif isinstance(dic[name].dtype.type,object) and (dic[name].size != 0) \
-               and (dic[name][0].dtype.type == np.str_):
-                # print(name, dic[name].shape, dic[name].size, dic[name].dtype)
-                # print([(dic[name][j].shape, dic[name][j].size, dic[name][j].dtype) for j in range(dic[name].size)])
-                # print(dic[name])
-                # dic[name] = _extract_strings(dic[name])   
-
-                # Empty strings in cell-string arrays are imported as empty array,
-                # so need this extra step to test for that
-                for elem in range(len(dic[name])):
-                    # Extract item from single-element arrays
-                    if dic[name][elem].shape == ():
-                        dic[name][elem] = dic[name][elem].item()
-                    # Deal with empty strings
-                    elif len(dic[name][elem]) == 0:
-                        dic[name][elem] = ''
-                    # General strings
-                    # TODO Feel like we need a recursion here?
-                    else:
-                        dic[name][elem] = dic[name][elem][0]
-
-                # Empty strings in cell-string arrays are imported as empty array,
-                # so need this extra step to test for that
-                # isstring = False
-                # for elem in range(len(dic[name])):
-                #     # If elem is itself a string, convert it
-                #     if dic[name][elem].shape == () and isinstance(dic[name][elem].item(),str):
-                #         dic[name][elem] = dic[name][elem].item()
-                #     # This skips empty arrays, only tests for string type on non-emptys
-                #     elif (len(dic[name][elem]) != 0) and isinstance(dic[name][elem][0],str):
-                #         isstring = True
-                #         break
-                # if isstring: dic[name] = _extract_strings(dic[name])
-
-    return dic
-
-
 def _extract_strings(x):
     """
     Deals with weird way Matlab cell-array-of-strings data structures are loaded.
@@ -812,33 +815,13 @@ def _extract_strings(x):
     return np.asarray([(x[j][0] if len(x[j]) > 0 else '') for j in range(len(x))])
 
 
-def _structuredarray_to_dataframe(sarray):
-    """
-    Converts Numpy structured array (which Matlab structs are initially imported
-    as, using scipy.io.loadmat) to a Pandas DataFrame, with type names as keys.
-    Intended for table-like Matlab scalar structs, which naturally fit into a
-    DataFrame (though Matlab table variables are not currently loadable in Python).
-
-    df = _structuredarray_to_dataframe(sarray)
-
-    INPUT
-    sarray  Numpy structured array
-
-    OUTPUT
-    df      Pandas DataFrame. Columns are names and values of all the sarray.dtype.names
-            whose associated values are vector-valued with length = modal length
-            of all names. Rows are each entry from these vectors
-
-    REFERENCE Based on code obtained from:
-    http://poquitopicante.blogspot.com/2014/05/loading-matlab-mat-file-into-pandas.html
-    """
-    # Convert structured array to dict {keys = sarray.dtype.names : values = sarray[key]}
-    dic = _structuredarray_to_dict(sarray)
-
-    # Convert dict to a Pandas DataFrame
-    df = _dict_to_dataframe(dic)
-
-    return df
+def _is_structured_array(array):
+    """ Returns True if input array is a Numpy structured array, False otherwise """
+    # For v7.3 mat files loaded with h5py, structured arrays are ndarrays with dtype np.void
+    # For v7 mat files loaded with scipy.io, structured arrays are an "np.void" type
+    # Test for either version
+    return (isinstance(array,np.ndarray) and (array.dtype.type is np.void)) \
+         or isinstance(array,np.void)
 
 
 def _dict_to_dataframe(dic):
@@ -869,20 +852,18 @@ def _dict_to_dataframe(dic):
     if 'Properties' in dic:
         metadata = dic.pop('Properties')
 
-        # If metadata is a structured array (which in v7.3 looks like an ndarray ,
-        # with dtype np.void,  but in v7 looks like a "np.void" type), convert it to dict
-        if (isinstance(metadata,np.ndarray) and (metadata.dtype.type is np.void)) or \
-            isinstance(metadata,np.void):
-            metadata = _structuredarray_to_dict(metadata)
+        # If metadata is a structured array, convert it to dict
+        if _is_structured_array(metadata):
+            metadata = _structuredarray_to_dict(metadata,
+                                                typemap={'struct':'dict'}, transpose=False)
     else:
         metadata = None
 
-    # Convert any scalar dict values -> ndarrays, and ensure ndarrays are 
-    # at least 1D (0-dimensional array mess up DF conversion and are weird)
+    # Convert any scalar dict values -> ndarrays, and ensure ndarrays are
+    # at least 1D (0-dimensional arrays mess up DF conversion and are weird)
     for key in dic.keys():
         if not isinstance(dic[key],np.ndarray) or (dic[key].ndim == 0):
             dic[key] = np.atleast_1d(dic[key])
-        # DEL if not isinstance(dic[key],np.ndarray): dic[key] = np.asarray(dic[key])
 
     # Find length of each value in dict <dic> (to become DataFrame columns)
     lengths = [value.shape[0] if value.ndim > 0 else 1 for value in dic.values()]
@@ -902,7 +883,7 @@ def _dict_to_dataframe(dic):
             if dic[key].shape[0] > height: dic[key] = _enclose_in_object_array(dic[key])
             # HACK Convert empty (0-length) arrays to (1,) array with value = nan
             elif dic[key].shape[0] == 0:    dic[key] = np.atleast_1d(np.nan)
-            
+
     columns = list(dic.keys())
 
     # Create a DataFrame with length-consistent key/value pairs as columns
@@ -928,16 +909,16 @@ def _dict_to_dataframe(dic):
 
 def _array_to_tuple_vector(array):
     """
-    Converts ndarray vector of shape (nRows,nCols) to (nRows,) vector of
-    nCols length tuples, which can more easily be assembled into a DataFrame
+    Converts ndarray vector of shape (n_rows,n_cols) to (n_rows,) vector of
+    n_cols length tuples, which can more easily be assembled into a DataFrame
 
     tuples = _array_to_tuple_vector(array)
 
     INPUT
-    array   (nRows,nCols) Numpy ndarray
+    array   (n_rows,n_cols) Numpy ndarray
 
     OUTPUT
-    tuples  (nRows,) Numpy vector of nCol-tuples
+    tuples  (n_rows,) Numpy vector of nCol-tuples
     """
     n = array.shape[0]
     # Create vector of size (n,) of same type as <array>
@@ -960,8 +941,8 @@ def _xarray_to_array(array):
     OUTPUT
     array       Numpy ndarray (same shape and dtype). Data values from DataArray.
     attrs       {String:*} dict. Metatdata attributes extracted from DataArray:
-                'dims' :    (nDims,) tuple of strings. Dimension names.
-                'coords' :  (nDims,) tuple of [len(dim),] array.
+                'dims' :    (n_dims,) tuple of strings. Dimension names.
+                'coords' :  (n_dims,) tuple of [len(dim),] array.
                             Coordinate indexes for each dimension
                 'name' :    String. Name of variable ('' if none set)
                 'attrs':    OrderedDict. Any additional metadata ([] if none set)
