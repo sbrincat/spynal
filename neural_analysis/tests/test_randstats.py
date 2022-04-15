@@ -48,6 +48,15 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     assert p2.shape == p.shape
     assert np.allclose(p, p2)
 
+    # Test for expected output with keepdims=False call
+    p, stat_obs, stat_resmp = one_sample_test(data, axis=0, method=method, seed=1,
+                                              n_resamples=n_resamples, return_stats=True,
+                                              keepdims=False)
+    assert p.shape == (n_chnls,)
+    assert stat_obs.shape == (n_chnls,)
+    assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
+    
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = one_sample_test(data.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                               axis=0, method=method, seed=1,
@@ -138,7 +147,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     assert np.isclose(p[0,0], result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
-
+ 
     # Test for consistent output with return_stats=False call
     p2 = test_func(data1, data2, axis=0, method=method, seed=1,
                    n_resamples=n_resamples, return_stats=False)
@@ -184,6 +193,14 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     assert np.allclose(stat_obs, stat_obs2)
     assert np.allclose(stat_resmp, stat_resmp2)
 
+    # Test for expected output with keepdims=False call
+    p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, seed=1,
+                                        n_resamples=n_resamples, return_stats=True, keepdims=False)
+    assert p.shape == (n_chnls,)
+    assert stat_obs.shape == (n_chnls,)
+    assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
+   
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = test_func(data1.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                         data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),
@@ -270,7 +287,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
     assert p2.shape == p.shape
     assert np.allclose(p, p2)
-
+ 
     # Test for consistent output with string-valued labels
     groups = np.asarray(['cond1','cond2','cond3'])
     p2, stat_obs2, stat_resmp2 = one_way_test(data, groups[labels], axis=0, method=method, seed=1,
@@ -296,6 +313,15 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.allclose(stat_obs, stat_obs2)
     assert np.allclose(stat_resmp, stat_resmp2)
 
+    # Test for expected output with keepdims=False call
+    p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, seed=1,
+                                           n_resamples=n_resamples, return_stats=True,
+                                           keepdims=False)
+    assert p.shape == (n_chnls,)
+    assert stat_obs.shape == (n_chnls,)
+    assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
+    assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
+   
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = one_way_test(data.reshape((n*n_groups,int(n_chnls/2),int(n_chnls/2))),
                                            labels, axis=0, method=method, seed=1,
@@ -469,12 +495,18 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
-
+    
     # Test for consistent output with return_stats=False call
     ci2 = one_sample_confints(data, axis=0, n_resamples=n_resamples, seed=1, return_stats=False)
     assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
     assert ci2.shape == ci.shape
     assert np.allclose(ci, ci2)
+
+    # Test for expected output with keepdims=False call
+    ci, stat_obs, stat_resmp = one_sample_confints(data, axis=0, n_resamples=n_resamples, seed=1,
+                                                   return_stats=True, keepdims=False)
+    assert stat_obs.shape == (n_chnls,)
+    assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (3rd axis)
     ci, stat_obs, stat_resmp = one_sample_confints(data.reshape((n,int(n_chnls/2),int(n_chnls/2))),
@@ -564,6 +596,12 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert ci2.shape == ci.shape
     assert np.allclose(ci, ci2)
 
+    # Test for expected output with keepdims=False call
+    ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples, seed=1,
+                                         return_stats=True, keepdims=False)
+    assert stat_obs.shape == (n_chnls,)
+    assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
+    
     # Test for consistent output with different data array shape (3rd axis)
     ci, stat_obs, stat_resmp = test_func(data1.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                          data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),

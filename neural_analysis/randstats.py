@@ -89,14 +89,15 @@ import numpy as np
 
 from neural_analysis.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
                                   one_sample_tstat, paired_tstat, two_sample_tstat, \
-                                  one_way_fstat, two_way_fstat, correlation, rank_correlation
+                                  one_way_fstat, two_way_fstat, correlation, rank_correlation, \
+                                  isarraylike
 
 
 # =============================================================================
 # One-sample randomization tests
 # =============================================================================
 def one_sample_test(data, axis=0, method='randomization', mu=0, stat='t', tail='both',
-                    n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                    n_resamples=10000, seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate 1-sample test of whether any arbitrary 1-sample stat (eg mean)
     is different from a given value `mu`, often 0 (analogous to 1-sample t-test).
@@ -146,16 +147,21 @@ def one_sample_test(data, axis=0, method='randomization', mu=0, stat='t', tail='
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,1,...)
-        p values from test. Same size as data, except for `axis` reduced to length 1.
-        For vector data, returns as a single float.
+    p : float or ndarray, shape=(...,[1,]...)
+        p values from test. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
-    stat_obs : float or ndarray, shape=(...,1,...), optional
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_resamples-1,...), optional
@@ -178,11 +184,12 @@ def one_sample_test(data, axis=0, method='randomization', mu=0, stat='t', tail='
         raise ValueError("Unsupported test type '%s'. Use 'randomization' or 'bootstrap'" % method)
 
     return test_func(data, axis=axis, mu=mu, stat=stat, tail=tail,
-                     n_resamples=n_resamples, seed=seed, return_stats=return_stats, **kwargs)
+                     n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                     keepdims=keepdims, **kwargs)
 
 
-def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
-                                  n_resamples=10000, seed=None, return_stats=False, **kwargs):
+def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both', n_resamples=10000,
+                                  seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate 1-sample randomization test
 
@@ -256,7 +263,10 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both',
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
         p = p.item()
-        if return_stats: stat_obs = stat_obs.item()
+        if return_stats and isarraylike(stat_obs): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -265,8 +275,8 @@ one_sample_permutation_test = one_sample_randomization_test
 """ Alias of :func:`one_sample_randomization_test`. See there for details. """
 
 
-def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
-                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
+def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both', n_resamples=10000,
+                              seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate 1-sample bootstrap test
 
@@ -340,7 +350,10 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
         p = p.item()
-        if return_stats: stat_obs = stat_obs.item()
+        if return_stats and isarraylike(stat_obs): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -350,7 +363,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both',
 # Paired-sample difference randomization tests
 # =============================================================================
 def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t', tail='both',
-                       n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                       n_resamples=10000, seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate paired-sample test of whether any arbitrary statistic (eg mean)
     differs between paired samples (analogous to paired-sample t-test)
@@ -400,16 +413,21 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t'
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,1,...)
-        p values from test. Same size as `data`, except for (...,n_resamples,...)
-        reduced to length = 1. For vector data, returns as a single float.
-
-    stat_obs : float or ndarray, shape=(...,1,...), optional
+    p : float or ndarray, shape=(...,[1,]...)
+        p values from test. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
+        
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_resamples-1,...), optional
@@ -427,7 +445,8 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t'
                          % method)
 
     return test_func(data1, data2, axis=axis, d=d, stat=stat, tail=tail,
-                     n_resamples=n_resamples, seed=seed, return_stats=return_stats, **kwargs)
+                     n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                     keepdims=keepdims, **kwargs)
 
 
 def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups=None, **kwargs):
@@ -456,7 +475,8 @@ def paired_sample_test_labels(data, labels, axis=0, method='permutation', groups
 
 
 def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='both',
-                                   n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                                   n_resamples=10000, seed=None, return_stats=False,
+                                   keepdims=True, **kwargs):
     """
     Mass univariate paired-sample permutation test
 
@@ -481,11 +501,13 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
 
     return one_sample_randomization_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                          tail=tail, n_resamples=n_resamples,
-                                         return_stats=return_stats, seed=seed, **kwargs)
+                                         return_stats=return_stats, seed=seed,
+                                         keepdims=keepdims, **kwargs)
 
 
 def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both',
-                                 n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                                 n_resamples=10000, seed=None, return_stats=False,
+                                 keepdims=True, **kwargs):
     """
     Mass univariate paired-sample bootstrap test
 
@@ -508,7 +530,8 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
 
     return one_sample_bootstrap_test(data1 - data2, axis=axis, mu=d, stat=stat,
                                      tail=tail, n_resamples=n_resamples,
-                                     return_stats=return_stats, seed=seed, **kwargs)
+                                     return_stats=return_stats, seed=seed,
+                                     keepdims=keepdims, **kwargs)
 
 
 # =============================================================================
@@ -516,7 +539,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
 # =============================================================================
 def paired_sample_association_test(data1, data2, axis=0, method='permutation', stat='r',
                                    tail='both', n_resamples=10000, seed=None, return_stats=False,
-                                   **kwargs):
+                                   keepdims=True, **kwargs):
     """
     Mass bivariate test of association (eg correlation) between two paired samples
 
@@ -562,16 +585,21 @@ def paired_sample_association_test(data1, data2, axis=0, method='permutation', s
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,1,...)
-        p values from test. Same size as `data`, except for (...,n_resamples,...)
-        reduced to length = 1. For vector data, returns as a single float.
-
-    stat_obs : float or ndarray, shape=(...,1,...), optional
+    p : float or ndarray, shape=(...,[1,]...)
+        p values from test. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
+        
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_resamples-1,...), optional
@@ -589,7 +617,8 @@ def paired_sample_association_test(data1, data2, axis=0, method='permutation', s
                          % method)
 
     return test_func(data1, data2, axis=axis, stat=stat, tail=tail,
-                     n_resamples=n_resamples, seed=seed, return_stats=return_stats, **kwargs)
+                     n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                     keepdims=keepdims, **kwargs)
 
 
 def paired_sample_association_test_labels(data, labels, axis=0, method='permutation', groups=None,
@@ -620,7 +649,7 @@ def paired_sample_association_test_labels(data, labels, axis=0, method='permutat
 
 def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', tail='both',
                                                n_resamples=10000, seed=None, return_stats=False,
-                                               **kwargs):
+                                               keepdims=True, **kwargs):
     """
     Mass bivariate permutation test of association (eg correlation) between two paired samples
 
@@ -686,6 +715,9 @@ def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', t
     if p.size == 1:
         p = p.item()
         if return_stats and isinstance(stat_obs,np.ndarray): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -693,7 +725,7 @@ def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', t
 
 def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tail='both',
                                              n_resamples=10000, seed=None, return_stats=False,
-                                             **kwargs):
+                                             keepdims=True, **kwargs):
     """
     Mass bivariate boostrap test of association (eg correlation) between two paired samples
 
@@ -764,6 +796,9 @@ def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tai
     if p.size == 1:
         p = p.item()
         if return_stats and isinstance(stat_obs,np.ndarray): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -773,7 +808,7 @@ def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tai
 # Two-sample randomization tests
 # =============================================================================
 def two_sample_test(data1, data2, axis=0, method='permutation', stat='t', tail='both',
-                    n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                    n_resamples=10000, seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate two-sample test of whether any arbitrary statistic
     differs between two non-paired samples (analogous to 2-sample t-test)
@@ -827,16 +862,21 @@ def two_sample_test(data1, data2, axis=0, method='permutation', stat='t', tail='
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,1,...)
-        p values from test. Same size as `data`, except for (...,n_resamples,...)
-        reduced to length = 1. For vector data, returns as a single float.
-
-    stat_obs : float or ndarray, shape=(...,1,...), optional
+    p : float or ndarray, shape=(...,[1,]...)
+        p values from test. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
+        
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_resamples-1,...), optional
@@ -851,7 +891,8 @@ def two_sample_test(data1, data2, axis=0, method='permutation', stat='t', tail='
         raise ValueError("Unsupported test type '%s'. Use 'permutation' or 'bootstrap'" % method)
 
     return test_func(data1, data2, axis=axis, stat=stat, tail=tail,
-                     n_resamples=n_resamples, seed=seed, return_stats=return_stats, **kwargs)
+                     n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                     keepdims=keepdims, **kwargs)
 
 
 def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=None, **kwargs):
@@ -879,8 +920,8 @@ def two_sample_test_labels(data, labels, axis=0, method='permutation', groups=No
     return two_sample_test(data1, data2, axis=axis, method=method, **kwargs)
 
 
-def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
-                                n_resamples=10000, seed=None, return_stats=False, **kwargs):
+def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both', n_resamples=10000,
+                                 seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate permutation two-sample test
 
@@ -967,14 +1008,18 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both',
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
         p = p.item()
-        if return_stats: stat_obs = stat_obs.item()
+        if return_stats and isarraylike(stat_obs): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
 
 def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
-                              n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                              n_resamples=10000, seed=None, return_stats=False,
+                              keepdims=True, **kwargs):
     """
     Mass univariate bootstrap two-sample test
 
@@ -1058,7 +1103,10 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
         p = p.item()
-        if return_stats: stat_obs = stat_obs.item()
+        if return_stats and isarraylike(stat_obs): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
@@ -1068,7 +1116,8 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 # One-way/Two-way randomization tests
 # =============================================================================
 def one_way_test(data, labels, axis=0, method='permutation', stat='F', tail='right',
-                 groups=None, n_resamples=10000, seed=None, return_stats=False,**kwargs):
+                 groups=None, n_resamples=10000, seed=None, return_stats=False,
+                 keepdims=True, **kwargs):
     """
     Mass univariate test on any arbitrary 1-way statistic with
     multiple groups/levels (analogous to F-test in a 1-way ANOVA)
@@ -1122,16 +1171,21 @@ def one_way_test(data, labels, axis=0, method='permutation', stat='F', tail='rig
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,1,...)
-        p values from test. Same size as `data`, except for (...,n_resamples,...)
-        reduced to length = 1. For vector data, returns as a single float.
+    p : float or ndarray, shape=(...,[1,]...)
+        p values from test. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
-    stat_obs : float or ndarray, shape=(...,1,...), optional
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_resamples-1,...), optional
@@ -1145,11 +1199,13 @@ def one_way_test(data, labels, axis=0, method='permutation', stat='F', tail='rig
         raise ValueError("Only 'permutation' method currently supported")
 
     return test_func(data, labels, axis=axis, stat=stat, tail=tail, groups=groups,
-                     n_resamples=n_resamples, seed=seed, return_stats=return_stats, **kwargs)
+                     n_resamples=n_resamples, seed=seed, return_stats=return_stats,
+                     keepdims=keepdims, **kwargs)
 
 
 def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
-                             n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                             n_resamples=10000, seed=None, return_stats=False,
+                             keepdims=True, **kwargs):
     """
     Mass univariate one-way permutation test
 
@@ -1232,14 +1288,17 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     # For vector-valued data, extract value from scalar array -> float for output
     if p.size == 1:
         p = p.item()
-        if return_stats: stat_obs = stat_obs.item()
+        if return_stats and isarraylike(stat_obs): stat_obs = stat_obs.item()
+    elif not keepdims:
+        p = p.squeeze(axis=axis)
+        if return_stats: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
 
 
 def two_way_test(data, labels, axis=0, method='permutation', stat='F', tail='right', groups=None,
-                             n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                             n_resamples=10000, seed=None, return_stats=False, keepdims=True, **kwargs):
     """
     Mass univariate test on any arbitrary 2-way statistic with
     multiple groups/levels (analogous to F-test in a 2-way ANOVA)
@@ -1293,16 +1352,18 @@ def two_way_test(data, labels, axis=0, method='permutation', stat='F', tail='rig
         If True, returns p values, observed stats, and resampled stats.
         If False, only returns p values.
 
+    keepdims : True
+        NOTE: This arg not used here; only here to maintain same API with other stat func's.
+        
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
     Returns
     -------
-    p : float or ndarray, shape=(...,n_terms,...)
-        p values from test. Same size as `data`, except for (...,n_resamples,...)
-        reduced to length = 1. For vector data, returns as a single float.
+    p : ndarray, shape=(...,n_terms,...)
+        p values from test. Same shape as data, with `axis` reduced to length n_terms.
 
-    stat_obs : float or ndarray, shape=(...,n_terms,...), optional
+    stat_obs : ndarray, shape=(...,n_terms,...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
     stat_resmp : ndarray, shape=(...,n_terms,...,n_resamples-1), optional
@@ -1323,7 +1384,8 @@ def two_way_test(data, labels, axis=0, method='permutation', stat='F', tail='rig
 
 
 def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', groups=None,
-                             n_resamples=10000, seed=None, return_stats=False, **kwargs):
+                             n_resamples=10000, seed=None, return_stats=False,
+                             keepdims=True, **kwargs):
     """
     Mass univariate permutation 2-way test
 
@@ -1404,8 +1466,8 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 # =============================================================================
 # Confidence intervals
 # =============================================================================
-def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000,
-                        seed=None, return_stats=False, return_sorted=True, **kwargs):
+def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=10000, seed=None,
+                        return_stats=False, return_sorted=True, keepdims=True, **kwargs):
     """
     Mass univariate bootstrap confidence intervals of any arbitrary 1-sample stat
     (eg mean).  Analogous to SEM/parametric confidence intervals.
@@ -1446,6 +1508,10 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
         (ordered by resample number), which is useful if you want to keep each resampling
         for all mass-univariate data series's together.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in `stat_obs`.
+        If False, removes reduced observations `axis` from `stat_obs`.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
@@ -1455,9 +1521,10 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
         Computed bootstrap confidence intervals. Same size as data, with `axis` reduced
         to length 2 = [lower,upper] confidence interval.
 
-    stat_obs : ndarray, shape=(...,1,...), optional
-        Statistic values for actual observed data.
-        Same size as data, with `axis` reduced to length 1.
+    stat_obs : float or ndarray, shape=(...,[1,]...), optional
+        Statistic values for actual observed data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
     stat_resmp : ndarray, shape=(...,n_resamples,...)
         Distribution of statistic values for all resamplings of data.
@@ -1505,13 +1572,15 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
 
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
-
+    elif not keepdims: stat_obs = stat_obs.squeeze(axis=axis)
+        
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
 
 
 def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_resamples=10000,
-                           seed=None, return_stats=False, return_sorted=True, **kwargs):
+                           seed=None, return_stats=False, return_sorted=True,
+                           keepdims=True, **kwargs):
     """
     Mass univariate bootstrap confidence intervals of any arbitrary paired-sample stat
     (eg mean difference). Analogous to SEM/parametric confidence intervals.
@@ -1552,6 +1621,10 @@ def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_re
         (ordered by resample number), which is useful if you want to keep each resampling
         for all mass-univariate data series's together.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in `stat_obs`.
+        If False, removes reduced observations `axis` from `stat_obs`.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
@@ -1571,11 +1644,12 @@ def paired_sample_confints(data1, data2, axis=0, stat='mean', confint=0.95, n_re
     """
     return one_sample_confints(data1 - data2, axis=axis, stat=stat, confint=confint,
                                n_resamples=n_resamples, seed=seed, return_stats=return_stats,
-                               return_sorted=return_sorted, **kwargs)
+                               return_sorted=return_sorted, keepdims=keepdims, **kwargs)
 
 
 def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_resamples=10000,
-                        seed=None, return_stats=False, return_sorted=True, **kwargs):
+                        seed=None, return_stats=False, return_sorted=True,
+                        keepdims=True, **kwargs):
     """
     Mass univariate bootstrap confidence intervals of any arbitrary 2-sample stat
     (eg difference in group means).  Analogous to SEM/parametric confidence intervals.
@@ -1620,6 +1694,10 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
         (ordered by resample number), which is useful if you want to keep each resampling
         for all mass-univariate data series's together.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in `stat_obs`.
+        If False, removes reduced observations `axis` from `stat_obs`.
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
@@ -1629,9 +1707,10 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
         Computed bootstrap confidence intervals. Same size as data, with `axis` reduced
         to length 2 = [lower,upper] confidence interval.
 
-    stat_obs : ndarray, shape=(...,1,...), optional
-        Statistic values for actual observed data.
-        Same size as data, with `axis` reduced to length 1.
+    stat_obs : float orndarray, shape=(...,[1,]...), optional
+        Statistic values for actual observed data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
     stat_resmp : ndarray, shape=(...,n_resamples,...)
         Distribution of statistic values for all resamplings of data.
@@ -1688,6 +1767,7 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
 
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
+    elif not keepdims: stat_obs = stat_obs.squeeze(axis=axis)
 
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints

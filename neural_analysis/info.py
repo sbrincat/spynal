@@ -34,7 +34,7 @@ assumptions about distribution of neural activity and task->activity encoding mo
     Unlike other models, this method is *multivariate* (looks at information across multiple neural
     channels), rather than *univariate* (looks at information only in a single channel at a time).
     Commonly-used linear decoders assume activity->task decoding is described by a linear model,
-    and often also assume activity is distributed as a multivariate normal. However, user can also 
+    and often also assume activity is distributed as a multivariate normal. However, user can also
     use any custom decoding model (with different assumptions) with this function.
     Can only handle multi-level categorical (multinomial) task variables.
 
@@ -98,7 +98,7 @@ from neural_analysis.helpers import _has_method
 # =============================================================================
 # High-level neural information wrapper functions
 # =============================================================================
-def neural_info(labels, data, axis=0, method='pev', **kwargs):
+def neural_info(labels, data, axis=0, method='pev', keepdims=True, **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
     some task/behavioral variable(s)
@@ -121,30 +121,46 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     method : {'pev','dprime','auroc','mutual_info','decode'}, default: 'pev'
         Method to use to compute information. See specific functions for details.
 
+        - 'pev' : Percent of data variance explained by model, using :func:`pev`
+        - 'dprime' : d' metric (difference in means/pooled SD), using :func:`dprime`
+        - 'auroc' : Area under ROC curve metric for discriminating labels, using :func:`auroc`
+        - 'mutual_info' : Mutual information btwn data and labels, using :func:`mutual_info`
+        - 'decode' : Classification accuracy of decoding labels from data, using :func:`decode`
+
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` in output, even if length=1.
+        If False, removes reduced length-1 observations `axis` from output.
+        NOTE: Return shape rules differ btwn info methods; see method function for details.
+
     **kwargs
         All other kwargs passed directly to specific information method function
 
     Returns
     -------
-    info  : ndarray, shape=(...,1,...) or (...,n_terms,...)
+    info  : float or ndarray, shape=(...,[1,]...) or (...,n_terms,...)
         Measure of information in data about labels.
-        Shape is same as data, with observation `axis` reduced to length = 1
-        (or = n_terms for pev/regression method).
+
+        Return shape rules differ somewhat between methods; see specific functions for details.
+        Generally, 1d `data` -> scalar `info`. For n-d data, `info` has same as `data`, with
+        observation `axis` reduced to length = 1 (or = n_terms for pev/regression method)
+        if `keepdims` is True, but with `axis` removed from output if `keepdims` is False.
     """
     method = method.lower()
     info_func = _string_to_info_func(method)
-    return info_func(labels,data,axis=axis,**kwargs)
+    return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
 
 
-def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
+def neural_info_2groups(data1, data2, axis=0, method='pev', keepdims=True, **kwargs):
     """
-    Wrapper function to compute mass-univariate neural information about
+    Alternative interface to compute mass-univariate neural information about
     some binary (ie 2-group) task/behavioral variable, with the inputs being the
     data for each of the two possible conditions: (data1, data2)
 
     Note: Some methods (dprime, auroc) are faster with this method and it is
     thus preferred, but otherwise the main reason to use it is for convenience
     if your data is already formatted into two groups
+
+    NOTE: Only parameters differing from primary interface (:func:`neural_info`) described here.
 
     Parameters
     ----------
@@ -156,20 +172,15 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
         Can have different number of observations (trials), but must otherwise
         have same shape as data1.
 
-    axis : int, default: 0 (first axis)
-        Axis of data arrays to perform analysis on, corresponding to trials/observations
-
-    method : {'pev','dprime','auroc','mutual_info','decode'}, default: 'pev'
-        Method to use to compute information. See specific functions for details.
-
-    **kwargs
-        All other kwargs passed directly to specific information method function
-
     Returns
     -------
-    info  : ndarray, shape=(...,1,...)
-        Measure of information in data about labels
-        Shape is same as data, with observation `axis` reduced to length = 1
+    info  : float or ndarray, shape=(...,[1,]...) or (...,n_terms,...)
+        Measure of information in data about difference between data1 vs data2 vs ... data_k.
+
+        Return shape rules differ somewhat between methods; see specific functions for details.
+        Generally, 1d `data` -> scalar `info`. For n-d data, `info` has same as `data`, with
+        observation `axis` reduced to length = 1 (or = n_terms for pev/regression method)
+        if `keepdims` is True, but with `axis` removed from output if `keepdims` is False.
     """
     method = method.lower()
 
@@ -185,44 +196,41 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
         else:
             raise ValueError("Information method '%s' is not yet supported" % method)
 
-        return info_func(data1, data2, axis=axis, **kwargs)
+        return info_func(data1, data2, axis=axis, keepdims=keepdims, **kwargs)
 
     # All other methods -- create label list, concatenate data and call (label,data) version
     else:
         info_func = _string_to_info_func(method)
         data, labels = data_groups_to_data_labels(data1, data2, axis=axis)
-        return info_func(labels, data, axis=axis, **kwargs)
+        return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
 
 
-def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
+def neural_info_ngroups(*args, axis=0, method='pev', keepdims=True, **kwargs):
     """
-    Wrapper function to compute mass-univariate neural information about
+    Alternative to compute mass-univariate neural information about
     some multi-class variable, with the inputs being the data for each
     of the possible conditions 1-k: (data1, data2, ..., data_k)
 
     NOTE: Some methods (dprime, auroc, mutual_info) are designed for only binary comparisons
     and will raise an error if you try to call them with this function
 
+    NOTE: Only parameters differing from primary interface (:func:`neural_info`) described here.
+
     Parameters
     ----------
     data1...data_k : ndarray, shape=(...,n_obs[j],...)
         Sets of values for each data distribution to be compared.
         Can have different number of observations (trials), but must otherwise all have same shape.
-        
-    axis : int, default: 0 (first axis)
-        Axis of data arrays to perform analysis on, corresponding to trials/observations
-
-    method : {'pev','decode'}, default: 'pev'
-        Method to use to compute information. See specific functions for details.
-
-    **kwargs
-        All other kwargs passed directly to specific information method function
 
     Returns
     -------
-    info  : ndarray, shape=(...,1,...)
-        Measure of information in data about difference between data1 vs data2 vs ... data_k
-        Shape is same as data, with observation `axis` reduced to length = 1
+    info  : float or ndarray, shape=(...,[1,]...) or (...,n_terms,...)
+        Measure of information in data about difference between data1 vs data2 vs ... data_k.
+
+        Return shape rules differ somewhat between methods; see specific functions for details.
+        Generally, 1d `data` -> scalar `info`. For n-d data, `info` has same as `data`, with
+        observation `axis` reduced to length = 1 (or = n_terms for pev/regression method)
+        if `keepdims` is True, but with `axis` removed from output if `keepdims` is False.
     """
     # TODO Add 'mutual_information','mutual_info' when mutual_info is updated for multi-class
     n_group_methods = ['decode','decoder','decoding', 'pev']
@@ -234,7 +242,7 @@ def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
 
     info_func = _string_to_info_func(method)
     data, labels = data_groups_to_data_labels(*args, axis=axis)
-    return info_func(labels, data, axis=axis, **kwargs)
+    return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
 
 
 def _string_to_info_func(method):
@@ -252,7 +260,7 @@ def _string_to_info_func(method):
 # Population decoding (classification) analysis
 # =============================================================================
 def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=None,
-           groups=None, as_pct=False, return_stats=False, stats=None, **kwargs):
+           groups=None, as_pct=False, return_stats=False, stats=None, keepdims=True, **kwargs):
     """
     Mass-multivariate population decoding analysis using given classifier method
 
@@ -326,21 +334,28 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
         'predict' : Predicted class for each trial/observation
         'prob' :    Posterior probability for each class, for each trial/observation
 
+    keepdims : bool, default: True
+        If True, retains `axis` and `feature_axis` reduced to length-one axes in output.
+        If False, removes `axis` and `feature_axis` axes from output.
+
     **kwargs
         All other kwargs passed directly to decoding object constructor
 
     Returns
     -------
-    accuracy : ndarray, , shape=(...,1,...,1,...)
-        Decoding accuracy. Shape is same as input data, but with `axis` and
-        `feature_axis` reduced to length 1. Accuracy given as proportion or percent
-        correct, depending on value of `as_pct`. Chance = [100 x] 1/n_classes.
+    accuracy : float or ndarray, shape=(...,[1,]...,[1,]...)
+        Decoding accuracy. Accuracy given as proportion or percent correct,
+        depending on value of `as_pct`. Chance = [100 x] 1/n_classes.
+
+        If `data` is 2d (just observation and feature axes), returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` and `feature_axis` reduced to length 1
+        if `keepdims` is True, or with `axis` and `feature_axis` removed  if `keepdims` is False.
 
     stats : dict, optional
         Additional per-trial decoding-related stats, as requested in
         input argument `stats`. May include the following:
 
-        - 'predict' : ndarray, shape=(...,_n_obs,...,1,...)
+        - 'predict' : ndarray, shape=(...,_n_obs,...,[1,]...)
             Predicted class for each observation/trial.
             Same shape as accuracy, but `axis` has length n_obs.
         - 'prob' : ndarray, shape=(...,_n_obs,...,n_classes,...)
@@ -533,6 +548,9 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     if data_ndim <= 2:
         accuracy = accuracy.item()
         for stat in stats:  stats[stat] = stats[stat].squeeze()
+    elif not keepdims:
+        accuracy = accuracy.squeeze(axis=(axis,feature_axis))
+        if 'predict' in stats:  stats['predict'] = stats['predict'].squeeze(axis=feature_axis)
 
     if return_stats:    return accuracy, stats
     else:               return accuracy
@@ -541,7 +559,7 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 # =============================================================================
 # Mutual information analysis
 # =============================================================================
-def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None):
+def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None, keepdims=True):
     """
     Mass-univariate mutual information between set of discrete-valued (or discretized)
     neural responses and categorical experimental conditions (often referred to as "stimuli"
@@ -584,10 +602,17 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
         Which group labels from `labels` to use. Useful for computing information on
         subset of groups/classes in labels.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     Returns
     -------
-    info : ndarray, shape=(...,1,...)
+    info : float or ndarray, shape=(...,[1,]...)
         Mutual information between responses and experimental conditions (in bits).
+        For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
     Notes
     -----
@@ -701,8 +726,12 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
         # Mutual information is total response entropy - noise entropy (Dayan & Abbott, eqn. 4.7)
         info[i_series] = H - Hnoise
 
-    # Pre-pend singleton axis to make info expected (1,n_series) shape
-    info = undo_standardize_array(info[np.newaxis,:], data_shape, axis=axis, target_axis=0)
+    if info.size == 1:
+        info = info.item()
+    else:
+        # Pre-pend singleton axis to make info expected (1,n_series) shape
+        info = undo_standardize_array(info[np.newaxis,:], data_shape, axis=axis, target_axis=0)
+        if not keepdims: info = info.squeeze(axis=axis)
 
     return info
 
@@ -715,7 +744,7 @@ mutual_information = mutual_info
 # =============================================================================
 # Note: This is actually a wrapper around _auroc_2groups(), which accepts
 # two data distributions as arguments, and is faster.
-def auroc(labels, data, axis=0, signed=True, groups=None):
+def auroc(labels, data, axis=0, signed=True, groups=None, keepdims=True):
     """
     Mass-univariate area-under-ROC-curve metric of discriminability
     between two data distributions
@@ -755,11 +784,16 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
         Useful for enforcing a given order to groups (eg sign to signed AUROC),
         or for computing info btwn pairs of groups within data with > 2 groups.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     Returns
     -------
-    roc : ndarray, shape=(...,1,...)
-        AUROC between groups along given axis. Same shape as `data`,
-        with `axis` reduced to length 1.
+    roc : float or ndarray, shape=(...,[1,]...)
+        AUROC between groups along given axis. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
     """
     labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -773,10 +807,10 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     # Split data into 2 groups and use _auroc_2groups() to actually do computation
     return _auroc_2groups(data.compress(labels == groups[0], axis=axis),
                           data.compress(labels == groups[1], axis=axis),
-                          axis=axis, signed=signed)
+                          axis=axis, signed=signed, keepdims=keepdims)
 
 
-def _auroc_2groups(data1, data2, axis=0, signed=True):
+def _auroc_2groups(data1, data2, axis=0, signed=True, keepdims=True):
     """
     Version of auroc() that accepts two data distributions
     auroc() actually calls this for its computation, bc it's faster
@@ -831,8 +865,12 @@ def _auroc_2groups(data1, data2, axis=0, signed=True):
     # If desired, calculate absolute/unsigned area under ROC metric
     if not signed: roc_area = np.abs(roc_area - 0.5) + 0.5
 
-    # Pre-pend singleton axis to make info expected (1,n_series) shape
-    roc_area = undo_standardize_array(roc_area[np.newaxis,:], data1_shape, axis=axis, target_axis=0)
+    if roc_area.size == 1:
+        roc_area = roc_area.item()
+    else:
+        # Pre-pend singleton axis to make info expected (1,n_series) shape
+        roc_area = undo_standardize_array(roc_area[np.newaxis,:], data1_shape, axis=axis, target_axis=0)
+        if not keepdims: roc_area = roc_area.squeeze(axis=axis)
 
     return roc_area
 
@@ -840,7 +878,7 @@ def _auroc_2groups(data1, data2, axis=0, signed=True):
 # =============================================================================
 # d-prime (Cohen's d) analysis
 # =============================================================================
-def dprime(labels, data, axis=0, signed=True, groups=None):
+def dprime(labels, data, axis=0, signed=True, groups=None, keepdims=True):
     """
     Mass-univariate d' metric of difference between two data distributions
 
@@ -880,10 +918,16 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
         Useful for enforcing a given order to groups (eg sign to signed d'),
         or for computing info btwn pairs of groups within data with > 2 groups.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     Returns
     -------
-    d : ndarray, shape=(...,1,...)
-        d' between groups along given axis. Same shape as `data`, with `axis` reduced to length 1.
+    d : float or ndarray, shape=(...,[1,]...)
+        d' between groups along given axis. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
 
     Notes
     -----
@@ -907,10 +951,10 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     # Split data into 2 groups and use _dprime_2groups() to actually do computation
     return _dprime_2groups(data.compress(labels == groups[0], axis=axis),
                            data.compress(labels == groups[1], axis=axis),
-                           axis=axis, signed=signed)
+                           axis=axis, signed=signed, keepdims=keepdims)
 
 
-def _dprime_2groups(data1, data2, axis=0, signed=True):
+def _dprime_2groups(data1, data2, axis=0, signed=True, keepdims=True):
     """
     Version of dprime() that accepts two data distributions
     dprime() actually calls this for its computation, bc it's faster
@@ -922,11 +966,11 @@ def _dprime_2groups(data1, data2, axis=0, signed=True):
         "dprime: Data contains no observations (trials) for one or more groups"
 
     # Compute difference of group means
-    d = data1.mean(axis=axis,keepdims=True) - data2.mean(axis=axis,keepdims=True)
+    d = data1.mean(axis=axis, keepdims=keepdims) - data2.mean(axis=axis, keepdims=keepdims)
 
     # Compute group std dev's
-    sd1	= data1.std(axis=axis,ddof=1,keepdims=True)
-    sd2	= data2.std(axis=axis,ddof=1,keepdims=True)
+    sd1	= data1.std(axis=axis, ddof=1, keepdims=keepdims)
+    sd2	= data2.std(axis=axis, ddof=1, keepdims=keepdims)
     # Compute pooled standard deviation across two groups, using standard formula
     sd_pooled = np.sqrt( ((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2) )
 
@@ -939,7 +983,7 @@ def _dprime_2groups(data1, data2, axis=0, signed=True):
     # Return unsigned (absolute) d', if requested
     if not signed: d = np.abs(d)
 
-    # For scalar info (vector data), extract value from scalar array -> float for output
+    # For scalar info (1d data), extract value from scalar array -> float for output
     if d.size == 1: d = d.item()
 
     return d
@@ -948,7 +992,8 @@ def _dprime_2groups(data1, data2, axis=0, signed=True):
 # =============================================================================
 # Percent explained variance (PEV) analysis
 # =============================================================================
-def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=False, **kwargs):
+def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=False,
+        keepdims=True, **kwargs):
     """
     Mass-univariate percent explained variance (PEV) analysis.
 
@@ -989,14 +1034,25 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
         If True, return several stats on model fit (eg F-stat,p) in addition to PEV
         If False, just return PEV.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` in output, even if length=1.
+        If False, removes reduced length-1 observations `axis` from output.
+        NOTE: Return shape rules differ btwn `model` types; see model function for details.
+
     **kwargs
         All other kwargs passed directly to model function. See those for details.
 
     Returns
     -------
-    exp_var : ndarray, shape=(...,n_terms,...)
+    exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels
-        Shape is same as data, with observation axis reduced to length = n_terms.
+        Shape is usually same as data, with observation axis reduced to length = n_terms.
+        For single-term 'anova1' model:
+            If data is 1d, `exp_var` is just returned as single scalar.
+            If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
+            with `axis` reduced to length-1.
+            If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
+            with `axis` removed.
 
     stats : dict, optional
         If `return_stats` set, statistics on each fit also returned.
@@ -1030,16 +1086,16 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
 
     # Compute PEV based on 1-way ANOVA model
     if model == 'anova1':
-        return anova1(labels,data,axis=axis,omega=omega,as_pct=as_pct,
-                      return_stats=return_stats,**kwargs)
+        return anova1(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+                      return_stats=return_stats, keepdims=keepdims, **kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'anova2':
-        return anova2(labels,data,axis=axis,omega=omega,as_pct=as_pct,
-                      return_stats=return_stats,**kwargs)
+        return anova2(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+                      return_stats=return_stats, keepdims=keepdims, **kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'regress':
-        return regress(labels,data,axis=axis,omega=omega,as_pct=as_pct,
-                       return_stats=return_stats,**kwargs)
+        return regress(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+                       return_stats=return_stats, keepdims=keepdims, **kwargs)
     else:
         raise ValueError("'%s' model is not supported for computing PEV" % model)
 
@@ -1048,7 +1104,7 @@ percent_explained_variance = pev
 
 
 def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs',
-           as_pct=True, return_stats=False):
+           as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate 1-way ANOVA analyses of one or more data vector(s)
     on single list of group labels
@@ -1078,7 +1134,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
 
     gm_method : str, Default: 'mean_of_obs'
         Method used to calculate grand mean for ANOVA formulas. Options:
-        
+
         - 'mean_of_obs' : Mean of all observations (more standard ANOVA formula)
         - 'mean_of_means' : Mean of group means--less downward-bias of PEV,F for unbalanced grp n's
 
@@ -1090,22 +1146,28 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         If True, return several stats on model fit (eg F-stat,p) in addition to PEV
         If False, just return PEV.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from output.
+
     Returns
     -------
-    exp_var : ndarray, shape=(...,1,...)
+    exp_var : float or ndarray, shape=(...,[1,]...)
         Percent (or proportion) of variance in data explained by labels.
-        Shape is same as data, with observation axis reduced to length 1.
+        For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True, or with `axis` removed if `keepdims` is False.
 
     stats : dict, optional
         If `return_stats` set, statistics on each fit also returned:
 
-        - p :  ndarray, shape=(...,1,...)
+        - p : float or ndarray, shape=(...,[1,]...)
             F-test p values for each datapoint. Same shape as `exp_var`.
-        - F : ndarray, shape=(...,1,...)
+        - F : float or ndarray, shape=(...,[1,]...)
             F-statistic for each datapoint. Same shape as `exp_var`.
         - mu : ndarray, shape=(...,n_groups,...)
-            Group mean for each group/level
-        - n : ndarray, shape=(...,n_groups,)
+            Group mean for each group/level. Note different shape rules.
+        - n : ndarray, shape=(n_groups,)
             Number of observations (trials) in each group/level
 
     Examples
@@ -1113,11 +1175,11 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     exp_var = anova1(labels,data,return_stats=False)
 
     exp_var,stats = anova1(labels,data,return_stats=True)
-    
+
     References
     ----------
     - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
-    - https://en.wikipedia.org/wiki/Effect_size    
+    - https://en.wikipedia.org/wiki/Effect_size
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1190,28 +1252,40 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     # Convert proportion [0-1] -> percent [0-100]
     if as_pct:   exp_var = 100.0*exp_var
 
-    exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
-
-    if not return_stats:
-        return exp_var
+    # Reshape exp_var properly for output
+    if exp_var.size == 1:
+        exp_var = exp_var.item()
+    else:
+        exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
+        if not keepdims: exp_var = exp_var.squeeze(axis=axis)
 
     # Calculate F-statistic and perform F-test to determine p value for all data points
-    else:
+    if return_stats:
         MS_groups= SS_groups / df_groups    # Groups mean square
         F       = MS_groups / MS_error      # F statistic
         F[:,undefined] = 0                  # Set F = 0 for data w/ data variance = 0
         p       = Ftest.sf(F,df_groups,df_error) # p value for given F stat
 
-        F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
-        p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
         mu  = undo_standardize_array(mu, data_shape, axis=axis, target_axis=0)
 
+        if F.size == 1:
+            F = F.item()
+            p = p.item()
+        else:
+            F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
+            p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
+            if not keepdims:
+                F = F.squeeze(axis=axis)
+                p = p.squeeze(axis=axis)
+
         stats   = {'p':p, 'F':F, 'mu':mu, 'n':n}
-        return exp_var, stats
+
+    if not return_stats:    return exp_var
+    else:                   return exp_var, stats
 
 
 def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total=False,
-           gm_method='mean_of_obs', as_pct=True, return_stats=False):
+           gm_method='mean_of_obs', as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate 2-way ANOVA analyses of one or more data vector(s)
     on single set of group labels
@@ -1267,11 +1341,16 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
         If True, return several stats on model fit (eg F-stat,p) in addition to PEV
         If False, just return PEV.
 
+    keepdims: bool, default: True
+        NOTE: This argument is not used, only kept for consistent API with other info funcs.
+
     Returns
     -------
     exp_var : ndarray, shape=(...,n_terms,...)
         Percent (or proportion) of variance in data explained by labels.
         Shape is same as data, with observation axis reduced to length = n_terms.
+        NOTE: shape rules for returns are different from other info functions
+        bc `axis` contains model terms and cannot be reduced.
 
     stats : dict, optional
         If `return_stats` is True, statistics on each fit also returned:
@@ -1283,7 +1362,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
         - mu : list, shape=(n_terms,) of [ndarray, shape=(...,n_groups,...)]
             Group mean for each group (level), in a separate list element for each
             model term (b/c n_groups not necesarily same for different terms).
-        - n : list, shape=(n_terms,) of [ndarray, shape=(...,n_groups,...)]
+        - n : list, shape=(n_terms,) of [ndarray, shape=(n_groups,)]
             Number of observations (trials) in each group/level, in a separate
             list element for each model term.
 
@@ -1297,7 +1376,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
     ----------
     - Zar "Biostatistical Analysis" 4th ed.
     - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
-    - https://en.wikipedia.org/wiki/Effect_size    
+    - https://en.wikipedia.org/wiki/Effect_size
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1422,7 +1501,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
 
 def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
-            partial=False, total=False, as_pct=True, return_stats=False):
+            partial=False, total=False, as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate ordinary least squares regression analyses of one or more
     data vector(s) on single design matrix
@@ -1477,18 +1556,28 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
         If True, return several stats on model fit (eg F-stat,p) in addition to PEV
         If False, just return PEV.
 
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` in output, even if length=1.
+        If False, removes reduced length-1 observations `axis` from output.
+
     Returns
     -------
-    exp_var : ndarray, shape=(...,n_terms,...)
+    exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels.
-        Shape is same as data, with observation `axis` reduced to length = n_terms.
+        Shape is usually same as data, with observation axis reduced to length = n_terms.
+        For single-term 'anova1' model:
+            If data is 1d, `exp_var` is just returned as single scalar.
+            If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
+            with `axis` reduced to length-1.
+            If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
+            with `axis` removed.
 
     stats : dict, optional
         If `return_stats` is True, statistics on each fit also returned:
 
-        - p : ndarray, shape=(...,n_terms,...)
+        - p : float or ndarray, shape=(...,[n_terms,]...)
             F-test p values for each datapoint. Same shape as exp_var.
-        - F : ndarray, shape=(...,n_terms,...)
+        - F : float or ndarray, shape=(...,[n_terms,]...)
             F-statistic for each datapoint. Same shape as exp_var.
         - B : ndarray, shape=(...,n_params,...)
             Fitted regression coefficients for each predictor (column in `labels`).
@@ -1592,8 +1681,6 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     if as_pct:   exp_var = 100.0*exp_var     # Convert proportion [0-1] -> percent [0-100]
 
-    exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
-
     # Append summed PEV across all model terms to end of term axis
     if total:
         exp_var = np.concatenate((exp_var, exp_var.sum(axis=0,keepdims=True)), axis=0)
@@ -1601,23 +1688,38 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
             df_extra = np.concatenate((df_extra, df_extra.sum(axis=0,keepdims=True)), axis=0)
             SS_extra = np.concatenate((SS_extra, SS_extra.sum(axis=0,keepdims=True)), axis=0)
 
-    if not return_stats:
-        return exp_var
+    # Reshape to expected output shape
+    if exp_var.size == 1:
+        exp_var = exp_var.item()
+    else:
+        exp_var = undo_standardize_array(exp_var, data_shape, axis=axis, target_axis=0)
+        if (n_terms+total == 1) and not keepdims: exp_var = exp_var.squeeze(axis=axis)
 
     # Calculate "extra-sums-of-squares" F-statistic and associated p value
-    else:
+    if return_stats:
         df_extra    = np.reshape(df_extra,(-1,1))
         MS_regress  = SS_extra / df_extra     # Regression Mean Squares for each term
         F           = MS_regress / MS_error   # F statistics for each term
         F[:,undefined] = 0                    # Set F = 0 for data w/ data variance = 0
         p           = Ftest.sf(F,df_extra,df_error) # p value for given F stat
 
-        F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
-        p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
-        B   = undo_standardize_array(B, data_shape, axis=axis, target_axis=0)
+        if F.size == 1:
+            F = F.item()
+            p = p.item()
+        else:
+            F   = undo_standardize_array(F, data_shape, axis=axis, target_axis=0)
+            p   = undo_standardize_array(p, data_shape, axis=axis, target_axis=0)
+            if (n_terms+total == 1) and not keepdims:
+                F = F.squeeze(axis=axis)
+                p = p.squeeze(axis=axis)
 
-        stats   = {'p':p, 'F':F, 'B':B}
-        return exp_var, stats
+        B = undo_standardize_array(B, data_shape, axis=axis, target_axis=0)
+
+        stats = {'p':p, 'F':F, 'B':B}
+
+    if not return_stats:    return exp_var
+    else:                   return exp_var, stats
+
 
 
 # =============================================================================

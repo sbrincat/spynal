@@ -28,10 +28,7 @@ from neural_analysis.info import neural_info, neural_info_2groups, neural_info_n
                           ('decode',        {'decoder':'SVM'},      0.95),
                           ('decode',        {'decoder':'custom'},   0.90)])
 def test_two_sample_info(two_sample_data, method, params, result):
-    """
-    Unit tests for neural_info function for computing neural information
-    for two-sample (two-condition) data
-    """
+    """ Unit tests for into functions for computing informatio for two-condition data """
     data, labels = two_sample_data
     data_orig = data.copy()
 
@@ -56,6 +53,12 @@ def test_two_sample_info(two_sample_data, method, params, result):
         print(np.round(info.squeeze(),2))
         assert info.shape == info_shape
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+
+    # Test for expected output with keepdims = False
+    info = neural_info(labels, data, axis=0, method=method, keepdims=False, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == (n_chnls,)
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
 
     # Test for consistent output with 2-group form of neural computation function
     info = neural_info_2groups(data[labels==0,:], data[labels==1,:], axis=0, method=method,
@@ -168,10 +171,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
                           ('decode',    {'decoder':'SVM'},      0.95),
                           ('decode',    {'decoder':'custom'},   1.00)])
 def test_one_way_info(one_way_data, method, params, result):
-    """
-    Unit tests for neural_info function for computing neural information
-    for one-way/multi-class (1-factor, 3 conditions/levels) data
-    """
+    """ Unit tests for info functions for computing info for one-way (multi-class) data """
     data, labels = one_way_data
     data_orig = data.copy()
 
@@ -196,6 +196,12 @@ def test_one_way_info(one_way_data, method, params, result):
         print(np.round(info.squeeze(),2))
         assert info.shape == info_shape
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
+
+    # Test for expected output with keepdims = False
+    info = neural_info(labels, data, axis=0, method=method, keepdims=False, **extra_args)
+    if method == 'decode':  assert isinstance(info,float)
+    else:                   assert info.shape == (n_chnls,)
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
 
     # Test for consistent output with n-group form of neural computation function
     info = neural_info_ngroups(data[labels==0,:], data[labels==1,:], data[labels==2,:],
@@ -304,10 +310,7 @@ def test_one_way_info(one_way_data, method, params, result):
                                                                  (72.84,80.33,55.14,72.48),
                                                                  ( 0.54, 1.41, 0.77, 0.07)))])
 def test_two_way_info(two_way_data, method, interact, params, result):
-    """
-    Unit tests for neural_info function for computing neural information
-    for two-way (2-factor) data
-    """
+    """ Unit tests for info func's for computing information for two-way (2-factor) data """
     data, labels = two_way_data
     data_orig = data.copy()
     labels = labels[:,0:2]

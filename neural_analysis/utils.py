@@ -350,7 +350,7 @@ def lv(data, axis=0, keepdims=True):
     -------
     LV : float or ndarray, shape=(...,[1,]...)
         LV of data.
-        For vector data, a single scalar value is returned.
+        For 1d data, a single scalar value is returned.
         Otherwise, it's an array w/ same shape as data, but with `axis` reduced to length 1
         if `keepdims` is True, and with `axis` removed if `keepdims` is False.
 

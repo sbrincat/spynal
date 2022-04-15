@@ -134,7 +134,7 @@ def _standardize_to_axis_0(data, axis=0):
         if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C').T
         else:               data = data.T
 
-    # Expand (n,) vector data to (n,1) to simplify downstream code
+    # Expand (n,) 1d data to (n,1) to simplify downstream code
     if data_ndim == 1:  data = data[:,np.newaxis]
 
     return data, data_shape
@@ -235,7 +235,7 @@ def _standardize_to_axis_end(data, axis=-1):
         # If data array data has > 2 dims, keep axis -1 and unwrap other dims into a matrix
         if data_ndim > 2:   data = np.reshape(data,(-1,data_shape[axis]),order='C')
 
-    # Expand (n,) vector data to (1,n) to simplify downstream code
+    # Expand (n,) 1d data to (1,n) to simplify downstream code
     if data_ndim == 1:  data = data[np.newaxis,:]
 
     return data, data_shape
