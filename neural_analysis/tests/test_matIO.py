@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
+from neural_analysis.tests.data_fixtures import MISSING_ARG_ERRS
 from neural_analysis.matIO import loadmat
 
 # todo Should we embed mat file generation in a fixture? Would require matlab engine for Python.
@@ -52,7 +53,7 @@ def test_loadmat(version):
     _variable_tests(data, pd.DataFrame, bool_type)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         data = loadmat(filename, asdict=True, verbose=False, foo=None)
 
 def _variable_tests(data, table_type=dict, bool_type=bool):

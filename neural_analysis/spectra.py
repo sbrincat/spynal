@@ -1,91 +1,103 @@
 # -*- coding: utf-8 -*-
 """
-spectra     A module for spectral analysis of neural oscillations
+Spectral analysis, signal processing, and continuous (LFP/EEG) data preprocessing
 
+Overview
+--------
 Functionality for computing frequency spectra as well as time-frequency (spectrogram) transforms.
 
-Options to compute spectral analysis using multitaper, wavelet, band-pass filtering or spectral
+Options to compute spectral analysis using multitaper, wavelet, band-pass filtering, or spectral
 burst analysis methods.
 
-Options to return full complex spectral data, spectral power, or spectral phase.
+Options to return full complex spectral data, spectral power, phase, real or imaginary part, etc.
 
-Also includes functions for preprocessing, postprocessing, and plotting of analog/spectral data.
+Also includes functions for preprocessing, postprocessing, plotting of continuous/spectral data.
 
 Most functions perform operations in a mass-univariate manner. This means that
-rather than embedding function calls in for loops over channels, trials, etc., like this:
+rather than embedding function calls in for loops over channels, trials, etc., like this::
 
-for channel in channels:
-    for trial in trials:
-        results[trial,channel] = compute_something(data[trial,channel])
+    for channel in channels:
+        for trial in trials:
+            results[trial,channel] = compute_something(data[trial,channel])
 
 You can instead execute a single call on ALL the data, labeling the relevant axis
 for the computation (usually time here), and it will run in parallel (vectorized)
 across all channels, trials, etc. in the data, like this:
 
-results = compute_something(data, axis)
+``results = compute_something(data, axis)``
 
 
-FUNCTIONS
-### General spectral analysis ###
-spectrum            Frequency spectrum of data
-spectrogram         Time-frequency spectrogram of data
-power_spectrum      Power spectrum of data
-power_spectrogram   Power of time-frequency transform
-phase_spectrogram   Phase of time-frequency transform
+Function list
+-------------
+General spectral analysis
+^^^^^^^^^^^^^^^^^^^^^^^^^
+- spectrum :          Frequency spectrum of data
+- spectrogram :       Time-frequency spectrogram of data
+- power_spectrum :    Power spectrum of data
+- power_spectrogram : Power of time-frequency transform
+- phase_spectrogram : Phase of time-frequency transform
 
-### Multitaper spectral analysis ###
-multitaper_spectrum Multitaper (DPSS) frequency spectrum
-multitaper_spectrogram  Multitaper (DPSS) time-frequency spectrogram
-compute_tapers      Computes DPSS tapers for use in multitaper spectral analysis
+Multitaper spectral analysis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- multitaper_spectrum :     Multitaper (DPSS) frequency spectrum
+- multitaper_spectrogram :  Multitaper (DPSS) time-frequency spectrogram
+- compute_tapers :          Compute DPSS tapers for use in multitaper spectral analysis
 
-### Wavelet spectral analysis ###
-wavelet_spectrum    Wavelet-based frequency spectrum
-wavelet_spectrogram Time-frequency continuous wavelet transform
-compute_wavelets    Computes wavelets for use in wavelet spectral analysis
-wavelet_bandwidth   Computes time,frequency bandwidths for set of wavelets
-wavelet_edge_extent Computes extent of edge effects for set of wavelets
+Wavelet spectral analysis
+^^^^^^^^^^^^^^^^^^^^^^^^^
+- wavelet_spectrum :    Wavelet-based frequency spectrum
+- wavelet_spectrogram : Time-frequency continuous wavelet transform
+- compute_wavelets :    Compute wavelets for use in wavelet spectral analysis
+- wavelet_bandwidth :   Compute time,frequency bandwidths for set of wavelets
+- wavelet_edge_extent : Compute extent of edge effects for set of wavelets
 
-### Bandpass-filtering spectral analysis ###
-bandfilter_spectrum Band-filtered frequency spectrum
-bandfilter_spectrogram Band-filtered, Hilbert-transformed time-frequency of data
-set_filter_params   Sets filter coefficients for use in band-filtered analysis
+Bandpass-filtering spectral analysis
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- bandfilter_spectrum :     Band-filtered frequency spectrum
+- bandfilter_spectrogram :  Band-filtered, Hilbert-transformed time-frequency of data
+- set_filter_params :       Set filter coefficients for use in band-filtered analysis
 
-### Other spectral analyses ###
-itpc                Intertrial phase clustering (analysis of phase locking to trial events)
-burst_analysis      Computes oscillatory burst analysis of Lundqvist et al 2016
+Other spectral analyses
+^^^^^^^^^^^^^^^^^^^^^^^
+- itpc :                Intertrial phase clustering (analysis of phase locking to trial events)
+- burst_analysis :      Compute oscillatory burst analysis of Lundqvist et al 2016
 
-### Preprocessing ###
-cut_trials          Cut LFPs/continuous data into trial segments
-realign_data        Realigns LFPs/continuous data to new within-trial event
+Preprocessing
+^^^^^^^^^^^^^
+- cut_trials :          Cut LFPs/continuous data into trial segments
+- realign_data :        Realign LFPs/continuous data to new within-trial event
+- get_freq_sampling :   Frequency sampling vector for a given FFT-based computation
+- remove_dc :           Remove constant DC component of signals
+- remove_evoked :       Remove phase-locked evoked potentials from signals
 
-get_freq_sampling   Frequency sampling vector for a given FFT-based computation
+Postprocesssing
+^^^^^^^^^^^^^^^
+- pool_freq_bands :         Average spectral data within set of frequency bands
+- pool_time_epochs :        Average spectral data within set of time epochs
+- one_over_f_norm :         Normalize to correct for 1/f distribution of spectral power
+- complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
+- one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
 
-remove_dc           Removes constant DC component of signals
-remove_evoked       Removes phase-locked evoked potentials from signals
+Plotting
+^^^^^^^^
+- plot_spectrum :       Plot frequency spectrum as a line plot, handling freq axis properly
+- plot_spectrogram :    Plot time-frequency spectrogram as a heatmap plot
 
-### Postprocesssing ###
-pool_freq_bands     Averages spectral data within set of frequency bands
-pool_time_epochs    Averages spectral data within set of time epochs
-one_over_f_norm     Normalizes to correct for 1/f distribution of spectral power
-complex_to_spec_type    Converts complex Fourier transform output to power/phase/real/imag/etc.
-one_sided_to_two_sided  Converts 1-sided Fourier transform output to 2-sided equivalent
-
-### Plotting ###
-plot_spectrum       Plots frequency spectrum as a line plot, handling freq axis properly
-plot_spectrogram    Plots time-frequency spectrogram as a heatmap plot
-
-### Data simulation ###
-simulate_oscillation Generates simulated oscillation-in-noise data
-
-
-DEPENDENCIES
-pyfftw              Python wrapper around FFTW, the speedy FFT library
+Data simulation
+^^^^^^^^^^^^^^^
+- simulate_oscillation :    Generates simulated oscillation-in-noise data
 
 
-Created on Thu Oct  4 15:28:15 2018
+Dependencies
+------------
+- pyfftw :              Python wrapper around FFTW, the speedy FFT library
 
-@author: sbrincat
+Function reference
+------------------
 """
+# Created on Thu Oct  4 15:28:15 2018
+#
+# @author: sbrincat
 
 from warnings import warn
 from math import floor,ceil,log2,pi,sqrt
@@ -132,45 +144,53 @@ _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
 def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_type='complex',
              removeDC=True, **kwargs):
     """
-    Computes frequency spectrum of data using given method
+    Compute frequency spectrum of data using given method
 
-    spec,freqs = spectrum(data,smp_rate,axis=0,method='multitaper',
-                          data_type='lfp',spec_type='complex',**kwargs)
+    Parameters
+    ----------
+    data : ndarray,shape=(...,n_samples,...)
+        Data to compute spectral analysis of.
+        Arbitrary shape; spectral analysis is computed along `axis`.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    axis : int, default: 0 (1st axis)
+        Axis of `data` to do spectral analysis on (usually time dimension).
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    method : {'multitaper','wavelet','bandfilter'}, default: 'multitaper'
+        Specific spectral analysis method to use:
 
-    method      String. Specific spectral analysis method to use:
-                'multitaper' [default] (only value currently supported)
+        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrum`
+        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrum`
+        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrum`
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type : {'lfp','spike'}, default: 'lfp'
+        Type of signal in data
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    spec_type : {'complex','power','phase','real','imag'}, default: 'complex'
+        Type of spectral signal to return. See :func:`complex_to_spec_type` for details.
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+    removeDC : bool, default: True
+        If True, subtracts off mean DC component across `axis`, making signals zero-mean
+        before spectral analysis.
 
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrum function. See there for details.
+    **kwargs :
+        All other kwargs passed directly to method-specific spectrum function
 
-    RETURNS
-    spec        (...,n_freqs,...) ndarray of complex | float.
-                Frequency spectrum of given type computed with given method.
-                Frequency axis is always inserted in place of time axis
-                Note: 'multitaper' method will return with additional taper
-                axis inserted after just after time axis if keep_tapers=True
-                dtype is complex for spec_type='complex', 'float' otherwise
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs,...), dtype=complex or float.
+        Frequency spectrum of given type computed with given method.
+        Frequency axis is always inserted in place of `axis`.
+        Note: 'multitaper' method will return with additional taper
+        axis inserted after just after `axis` if `keep_tapers` is True.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <spec>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
+    freqs : ndarray, shape=(n_freqs,) or (n_freqbands,2)
+        For `method` == 'bandfilter': List of (low,high) cut frequencies (Hz) used to
+        generate `spec`, shape=(n_freqbands,2)
+        For other methods: List of frequencies in `spec` (Hz), shape=(n_freqs,)
     """
     method = method.lower()
     assert data_type in ['lfp','spike'], \
@@ -191,51 +211,57 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_
 def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_type='complex',
                 removeDC=True, **kwargs):
     """
-    Computes time-frequency transform of data using given method
+    Compute time-frequency transform of data using given method
 
-    spec,freqs,timepts = spectrogram(data,smp_rate,axis=0,method='wavelet',
-                                     data_type='lfp', spec_type='complex',removeDC=True,**kwargs)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_samples,...)
+        Data to compute spectral analysis of.
+        Arbitrary shape; spectral analysis is computed along `axis`.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    axis : int, default: 0 (1st axis)
+        Axis of `data` to do spectral analysis on (usually time dimension).
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    method : {'multitaper','wavelet','bandfilter','burst'}, default: 'wavelet'
+        Specific spectral analysis method to use:
 
-    method      String. Specific spectral analysis method to use:
-                'wavelet' :     Continuous Morlet wavelet analysis [default]
-                'multitaper' :  Multitaper spectral analysis
-                'bandfilter' :  Band-pass filtering and Hilbert transform
-                'burst' :       Oscillatory burst analysis
+        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
+        - 'burst' : Oscillatory burst analysis in :func:`burst_analysis`
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    data_type : {'lfp','spike'}, default: 'lfp'
+        Type of signal in data
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    spec_type : {'complex','power','phase','real','imag'}, default: 'complex'
+        Type of spectral signal to return. See :func:`complex_to_spec_type` for details.
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+    removeDC : bool, default: True
+        If True, subtracts off mean DC component across `axis`, making signals zero-mean
+        before spectral analysis.
 
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrogram function. See there for details.
+    **kwargs :
+        All other kwargs passed directly to method-specific spectrogram function
 
-    RETURNS
-    spec        (...,n_freqs,n_timepts,...) ndarray of complex | float.
-                Time-frequency spectrogram of given type computed with given method.
-                Frequency axis is always inserted just before time axis.
-                Note: 'multitaper' method will return with additional taper
-                axis inserted after just after freq axis if keep_tapers=True.
-                dtype is complex for spec_type='complex', 'float' otherwise.
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs,n_timepts,...), dtype=complex or float.
+        Time-frequency spectrogram of given type computed with given method.
+        Frequency axis is always inserted just before time axis.
+        Note: 'multitaper' method will return with additional taper
+        axis inserted between freq and time axes if `keep_tapers` is True.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <spec>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
+    freqs : ndarray, shape=(n_freqs,) or (n_freqbands,2)
+        For `method` == 'bandfilter': List of (low,high) cut frequencies (Hz) used to
+        generate `spec`, shape=(n_freqbands,2)
+        For other methods: List of frequencies in `spec` (Hz), shape=(n_freqs,)
 
-    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec>
-                (in s, referenced to start of data).
+    timepts : ndarray, shape=(n_timepts,)
+        List of time points / time window centers in `spec` (in s, referenced to start of data)
     """
     method = method.lower()
 
@@ -263,115 +289,27 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
 
 def power_spectrum(data, smp_rate, axis=0, method='multitaper', **kwargs):
     """
-    Convenience wrapper around spectrum to compute power spectrum of data with given method
+    Convenience wrapper around spectrum() to compute **power** spectrum of data with given method
 
-    spec,freqs = power_spectrum(data,smp_rate,axis=0,method='multitaper',**kwargs)
-
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
-
-    smp_rate     Scalar. Data sampling rate (Hz)
-
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
-
-    method      String. Specific spectral analysis method to use:
-                'multitaper' [default] (only value currently supported)
-
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrum function. See there for details.
-
-    RETURNS
-    spec        (...,n_freqs,...) ndarray of complex floats.
-                Compplex frequency spectrum computed with given method.
-                Frequency axis is always inserted in place of time axis
-                Note: 'multitaper' method will return with additional taper
-                axis inserted after just after time axis.
-
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <spec>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
+    See :func:`spectrum` for details
     """
     return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
 
 
 def power_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
-    Convenience wrapper around spectrogram() to compute time-frequency power with given method
+    Convenience wrapper around spectrogram() to compute time-frequency **power** with given method
 
-    spec,freqs,timepts = power_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs)
-
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
-
-    smp_rate     Scalar. Data sampling rate (Hz)
-
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
-
-    method      String. Specific spectral analysis method to use:
-                'wavelet' :     Continuous Morlet wavelet analysis [default]
-                'multitaper' :  Multitaper spectral analysis
-                'bandfilter' :  Band-pass filtering and Hilbert transform
-
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrogram function. See there for details.
-
-    RETURNS
-    spec        (...,n_freqs,n_timepts,...) ndarray of floats.
-                Time-frequency power spectrogram computed with given method.
-                Frequency axis is always inserted just before time axis.
-                For 'multitaper' method, power is averaged across tapers.
-
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <spec>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
-
-    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec>
-                (in s, referenced to start of data).
+    See :func:`spectrogram` for details
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', **kwargs)
 
 
 def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', **kwargs):
     """
-    Convenience wrapper around spectrogram() to compute phase of time-frequency transform
-    of data with given method
+    Convenience wrapper around spectrogram() to compute **phase** of time-frequency transform
 
-    spec,freqs,timepts = phase_spectrogram(data,smp_rate,axis=0,method='wavelet',**kwargs)
-
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
-
-    smp_rate     Scalar. Data sampling rate (Hz)
-
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
-
-    method      String. Specific spectral analysis method to use:
-                'wavelet' :     Continuous Morlet wavelet analysis [default]
-                'multitaper' :  Multitaper spectral analysis
-                'bandfilter' :  Band-pass filtering and Hilbert transform
-
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrogram function. See there for details.
-
-    RETURNS
-    spec        (...,n_freqs,n_timepts,...) ndarray of floats.
-                Time-frequency power spectrogram computed with given method.
-                Frequency axis is always inserted just before time axis.
-                For 'multitaper' method, phase is averaged (circular mean)
-                across tapers.
-
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <spec>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <spec> (Hz).
-
-    timepts     (n_timepts,) ndarray. List of time points / time window centers in <spec>
-                (in s, referenced to start of data).
+    See :func:`spectrogram` for details
     """
     return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', **kwargs)
 
@@ -384,71 +322,62 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
                         keep_tapers=False, tapers=None, pad=True, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP) or point process (spike) data
-    
+
     Multitaper methods project the data onto orthogonal Slepian (DPSS) "taper" functions, which
     increases the data's effective signal-to-noise. It allows a principled tradeoff btwn time
-    resolution (data.shape[axis]), frequency resolution (freq_width), and the number of taper
-    functions (n_tapers), which determines the signal-to-noise increase (see ARGS for details).
-    
+    resolution (data.shape[axis]), frequency resolution (`freq_width`), and the number of taper
+    functions (`n_tapers`), which determines the signal-to-noise boost.
+
     Note: By default, data is zero-padded to the next power of 2 greater than its input length.
     This will change the frequency sampling (number of freqs and exact freqs sampled) from what
     would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
-    spec,freqs = multitaper_spectrum(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
-                                     freq_range=None,removeDC=True,freq_width=4,n_tapers=None,
-                                     keep_tapers=False,tapers=None,pad=True,**kwargs)
+    Only parameters differing from :func:`spectrum` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    Parameters
+    ----------
+    freq_range : array-like, shape=(2,) or scalar, default: all frequencies from FFT (0-smp_rate/2)
+        Range of frequencies to keep in output, either given as an explicit [low,high]
+        range or just a scalar giving the highest frequency to return.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    freq_width : scalar, default: 4 Hz
+        Frequency bandwidth 'W' (Hz).
 
-    axis        Int. Axis of data to perform spectral analysis on (usually time dim)
-                Default: 0
+    n_tapers : scalar, default: (2TW-1)
+        Number of tapers to compute. Must be <= 2TW-1, as this is the max number of
+        spectrally delimited tapers (and is set as default based on set T,W values).
+        Note: Time bandwidth 'T' is set to full length of data.
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    tapers : ndarray, shape=(n_win_samples,n_tapers), default: (computed from t/f_range,ntapers)
+        Precomputed tapers (as computed by :func:`compute_tapers`).
+        
+        Alternative method for explictly setting taper functions.
+        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.        
+        If tapers not explicitly input, we compute them from `time_width`/`freq_width`/`n_tapers`.
+        If tapers *are* explicitly input, `time_width`/`freq_width`/`n_tapers` are ignored.
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    keep_tapers : bool, default: False
+        If True, tapers axis is retained in output, between frequency axis and time `axis`.
+        If False, output is averaged over tapers, and taper axis is removed
 
-    freq_range  (2,) array-like | Scalar. Range of frequencies to keep in output,
-                either given as an explicit [low,high] range or just a scalar
-                giving the highest frequency to return.
-                Default: all frequencies from FFT, ranging from
-                0 Hz - Nyquist frequency (smp_rate/2)
+    pad : bool, default: True
+        If True, zero-pads data to next power of 2 length
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs,[n_tapers,]...), dtype=complex or float
+        Multitaper spectrum of given type of data. Sampling (time) axis is
+        replaced by frequency and taper axes (if `keep_tapers` is True), but
+        shape is otherwise preserved.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
-                Note: Time bandwidth 'T' is set to full length of data.
+    freqs : ndarray, dtype=(n_freqs,)
+        List of frequencies in `spec` (in Hz)
 
-    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
-                the max number of spectrally delimited tapers. Default: 2TW-1
-
-    tapers      (n_samples,n_tapers). Precomputed tapers (as computed by compute_tapers()).
-                Input either (freq_width, n_tapers) -or- tapers.
-                Default: computed from (time range, freq_width, n_tapers)
-
-    keep_tapers Bool. If True, retains all tapered versions of spectral data in output.
-                If False [default], returns the mean across tapers.
-
-    pad         Bool. If True [default], zero-pads data to next power of 2 length
-
-    RETURNS
-    spec        (...,n_freqs,[n_tapers,]...) ndarray of complex | float.
-                Multitaper spectrum of given type of data. Sampling (time) axis is
-                replaced by frequency and taper axes (if keep_tapers=True), but
-                shape is otherwise preserved.
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
-
-    REFERENCE   Mitra & Pesaran (1999) "Analysis of dynamic brain imaging data"
-                Jarvis & Mitra (2001) Neural Computation
-
-    SOURCE      Adapted from Chronux functions mtfftc.m, mtfftpb.m
+    References
+    ----------
+    Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
+    Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -540,78 +469,73 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                            n_tapers=None, spacing=None, tapers=None, keep_tapers=False,
                            pad=True, **kwargs):
     """
-    Computes multitaper time-frequency spectrogram for continuous (eg LFP)
+    Compute multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
 
     Multitaper methods project the data onto orthogonal Slepian (DPSS) "taper" functions, which
     increases the data's effective signal-to-noise. It allows a principled tradeoff btwn time
     resolution (data.shape[axis]), frequency resolution (freq_width), and the number of taper
-    functions (n_tapers), which determines the signal-to-noise increase (see ARGS for details).
-    
+    functions (n_tapers), which determines the signal-to-noise increase.
+
     Note: By default, data is zero-padded to the next power of 2 greater than its input length.
     This will change the frequency sampling (number of freqs and exact freqs sampled) from what
     would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
-    spec,freqs,timepts = multitaper_spectrogram(data,smp_rate,axis=0,data_type='lfp',
-                                                spec_type='complex',freq_range=None,removeDC=True,
-                                                time_width=0.5,freq_width=4,n_tapers=None,
-                                                spacing=None,tapers=None,pad=True,**kwargs)
+    Only parameters differing from :func:`spectrogram` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    Parameters
+    ----------
+    freq_range : array-like, shape=(2,) or scalar, default: all frequencies from FFT (0-smp_rate/2)
+        Range of frequencies to keep in output, either given as an explicit [low,high]
+        range or just a scalar giving the highest frequency to return.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    time_width : scalar, default: 0.5 (500 ms)
+        Time bandwidth 'T' (s). Width of sliding time window is set equal to this.
 
-    axis        Int. Axis of data to perform spectral analysis on (usually time dim)
-                Default: 0
+    freq_width : scalar, default: 4 Hz
+        Frequency bandwidth 'W' (Hz).
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    n_tapers : scalar, default: (2TW-1)
+        Number of tapers to compute. Must be <= 2TW-1, as this is the max number of
+        spectrally delimited tapers (and is set as default based on set T,W values).
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    spacing : scalar, default: `time_width` (so each window exactly non-overlapping)
+        Spacing between successive sliding time windows (s)
 
-    freq_range  (2,) array-like | Scalar. Range of frequencies to keep in output,
-                either given as an explicit [low,high] range or just a scalar
-                giving the highest frequency to return.
-                Default: all frequencies from FFT
+    tapers : ndarray, shape=(n_win_samples,n_tapers), default: (computed from t/f_range,ntapers)
+        Precomputed tapers (as computed by :func:`compute_tapers`).
+        
+        Alternative method for explicitly setting taper functions.
+        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.        
+        If tapers not explicitly input, we compute them from `time_width`/`freq_width`/`n_tapers`.
+        If tapers *are* explicitly input, `time_width`/`freq_width`/`n_tapers` are ignored.
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+    keep_tapers : bool, default: False
+        If True, tapers axis is retained in output, between frequency axis and time `axis`.
+        If False, output is averaged over tapers, and taper axis is removed
 
-    time_width  Scalar. Time bandwidth 'T' (s). Width of sliding time window is
-                set equal to this. Default: 0.5 (500 ms)
+    pad : bool, default: True
+        If True, zero-pads data to next power of 2 length
 
-    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs[,n_tapers],n_timewins,...), dtype=complex or float
+        Multitaper time-frequency spectrogram of data.
+        Sampling (time) axis is replaced by frequency, taper (if keep_tapers=True),
+        and time window axes but shape is otherwise preserved.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
-                the max number of spectrally delimited tapers. Default: 2TW-1
+    freqs : ndarray, shape=(n_freqs,)
+        List of frequencies in `spec` (in Hz)
 
-    spacing     Scalar. Spacing between successive sliding time windows (s).
-                Default: Set = window width (so each window exactly non-overlapping)
+    timepts : ndarray, shape=(n_timewins,...)
+        List of timepoints in `spec` (in s, referenced to start of data).
+        Timepoints here are centers of each time window.
 
-    tapers      (n_win_samples,n_tapers). Precomputed tapers (as computed by compute_tapers()).
-                Input either (time_width, freq_width, n_tapers) -or- tapers.
-                Default: computed from (time_width, freq_width, n_tapers)
-
-    pad         Bool. If True [default], zero-pads data to next power of 2 length
-
-    RETURNS
-    spec        (...,n_freqs[,n_tapers],n_timewins,...) ndarray of complex | float.
-                Multitaper time-frequency spectrogram of data.
-                Sampling (time) axis is replaced by frequency, taper (if keep_tapers=True),
-                and time window axes but shape is otherwise preserved.
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
-
-    timepts     (n_timewins,...) ndarray. List of timepoints in <spec> (in s, referenced
-                to start of data). Timepoints here are centers of each time window.
-
-    REFERENCE   Mitra & Pesaran (1999) "Analysis of dynamic brain imaging data"
-                Jarvis & Mitra (2001) Neural Computation
-
-    SOURCE      Adapted from Chronux function mtfftc.m
+    References
+    ----------
+    Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
+    Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -660,29 +584,30 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
 def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     """
-    Computes Discrete Prolate Spheroidal Sequence (DPSS) tapers for use in
+    Compute Discrete Prolate Spheroidal Sequence (DPSS) tapers for use in
     multitaper spectral analysis.
 
     Uses scipy.signal.windows.dpss, but arguments are different here
 
-    tapers = compute_tapers(smp_rate,time_width=0.5,freq_width=4,n_tapers=None)
+    Parameters
+    ----------
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    ARGS
-    smp_rate    Scalar. Data sampling rate (Hz)
+    time_width : scalar, default: 0.5 (500 ms)
+        Time bandwidth 'T' (s). Should match data window length.
 
-    time_width  Scalar. Time bandwidth 'T' (s). Should match data window length.
-                Default: 0.5 (500 ms)
+    freq_width : scalar, default: 4 Hz
+        Frequency bandwidth 'W' (Hz)
 
-    freq_width  Scalar. Frequency bandwidth 'W' (Hz). Default: 4 Hz
+    n_tapers : scalar, default: (2TW-1)
+        Number of tapers to compute. Must be <= 2TW-1, as this is
+        the max number of spectrally delimited tapers.
 
-    n_tapers    Scalar. Number of tapers to compute. Must be <= 2TW-1, as this is
-                the max number of spectrally delimited tapers. Default: 2TW-1
-
-    RETURNS
-    tapers      (n_samples,n_tapers) ndarray. Computed dpss taper functions
-                (n_samples = T*smp_rate)
-
-    SOURCE  Adapted from Cronux function dpsschk.m
+    Returns
+    -------
+    tapers : ndarray, shape=(n_samples,n_tapers)
+        Computed dpss taper functions (n_samples = T*smp_rate)
     """
     # Time-frequency bandwidth product 'TW' (s*Hz)
     time_freq_prod  = time_width*freq_width
@@ -714,55 +639,39 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
                      freqs=2**np.arange(1,7.5,0.25), removeDC=True,
                      wavelet='morlet', wavenumber=6, pad=False, buffer=0, **kwargs):
     """
-    Computes continuous wavelet transform of data, then averages across timepoints to
+    Compute continuous wavelet transform of data, then averages across timepoints to
     reduce it down to a frequency spectrum.
 
     Not really the best way to compute 1D frequency spectra, but included for completeness
 
-    spec,freqs,timepts = wavelet_spectrum(data,smp_rate,axis=0,data_type='lfp', spec_type='complex',
-                                          freqs=2**np.arange(1,7.5,0.25),removeDC=True,
-                                          wavelet='morlet',wavenumber=6,
-                                          pad=True,buffer=0, **kwargs)
+    Only parameters differing from :func:`spectrum` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqs,), default: 2**np.irange(1,7.5,0.25)
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        in 1/4 octaves, but log sampling is not required.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    wavelet : {'morlet'}, default: 'morlet'
+        Name of wavelet type. Currently only 'morlet' is supported.
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    wavenumber : int, default: 6
+        Wavelet wave number parameter ~ number of oscillations in each wavelet.
+        Must be >= 6 to meet "admissibility constraint".
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    buffer : float, default: 0 (no buffer)
+        Time (s) to trim off each end of time dimension of data.
+        Removes symmetric buffer previously added (outside of here) to prevent edge effects.
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs,...), dtype=complex or float.
+        Wavelet-derived spectrum of data.
+        Same shape as data, with frequency axis replacing time axis
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
-                Default: 2**np.irange(1,7.5,0.25) (log sampled in 1/4 octaves from 2-128)
-
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
-
-    wavelet     String. Name of wavelet type. Default: 'morlet'
-
-    wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
-                in each wavelet. Must be >= 6 to meet "admissibility constraint".
-                Default: 6
-
-    pad         Bool. If True, zero-pads data to next power of 2 length. Default: False
-
-    buffer      Float. Time (s) to trim off each end of time dimension of data.
-                Removes symmetric buffer previously added (outside of here) to prevent
-                edge effects. Default: 0 (no buffer)
-
-    RETURNS
-    spec        (...,n_freqs,...) ndarray of complex | float.
-                Wavelet-derived spectrum of data.
-                Same shape as data, with frequency axis replacing time axis
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
+    freqs, ndarray, shape=(n_freqs,)
+        List of frequencies in `spec` (in Hz)
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -779,62 +688,48 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
                         freqs=2**np.arange(1,7.5,0.25), removeDC=True,
                         wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1, **kwargs):
     """
-    Computes continuous time-frequency wavelet transform of data at given frequencies.
+    Compute continuous time-frequency wavelet transform of data at given frequencies.
 
-    spec,freqs,timepts = wavelet_spectrogram(data,smp_rate,axis=0,data_type='lfp',
-                                             spec_type='complex',freqs=2**np.arange(1,7.5,0.25),
-                                             removeDC=True,wavelet='morlet',wavenumber=6,
-                                             pad=True,buffer=0,downsmp=1, **kwargs)
+    Only parameters differing from :func:`spectrogram` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqs,), default: 2**np.irange(1,7.5,0.25)
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        in 1/4 octaves, but log sampling is not required.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    wavelet : {'morlet'}, default: 'morlet'
+        Name of wavelet type. Currently only 'morlet' is supported.
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    wavenumber : int, default: 6
+        Wavelet wave number parameter ~ number of oscillations in each wavelet.
+        Must be >= 6 to meet "admissibility constraint".
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    buffer : float, default: 0 (no buffer)
+        Time (s) to trim off each end of time dimension of data.
+        Removes symmetric buffer previously added (outside of here) to prevent edge effects.
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    downsmp: int, default: 1 (no downsampling)
+        Factor to downsample time sampling by (after spectral analysis).
+        eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
 
-    freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
-                Default: 2**np.irange(1,7.5,0.25) (log sampled in 1/4 octaves from 2-128)
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqs,n_timepts_out,...), dtype=complex or float.
+        Wavelet time-frequency spectrogram of data, transformed to requested spectral type.
+        Same shape as data, with frequency axis prepended before time, and time axis
+        possibly reduces via downsampling.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+    freqs : ndarray, shape=(n_freqs,) ndarray
+        List of frequencies in `spec` (in Hz)
 
-    wavelet     String. Name of wavelet type. Default: 'morlet'
+    timepts : ndarray, shape=(n_timepts_out,)
+        List of timepoints in `spec` (in s, referenced to start of data).
 
-    wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
-                in each wavelet. Must be >= 6 to meet "admissibility constraint".
-                Default: 6
-
-    pad         Bool. If True, zero-pads data to next power of 2 length. Default: False
-
-    buffer      Float. Time (s) to trim off each end of time dimension of data.
-                Removes symmetric buffer previously added (outside of here) to prevent
-                edge effects. Default: 0 (no buffer)
-
-    downsmp     Int. Factor to downsample time sampling by (after spectral analysis).
-                eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
-                Default: 1 (no downsampling)
-
-    RETURNS
-    spec        (...,n_freqs,n_timepts_out,...) ndarray of complex | float.
-                Wavelet time-frequency spectrogram of data, transformed to requested spectral type.
-                Same shape as data, with frequency axis prepended before time, and time axis
-                possibly reduces via downsampling.
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqs,) ndarray. List of frequencies in <spec> (in Hz)
-
-    timepts     (n_timepts_out,) ndarray. List of timepoints in <spec> (in s, referenced
-                to start of data).
-
-    REFERENCE   Torrence & Compo (1998) "A Practical Guide to Wavelet Analysis"
+    References
+    ----------
+    Torrence & Compo 1998 https://doi.org/10.1175/1520-0477(1998)079%3C0061:APGTWA%3E2.0.CO;2
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -897,38 +792,40 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 def compute_wavelets(n, smp_rate, freqs=2**np.arange(1,7.5,0.25),
                      wavelet='morlet', wavenumber=6, do_fft=False):
     """
-    Computes set of (Fourier transformed) wavelets for use in wavelet spectral analysis
+    Compute set of (Fourier transformed) wavelets for use in wavelet spectral analysis
 
-    wavelets = compute_wavelets(n,smp_rate,freqs=2**np.arange(1,7.5,0.25),
-                                 wavelet='morlet',wavenumber=6,do_fft=False)
+    Parameters
+    ----------
+    n : int
+        Total number of samples (time points) in analysis, including any padding.
 
-    ARGS
-    n           Int. Total number of samples (time points) in analysis,
-                including any padding.
+    smp_rate scalar
+        Data sampling rate (Hz)
 
-    smp_rate     Scalar. Data sampling rate (Hz)
+    freqs : array-like, shape=(n_freqs,), default: 2**np.irange(1,7.5,0.25)
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        in 1/4 octaves, but log sampling is not required.
 
-    freqs       (n_freqs,) array-like. Set of desired wavelet frequencies
-                Default: 2**np.irange(1,7.5,0.25) (log sampled in 1/4 octaves from 2-128)
+    wavelet : {'morlet'}, default: 'morlet'
+        Name of wavelet type. Currently only 'morlet' is supported.
 
-    wavelet     String. Name of wavelet type. Default: 'morlet'
-                Currently 'morlet' is only supported value.
+    wavenumber : int, default: 6
+        Wavelet wave number parameter ~ number of oscillations in each wavelet.
+        Must be >= 6 to meet "admissibility constraint".
 
-    wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
-                in each wavelet. For Morlet, must be >= 6 to meet "admissibility constraint".
-                Default: 6
+    do_fft: bool, default: False
+        If True, returns Fourier transform of wavelet functions.
+        If False, returns original time-domain functions.
 
-    do_fft      Bool. If True, returns Fourier transform of wavelet functions;
-                If False [default], returns original time-domain functions
+    Returns
+    -------
+    wavelets : ndarray, shape=(n_freqs,n_timepts)
+        Computed set of wavelet functions at multiple frequencies/scales.
+        (either the time domain wavelets or theirFourier transform, depending on `do_fft`)
 
-    RETURNS
-    wavelets    (n_freqs,n_timepts). Computed set of wavelet functions at multiple
-                frequencies/scales. (either the time domain wavelets or their
-                Fourier transform, depending on <do_fft> argument)
-
-    REFERENCE   Torrence & Compo (1998) "A Practical Guide to Wavelet Analysis"
-
-    SOURCE      Adapted from Torrence & Compo's Matlab wavelet toolbox
+    References
+    ----------
+    Torrence & Compo 1998 https://doi.org/10.1175/1520-0477(1998)079%3C0061:APGTWA%3E2.0.CO;2
     """
     freqs   = np.asarray(freqs)
     wavelet = wavelet.lower()
@@ -970,26 +867,29 @@ def compute_wavelets(n, smp_rate, freqs=2**np.arange(1,7.5,0.25),
 
 def wavelet_bandwidth(freqs, wavelet='morlet', wavenumber=6, full=True):
     """
-    Returns frequency and time bandwidths for set of wavelets at given frequencies
+    Return frequency and time bandwidths for set of wavelets at given frequencies
 
-    freq_widths,time_widths = wavelet_bandwidth(freqs,wavelet='morlet',wavenumber=6,full=True)
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqs,)
+        Set of wavelet center frequencies.
 
-    ARGS
-    freqs       (n_freqs,) array-like. Set of center wavelet frequencies.
+    wavelet : {'morlet'}, default: 'morlet'
+        Name of wavelet type. Currently only 'morlet' is supported.
 
-    wavelet     String. Name of wavelet type. Default: 'morlet'
-                Currently 'morlet' is only supported value.
+    wavenumber : int, default: 6
+        Wavelet wave number parameter ~ number of oscillations in each wavelet.
 
-    wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
-                Default: 6
+    full : bool, default: True
+        If True, return full-bandwidths. If False, return half-bandwidths.
 
-    full        Bool. If True [default], returns full-bandwidths.
-                If False, returns full bandwidths.
+    Returns
+    -------
+    freq_widths : ndarray, shape=(n_freqs,)
+        Frequency bandwidth (Hz) for each given frequency
 
-    RETURNS
-    freq_widths (n_freqs,) ndarray. Frequency bandwidth (Hz) for each given frequency
-
-    time_widths (n_freqs,) ndarray. Time bandwidth (s) for each given frequency
+    time_widths : ndarray, shape=(n_freqs,)
+        Time bandwidth (s) for each given frequency
     """
     wavelet = wavelet.lower()
     freqs = np.asarray(freqs)
@@ -1012,32 +912,33 @@ def wavelet_bandwidth(freqs, wavelet='morlet', wavenumber=6, full=True):
 
 def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
     """
-    Returns temporal extent of edge effects for set of wavelets at given frequencies
+    Return temporal extent of edge effects for set of wavelets at given frequencies
 
-    Computes time period over which edge effects might effect output of wavelet transform,
+    Compute time period over which edge effects might effect output of wavelet transform,
     and over which the effects of a single spike-like artifact in data will extend.
 
     Computed as time for wavelet power to drop by a factor of exp(−2), ensuring that
     edge effects are "negligible" beyond this point.
 
-    edge_extent = wavelet_edge_extent(freqs,wavelet='morlet',wavenumber=6)
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqs,)
+        Set of wavelet center frequencies
 
-    ARGS
-    freqs       (n_freqs,) array-like. Set of center wavelet frequencies.
+    wavelet : {'morlet'}, default: 'morlet'
+        Name of wavelet type. Currently only 'morlet' is supported.
 
-    wavelet     String. Name of wavelet type. Default: 'morlet'
-                Currently 'morlet' is only supported value.
+    wavenumber : int, default: 6
+        Wavelet wave number parameter ~ number of oscillations in each wavelet.
 
-    wavenumber  Int. Wavelet wave number parameter ~ number of oscillations
-                Default: 6
+    Returns
+    -------
+    edge_extent : ndarray, shape=(n_freqs,)
+        Time period (s) over which edge effects extend for each given frequency
 
-    RETURNS
-    edge_extent (n_freqs,) ndarray. Time period (s) over which edge effects
-                extend for each given frequency
-
-    REFERENCE   Torrence & Compo (1998) "A Practical Guide to Wavelet Analysis" Sxn.3g
-
-    SOURCE      Adapted from Torrence & Compo's Matlab wavelet toolbox
+    References
+    ----------
+    Torrence & Compo https://doi.org/10.1175/1520-0477(1998)079%3C0061:APGTWA%3E2.0.CO;2 Sxn.3g
     """
     wavelet = wavelet.lower()
     freqs = np.asarray(freqs)
@@ -1062,75 +963,73 @@ def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
 # =============================================================================
 def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freqs=((2,8),(10,32),(40,100)), removeDC=True,
-                        filt='butter', params=None, buffer=0, **kwargs):
+                        filt='butter', order=4, params=None, buffer=0, **kwargs):
     """
     Computes band-filtered and Hilbert-transformed signal from data
     for given frequency band(s), then reduces it to 1D frequency spectra by averaging across time.
 
-    Not really the best way to compute 1D frequency spectra, but included for completeness
+    Not really the best way to compute 1D frequency spectra, but included for completeness.
 
-    spec,freqs,timepts = bandfilter_spectrum(data,smp_rate,axis=0,data_type='lfp',
-                                             spec_type='complex',freqs=((2,8),(10,32),(40,100)),
-                                             filt='butter',params=None,buffer=0,**kwargs)
+    Only parameters differing from :func:`spectrum` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    NOTE: Can specify filter implictly using (`freqs`,`filt`,`order`) OR explicitly using `params`.
+          If `params` is input, `freqs`, `filt`, and `order` are ignored.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqbands,2), default: ((2,8),(10,32),(40,100))
+        List of (low,high) cut frequencies for each band to use.
+        Set low cut = 0 for low-pass, set high cut >= smp_rate/2 for high-pass,
+        otherwise assumes band-pass. Default samples ~ theta, alpha/beta, gamma.
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    filt : str, default: 'butter' (Butterworth)
+        Name of filter to use. See :func:`set_filter_params` for all options
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    order : int, default: 4
+        Filter order
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    params : dict
+        Parameters that explicitly define filter for each freq band.
+        
+        Alternative method for explicitly setting parameters defining freq band filters,
+        which are precomputed with :func:`set_filter_params` (or elsewhere).
+        Input either `freqs`/`filt`/`order` OR params.
+        If params are not explicitly input, we compute them from `freqs`/`filt`/`order`.
+        If params *are* explicitly input, `freqs`/`filt`/`order` are ignored.
+        
+        One of two forms: 'ba' or 'zpk', with key/values as follows:
 
-    freqs       (n_freqbands,) array-like of (2,) sequences | (n_freqbands,2) ndarray.
-                List of (low,high) cut frequencies for each band to use.
-                Set 1st value = 0 for low-pass; set 2nd value >= smp_rate/2 for
-                high-pass; otherwise assumes band-pass.
-                Default: ((2,8),(10,32),(40,100)) (~theta, alpha/beta, gamma)
-                ** Only used if filter <params> not explicitly given **
+        - b,a : array-like, shape=(n_freqbands,) of array-like (n_params[band,])
+            Numerator `b` and denominator `a` polynomials of the filter for each band
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+        - z,p,k :
+            Zeros, poles, and system gain of the IIR filter transfer function        
 
-    filt        String. Name of filter to use. Default: 'butter' (Butterworth)
-                ** Only used if filter <params> not explitly given **
+    buffer : float, default: 0 (no buffer)
+        Time (s) to trim off each end of time dimension of data.
+        Removes symmetric buffer previously added (outside of here) to prevent
+        edge effects.
 
-    params      Dict. Contains parameters that define filter for each freq band.
-                Can precompute params with set_filter_params() and input explicitly
-                OR input values for <freqs> and params will be computed here.
-                One of two forms: 'ba' or 'zpk', with key/values as follows:
+    **kwargs :
+        Any other kwargs passed directly to :func:`set_filter_params`
 
-        b,a     (n_freqbands,) lists of vectors. Numerator <b> and
-                denominator <a> polynomials of the filter for each band.
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqbands,...), dtype=complex or floats
+        Band-filtered, (optionally) Hilbert-transformed data, transformed to requested spectral
+        type, and averaged across the time axis to 1D frequency spectra.
+        Same shape as input data, but with frequency axis replacing time axis.
+        dtype is complex if `spec_type` is 'complex', float otherwise.
 
-        z,p,k   Zeros, poles, and system gain of the IIR filter transfer function
-
-    buffer      Float. Time (s) to trim off each end of time dimension of data.
-                Removes symmetric buffer previously added (outside of here) to prevent
-                edge effects. Default: 0 (no buffer)
-
-    **kwargs    Any other kwargs passed directly to set_filter_params()
-
-    RETURNS
-    spec        (...,n_freqbands,...) ndarray of complex floats.
-                Band-filtered, Hilbert-transformed data, transformed to requested spectral
-                type and averaged across the time axis to 1D frequency spectra.
-                Same shape as input data, but with frequency axis replacing time axis.
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqbands,2) ndarray. List of (low,high) cut frequencies (Hz)
-                for each band used.
+    freqs : ndarray, shape=(n_freqbands,2)
+        List of (low,high) cut frequencies (Hz) for each band used
     """
     if axis < 0: axis = data.ndim + axis
 
     spec, freqs, _ = bandfilter_spectrogram(data, smp_rate, axis=axis, data_type=data_type,
                                             spec_type=spec_type, freqs=freqs, removeDC=removeDC,
-                                            filt=filt, params=params, buffer=buffer, **kwargs)
+                                            filt=filt, order=order, params=params, buffer=buffer,
+                                            **kwargs)
 
     # Take mean across time axis (which is now shifted +1 b/c of frequency axis)
     return spec.mean(axis=axis+1), freqs
@@ -1143,79 +1042,64 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     Computes zero-phase band-filtered and Hilbert-transformed signal from data
     for given frequency band(s).
 
-    Function aliased as bandfilter_spectrogram() or bandfilter().
+    Function aliased as bandfilter().
 
-    spec,freqs,timepts = bandfilter_spectrogram(data,smp_rate,axis=0,data_type='lfp',
-                                                spec_type='complex',freqs=((2,8),(10,32),(40,100)),
-                                                filt='butter', order=4, params=None,
-                                                buffer=0 ,downsmp=1, **kwargs)
+    Only parameters differing from :func:`spectrogram` are described here.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    NOTE: Can specify filter implictly using (`freqs`,`filt`,`order`) OR explicitly using `params`.
+          If `params` is input, `freqs`, `filt`, and `order` are ignored.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqbands,2), default: ((2,8),(10,32),(40,100))
+        List of (low,high) cut frequencies for each band to use.
+        Set low cut = 0 for low-pass, set high cut >= smp_rate/2 for high-pass,
+        otherwise assumes band-pass. Default samples ~ theta, alpha/beta, gamma.
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    filt : str, default: 'butter' (Butterworth)
+        Name of filter to use. See :func:`set_filter_params` for all options
 
-    data_type   String. Type of signal in data: 'lfp' [default] or 'spike'
+    order : int, default: 4
+        Filter order
 
-    spec_type   String. Type of spectral signal to return: 'complex' [default] |
-                'power' | 'phase' | 'real' | 'imag'. See complex_to_spec_type for details.
+    params : dict, default: (computed from `freqs`/`filt`/`order`)
+        Parameters that explicitly define filter for each freq band.
+        
+        Alternative method for explicitly setting parameters defining freq band filters,
+        which are precomputed with :func:`set_filter_params` (or elsewhere).
+        Input either `freqs`/`filt`/`order` OR params.
+        If params are not explicitly input, we compute them from `freqs`/`filt`/`order`.
+        If params *are* explicitly input, `freqs`/`filt`/`order` are ignored.
+        
+        One of two forms: 'ba' or 'zpk', with key/values as follows:
 
-    freqs       (n_freqbands,) array-like of (2,) sequences | (n_freqbands,2) ndarray.
-                List of (low,high) cut frequencies for each band to use.
-                Set 1st value = 0 for low-pass; set 2nd value >= smp_rate/2 for
-                high-pass; otherwise assumes band-pass.
-                Default: ((2,8),(10,32),(40,100)) (~theta, alpha/beta, gamma)
-                ** Only used if filter <params> not explicitly given **
+        - b,a : array-like, shape=(n_freqbands,) of array-like (n_params[band,])
+            Numerator `b` and denominator `a` polynomials of the filter for each band
 
-    removeDC    Bool. If True, removes mean DC component across time axis,
-                making signals zero-mean for spectral analysis. Default: True
+        - z,p,k :
+            Zeros, poles, and system gain of the IIR filter transfer function        
 
-    filt        String. Name of filter to use. Default: 'butter' (Butterworth)
-                Ignored if filter <params> explitly given.
+    buffer : float, default: 0 (no buffer)
+        Time (s) to trim off each end of time dimension of data.
+        Removes symmetric buffer previously added (outside of here) to prevent
+        edge effects.
 
-    order       Int. Filter order. Default: 4
-                Ignored if filter <params> explitly given.
+    **kwargs :
+        Any other kwargs passed directly to :func:`set_filter_params`
 
-    NOTE: Can specify filter implictly using <filt,order> OR explicitly using <params>.
-          If <params> is input, filt and order are ignored.
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_freqbands,n_timepts_out,...), dtype=complex or float.
+        Band-filtered, (optionally) Hilbert-transformed "spectrogram" of data,
+        transformed to requested spectral type.
+        Same shape as input data, but with frequency axis prepended immediately
+        before time `axis`. dtype is complex if `spec_type` is 'complex', float otherwise.
 
-    params      Dict. Contains parameters that define filter for each freq band.
-                Can precompute params with set_filter_params() and input explicitly
-                OR input values for <freqs> and params will be computed here.
-                One of two forms: 'ba' or 'zpk', with key/values as follows:
+    freqs : ndarray, shape=(n_freqbands,2)
+        List of (low,high) cut frequencies (Hz) for each band used in `spec`.
 
-        b,a     (n_freqbands,) lists of vectors. Numerator <b> and
-                denominator <a> polynomials of the filter for each band.
-
-        z,p,k   Zeros, poles, and system gain of the IIR filter transfer function
-
-    buffer      Float. Time (s) to trim off each end of time dimension of data.
-                Removes symmetric buffer previously added (outside of here) to prevent
-                edge effects. Default: 0 (no buffer)
-
-    downsmp     Int. Factor to downsample time sampling by (after spectral analysis).
-                eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
-                Default: 1 (no downsampling)
-
-    **kwargs    Any other kwargs passed directly to set_filter_params()
-
-    RETURNS
-    spec        (...,n_freqbands,n_timepts_out,...) ndarray of complex | float.
-                Band-filtered, Hilbert-transformed "spectrogram" of data, transformed to
-                requested spectral type.
-                Same shape as input data, but with frequency axis prepended immediately
-                before time <axis>.
-                dtype is complex if spec_type='complex', float otherwise.
-
-    freqs       (n_freqbands,2) ndarray. List of (low,high) cut frequencies (Hz)
-                for each band used.
-
-    timepts     (n_timepts_out,) ndarray. List of timepoints in <spec> (in s, referenced
-                to start of data).
+    timepts : ndarray, shape=(n_timepts_out,)
+        List of timepoints in `spec` (in s, referenced to start of data).
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -1300,7 +1184,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     return spec, freqs, timepts
 
-bandfilter = bandfilter_spectrogram  # Alias function as bandfilter()
+bandfilter = bandfilter_spectrogram
+""" Alias of :func:`bandfilter_spectrogram`. See there for details. """
 
 
 def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
@@ -1309,43 +1194,53 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
     Sets coefficients for desired filter(s) using scipy.signal
     "Matlab-style IIR filter design" functions
 
-    params = set_filter_params(bands,smp_rate,filt='butter',order=4,form='ba',
-                               return_dict=True,**kwargs)
-    b,a = set_filter_params(bands,smp_rate,filt='butter',order=4,form='ba',
-                            return_dict=False,**kwargs)
-    z,p,k = set_filter_params(bands,smp_rate,filt='butter',order=4,form='zpk',
-                              return_dict=False,**kwargs)
-
-    ARGS
-    bands       (n_freqbands,) array-like of (2,) sequences | (n_freqbands,2) ndarray.
-                [low,high] cut frequencies for each band to use.
-                Set 1st value = 0 for low-pass; set 2nd value >= smp_rate/2 for
-                high-pass; otherwise assumes band-pass.
-
-    smp_rate    Scalar. Data sampling rate (Hz)
-
-    filt        String. Name of filter to use: 'butter'|'ellip'|'cheby1'|'cheby2'
-                Default: 'butter'
-
-    order       Int. Filter order. Default: 4
-
-    form        String. Type of parameters output. 'ba': numerator/denominator
-                b,a or 'zpk': pole-zero z, p, k. Default: ‘ba’.
-
-    return_dict Bool. If True, params returned in a dict; else as a tuple.
-
-    Any additional kwargs passed directly to filter function
-
-    RETURNS
-    If return_dict is False, outputs are returned as a tuple, as described below;
+    NOTE: If return_dict is False, outputs are returned as a tuple, as described below;
     else, outputs are packaged in a single dict, with param names as keys.
 
-    b,a         (n_freqbands,) list of vectors. Numerator <b> and
-                denominator <a> polynomials of the filter for each band.
-                Returned if form='ba'.
+    Parameters
+    ----------
+    bands : array-like, shape=(n_freqbands,2)
+        List of (low,high) cut frequencies for each band to use.
+        Set low cut = 0 for low-pass, set high cut >= smp_rate/2 for high-pass,
+        otherwise assumes band-pass
 
-    z,p,k       Zeros, poles, and system gain of the IIR filter transfer
-                function. Returned if form='zpk'.
+    smp_rate : scalar
+        Data sampling rate (Hz)
+
+    filt : str, default: 'butter' (Butterworth)
+        Name of filter to use. See :func:`set_filter_params` for all options
+
+    order : int, default: 4
+        Filter order
+
+    form : {'ba','zpk'}, default: ‘ba’
+        Type of parameters to output:
+        - 'ba': numerator(b), denominator (a)
+        - 'zpk': Zeros (z), poles (p), and system gain (k) of the IIR filter transfer function
+
+    return_dict : bool, default: False
+        If True, params returned in a dict; else as standard series (tuple) of output variables
+
+    **kwargs :
+        Any additional kwargs passed directly to filter function
+
+    Returns
+    -------
+    b,a : list, shape=(n_freqbands,) of list, shape=(n_params[band,])
+        Numerator `b` and denominator `a` polynomials of the filter for each band.
+        Returned if `form` == 'ba'.
+
+    z,p,k : list, shape=(n_freqbands,) of list, shape=(n_params[band,])
+        Zeros, poles, and system gain of IIR transfer function.
+        Returned if `form` == 'zpk'.
+
+    Examples
+    --------
+    params = set_filter_params(bands, smp_rate, form='ba', return_dict=True)
+
+    b,a = set_filter_params(bands, smp_rate, form='ba', return_dict=False)
+
+    z,p,k = set_filter_params(bands, smp_rate, form='zpk', return_dict=False)
     """
     # Convert bands to (n_freqbands,2)
     bands       = np.asarray(bands)
@@ -1409,52 +1304,62 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
     Intertrial phase clustering (ITPC) measures frequency-specific phase locking of continuous
     neural activity (eg LFPs) to trial events. A spectral analog (roughly) of evoked potentials.
 
+    Complex time-frequency representation is first computed (using some method), then the
+    complex vector mean is computed across trials, and it's magnitude is returned as ITPC.
+
     aka "intertrial coherence", "intertrial phase-locking value/factor"
 
-    ARGS
-    data        (...,n_timepts,...,n_trials,...) ndarray. Data to compute ITPC of,
-                aligned to some within-trial event.
-                Arbitrary shape; spectral analysis is computed along <axis>,
-                and ITPC is computed along <trial_axis>.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_timepts,...,n_trials,...)
+        Data to compute ITPC of, aligned to some within-trial event.
+        Arbitrary shape; spectral analysis is computed along `axis` (usually time),
+        and ITPC is computed along `trial_axis`.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    axis : int, default: 0 (1st axis)
+        Axis of `data` to do spectral analysis on (usually time dimension).
 
-    method      String. Specific spectral analysis method to use:
-                'wavelet' :     Continuous Morlet wavelet analysis [default]
-                'multitaper' :  Multitaper spectral analysis
-                'bandfilter' :  Band-pass filtering and Hilbert transform
-                'burst' :       Oscillatory burst analysis
+    method : {'multitaper','wavelet','bandfilter'}, default: 'wavelet'
+        Specific underlying spectral analysis method to use:
 
-    itpc_method String. Method to use for computing intertrial phase clustering:
-                'PLV' : Phase locking value (length of cross-trial complex vector mean)
-                        Standard/traditional measure of ITPC, but is positively biased
-                        for small n, and is biased > 0 even for no phase clustering.
-                'Z' :   Rayleigh's Z normalization of PLV (Z = n*PLV**2). Reduces small-n bias.
-                'PPC' : Pairwise Phase Consistency normalization (PPC = (n*PLV**2 - 1)/(n - 1))
-                        of PLV. Debiased and has expected value 0 for no clustering.
-                Default: 'PLV'
+        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
 
-    **kwargs    All other kwargs passed directly to method-specific
-                spectrogram function. See there for details.
+    itpc_method : {'PLV','Z','PPC'}, default: 'PLV'
+        Method to use for computing intertrial phase clustering:
 
-    RETURNS
-    ITPC        (...,n_freqs,n_timepts,...) ndarray.
-                Time-frequency spectrogram representation of intertrial phase clustering.
-                Frequency axis is always inserted just before time axis, and trial axis is
-                removed, but otherwise shape is same as input data
+        - 'PLV' : Phase locking value (length of cross-trial complex vector mean)
+            Standard/traditional measure of ITPC, but is positively biased
+            for small n, and is biased > 0 even for no phase clustering.
+        - 'Z' :   Rayleigh's Z normalization of PLV (Z = n*PLV**2). Reduces small-n bias.
+        - 'PPC' : Pairwise Phase Consistency normalization (PPC = (n*PLV**2 - 1)/(n - 1))
+            of PLV. Debiased and has expected value 0 for no clustering.
 
-    freqs       For method='bandfilter': (n_freqbands,2) ndarray. List of (low,high) cut
-                frequencies (Hz) used to generate <ITPC>.
-                For other methods: (n_freqs,) ndarray. List of frequencies in <ITPC> (Hz).
+    **kwargs :
+        All other kwargs passed directly to method-specific spectrogram function
 
-    timepts     (n_timepts,) ndarray. List of time points / time window centers in <ITPC>
-                (in s, referenced to start of data).
+    Returns
+    -------
+    ITPC : ndarray, shape=(...,n_freqs,n_timepts,...)
+        Time-frequency spectrogram representation of intertrial phase clustering.
+        Frequency axis is always inserted just before time axis, and trial axis is
+        removed, but otherwise shape is same as input `data`.
 
-    REFERENCE
-    Cohen _Analyzing Neural Time Series Data_ Ch. 19
+    freqs : ndarray, shape=(n_freqs,) or (n_freqbands,2)
+        For `method` == 'bandfilter': List of (low,high) cut frequencies (Hz) used to
+        generate `ITPC`, shape=(n_freqbands,2)
+        For other methods: List of frequencies in `spec` (Hz), shape=(n_freqs,)
+
+    timepts : ndarray, shape=(n_timepts,)
+        List of time points / time window centers in `ITPC` (in s, referenced to start of data)
+
+    References
+    ----------
+    Cohen "Analyzing Neural Time Series Data" http://dx.doi.org/10.7551/mitpress/9609.001.0001 Ch. 19
     """
     method = method.lower()
     itpc_method = itpc_method.lower()
@@ -1500,8 +1405,8 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
 
     return ITPC, freqs, timepts
 
-# Also alias itpc as intertrial_phase_clustering
 intertrial_phase_clustering = itpc
+""" Alias of :func:`itpc`. See there for details. """
 
 
 def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycles=3,
@@ -1509,87 +1414,95 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
                    bands=((20,35),(40,65),(55,90),(70,100)),
                    window=None, timepts=None, **kwargs):
     """
-    Computes oscillatory burst analysis of Lundqvist et al 2016.
-    Default argument values approximate analysis as implemented in there.
+    Oscillatory burst analysis of Lundqvist et al 2016.
 
-    Computes oscillatory power
-    To compute burst rate, simply take mean across trial axis.
+    Computes oscillatory power, z-scores within each frequency band, thresholds at given
+    z `threshold`, labels as burst "ON" times timepoints > `threshold` for at least
+    `min_cycles` duration.
 
+    To compute burst rate, simply take mean of computed `bursts` across trial axis.
 
-    bursts,freqs,timepts = burst_analysis(data, smp_rate, axis=0, trial_axis=-1,
-                                          threshold=2, min_cycles=3,
-                                          method='wavelet', spec_type='power', freq_exp=None,
-                                          bands=((20,35),(40,65),(55,90),(70,100)),
-                                          window=None, timepts=None,
-                                          **kwargs)
+    Default argument values approximate analysis as implemented in Lundqvist 2016.
 
-    ARGS
-    data        (...,n_samples,...) ndarray. Data to compute spectral analysis of.
-                Arbitrary shape; spectral analysis is computed along axis <axis>.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_samples,...)
+        Data to compute spectral analysis of.
+        Arbitrary shape; spectral analysis is computed along `axis`.
 
-    smp_rate    Scalar. Data sampling rate (Hz)
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    axis        Int. Axis of <data> to do spectral analysis on
-                (usually time dimension). Default: 0
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    trial_axis  Int. Axis of <data> corresponding to trials/observations.
-                Default: -1 (last axis of data)
+    axis : int, default: 0 (1st axis)
+        Axis of `data` to do spectral analysis on (usually time dimension).
 
-    threshold   Scalar. Threshold power level for detecting bursts, given in SDs above the mean.
-                Default: 2 SDs
+    trial_axis : int, default: -1 (last axis of `data`)
+        Axis of `data` corresponding to trials/observations.
 
-    min_cycles  Scalar. Minimal length of contiguous above-threshold period to be counted as a
-                burst, given in number of oscillatory cycles at each frequency (or band center).
-                Default: 3
+    threshold : scalar, default: 2 (2 SDs above mean)
+        Threshold power level for detecting bursts, given in SDs above the mean
 
-    method      String. Underlying time-frequency spectral analysis method to use,
-                which burst analysis is computed on.
-                'wavelet' :     Continuous Morlet wavelet analysis [default]
-                'multitaper' :  Multitaper spectral analysis
-                'bandfilter' :  Band-pass filtering and Hilbert transform
-                Note: In the original paper, multitaper was used, but all three
-                methods were claimed to produced similar results.
+    min_cycles : scalar, default: 3
+        Minimal length of contiguous above-threshold period to be counted as a burst,
+        given in number of oscillatory cycles at each frequency (or band center).
 
-    spec_type   String. Type of spectral signal to compute. Default: 'power'
-                'power' : Spectral power, ie square of signal envelope
-                'magnitude' : Square root of power, ie signal envelope
+    method : {'multitaper','wavelet','bandfilter'}, default: 'wavelet'
+        Specific spectral analysis method to use:
 
-    freq_exp    Float. This can be used to normalize out 1/f^a effects in power before
-                band-pooling and burst detection). This gives the exponent on the frequency
-                ('a' in 1/f^a).  Set = 1 to norm by 1/f.  Set = None for no normalization.
-                Default: None (do no frequency normalization)
+        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
 
-    bands       (n_freqbands,) array-like of (2,) sequences | (n_freqbands,2) ndarray.
-                List of (low,high) cut frequencies for each band to compute bursts within.
-                Set 1st value = 0 for low-pass; set 2nd value >= smp_rate/2 for
-                high-pass; otherwise assumes band-pass.
-                Set = None to compute bursts at each frequency in spectral transform.
-                Default: ((20,35),(40,65),(55,90),(70,100)) (beta, low/med/high gamma)
+        Note: In the original paper, multitaper was used, but all three
+        methods were claimed to produced similar results.
 
-    window      (2,) array-like. (start,end) of time window to compute mean,SD for
-                burst amplitude threshold within (in same units as <timepts>).
-                Default: None (compute over entire data time range)
+    spec_type : {'power','magnitude'}, default: 'power'
+        Type of spectral signal to compute:
 
-    timepts     (n_timepts,) array-like. Time sampling vector for data (usually in s).
-                Necessary if <window> is set, but unused otherwise.  Default: None
+        - 'power' : Spectral power, ie square of signal envelope
+        - 'magnitude' : Square root of power, ie signal envelope
 
-    **kwargs    Any other kwargs passed directly to power_spectrogram() function
+    freq_exp : float, default: None (do no frequency normalization)
+        This can be used to normalize out 1/f^a effects in power before
+        band-pooling and burst detection). This gives the exponent on the frequency
+        ('a' in 1/f^a).  Set = 1 to norm by 1/f.  Set = None for no normalization.
 
-    RETURNS
-    bursts      (...,n_freq[band]s,n_timepts_out,...) ndarray of bool. Binary array labelling
-                timepoints within detected bursts in each trial and frequency band.
-                Same shape as input data, but with frequency axis prepended immediately
-                before time <axis>.
+    bands : array-like, shape=(n_freqbands,2), default: ((20,35),(40,65),(55,90),(70,100))
+        List of (low,high) cut frequencies for each band to compute bursts within.
+        Set low cut = 0 for low-pass, set high cut >= smp_rate/2 for high-pass,
+        otherwise assumes band-pass. Default samples ~ beta, low/med/high gamma.
+        Set = None to compute bursts at each frequency in spectral transform.
 
-    freqs       (n_freq[band]s,) ndarray. List of center frequencies of bands in <bursts>
+    window : array-like, shape=(2,), default: None (compute over entire data time range)
+        Optional (start,end) of time window to compute mean,SD for burst amplitude threshold
+        within (in same units as `timepts`).
 
-    timepts     (n_timepts_out,) ndarray. List of time points / time window centers in <spec>
-                (in s, referenced to start of data).
+    timepts : array-like, shape=(n_timepts,), default: None
+        Time sampling vector for data (usually in s).
+        Necessary if `window` is set, but unused otherwise.
 
-    REFERENCE
-    Lundqvist, ..., & Miller (2016) Neuron "Gamma and Beta Bursts Underlie Working Memory"
-    Lundqvist, ..., & Miller (2018) Nature Comm "Gamma and beta bursts during working memory
-                                                readout suggest roles in its volitional control"
+    **kwargs :
+        Any other kwargs passed directly to :func:`spectrogram` function
+
+    Returns
+    -------
+    bursts : ndarray, shape=(...,n_freq[band]s,n_timepts_out,...), dtype=bool
+        Binary array labelling timepoints within detected bursts in each trial and frequency band.
+        Same shape as `data`, but with frequency axis prepended immediately before time `axis`.
+
+    freqs : ndarray, shape=(n_freq[band],)
+        List of center frequencies of bands in `bursts`
+
+    timepts : ndarray=(n_timepts_out,)
+        List of time points / time window centers in `bursts` (in s, referenced to start of data).
+
+    References
+    ----------
+    Lundqvist et al (2016) Neuron https://doi.org/10.1016/j.neuron.2016.02.028
+    Lundqvist et al (2018) Nature Comms https://doi.org/10.1038/s41467-017-02791-8
     """
     # todo  Gaussian fits for definining burst f,t extent?
     # todo  Option input of spectral data?
@@ -1675,7 +1588,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
     bursts = z > threshold
 
     tsmps = np.arange(n_timepts)
-    
+
 
     def _screen_bursts(burst_bool, min_samples, start):
         """ Subfunction to evaluate/detect bursts in boolean time series of candidate bursts """
@@ -1710,7 +1623,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
             burst_bool[(offset+1):] = False
             return burst_bool
         # Otherwise, call function recursively, now starting search just after current burst offset
-        else: 
+        else:
             return _screen_bursts(burst_bool,min_samples,offset+1)
 
 
@@ -1753,78 +1666,92 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
 # =============================================================================
 def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
     """
-    Plots frequency spectrum as a line plot.
+    Plot frequency spectrum as a line plot.
 
-    lines,ax = plot_spectrum(freqs, data, ylim=None, color=None, **kwargs)
+    Parameters
+    ----------
+    freqs : array-like, shape=(n_freqs,)
+        Frequency sampling (x-axis) vector for data (Hz).
+        May be linearly or logarithmically sampled; we handle appropriately.
 
-    ARGS
-    freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
-            May be linearly or logarithmically sampled; we deal appropriately.
+    data : ndarray, shape=(n_freqs,)
+        Frequency spectrum data to plot (y-axis)
 
-    data    (n_freqs,) ndarray. Frequency spectrum data.
+    ax : Pyplot Axis object, default: plt.gca()
+        Axis to plot into
 
-    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca()
+    ylim : array-like, shape=(2,), Default: (data.min(),data.max()) +/- 5%
+        Plot y-axis limits: (min,max)
 
-    ylim    (2,) array-like. y-axis limits: (min,max)
-            Default: min/max over all data +/- 5%  (data.min(),data.max())
+    color : Color spec, default: <Matplotlib default plot color>
+        Color to plot in
 
-    color   (3,) array-like | Color spec. Color to plot in.
-            Default: <default plot color>
+    **kwargs :
+        Any additional keyword args are interpreted as parameters of plt.axes()
+        (settable Axes object attributes) or plt.plot() (Line2D object attributes),
+        and passsed to the proper function.
 
-    **kwargs All other keyword args passed directly to plt.plot()
+    Returns
+    -------
+    lines : List of Line2D objects
+        Output of plt.plot()
 
-    ACTION
-    Plots spectrum data into given axes using plt.plot()
-
-    RETURNS
-    lines   List of Line2D objects. Output of plt.plot()
-    ax      Pyplot Axis object. Axis for plot
+    ax : Axis object
+        Axis plotted into
     """
-    freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-    
+    freqs,fticks,fticklabels = _frequency_plot_settings(freqs)
+
     lines, _, ax = plot_line_with_error_fill(freqs, data, ax=ax, ylim=ylim, color=color, **kwargs)
-    
+
     plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
     ax.set_xticks(fticks)
     ax.set_xticklabels(fticklabels)
     # No need to return list of lists if only plotting one data series
-    if (data.ndim == 1) or (data.shape[0] == 1): lines = lines[0]    
-    
+    if (data.ndim == 1) or (data.shape[0] == 1): lines = lines[0]
+
     return lines, ax
 
 
 def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', **kwargs):
     """
-    Plots time-frequency spectrogram as a heatmap plot.
+    Plot time-frequency spectrogram as a heatmap plot.
 
-    img,ax = plot_spectrogram(timepts, freqs, data, clim=None, cmap='viridis', **kwargs)
+    Parameters
+    ----------
+    timepts : array-like, shape=(n_timepts,)
+        Time sampling (x-axis) vector for data
 
-    ARGS
-    timepts (n_timepts,) array-like. Time sampling vector for data
+    freqs : array-like, shape=(n_freqs,)
+        Frequency sampling (y-axis) vector for data (Hz).
+        May be linearly or logarithmically sampled; we handle appropriately.
 
-    freqs   (n_freqs,) array-like. Frequency sampling vector for data (Hz).
-            May be linearly or logarithmically sampled; we deal appropriately.
+    data : ndarray, shape=(n_freqs,n_timepts)
+        Time-frequency (spectrogam) data to plot on color axis
 
-    data    (n_freqs,n_timepts) ndarray. Time-frequency (spectrogam) data
+    ax : Pyplot Axis object, default: plt.gca()
+        Axis to plot into
 
-    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca()
+    clim : array-like, shape=(2,), default: (data.min(),data.max())
+        Color axis limits: (min,max)
 
-    clim    (2,) array-like. Color axis limits: (min,max)
-            Default: min/max over all data (data.min(),data.max())
+    cmap  : str | Colormap object. default: 'viridis' (linear dark-blue to yellow colormap)
+        Colormap to plot heatmap in, given either as name of matplotlib colormap or custom
+        matplotlib.colors.Colormap object instance.
 
-    cmap    String. Colormap to plot in. Default: 'viridis'
+    **kwargs :
+        Any additional keyword args are interpreted as parameters of :func:`plt.axes`
+        (settable Axes object attributes) or :func:`plt.imshow` (AxesImage object attributes).
 
-    **kwargs All other keyword args passed directly to plt.imshow()
+    Returns
+    -------
+    img : AxesImage object
+        Output of ax.imshow(). Allows access to image properties.
 
-    ACTION
-    Plots spectrogram data into given axes using plt.imshow()
-
-    RETURNS
-    img     AxesImage object. Output of plt.imshow()
-    ax      Pyplot Axis object. Axis for plot
+    ax : Axis object
+        Axis plotted into.
     """
-    freqs,fticks,fticklabels = frequency_plot_settings(freqs)
-    
+    freqs,fticks,fticklabels = _frequency_plot_settings(freqs)
+
     img, ax = plot_heatmap(timepts, freqs, data, ax=ax, clim=clim, cmap=cmap,
                            origin='lower', **kwargs)
 
@@ -1835,8 +1762,8 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     return img, ax
 
 
-def frequency_plot_settings(freqs):
-    """ Returns settings for plotting a frequency axis: plot freqs, ticks, tick labels """
+def _frequency_plot_settings(freqs):
+    """ Return settings for plotting a frequency axis: plot freqs, ticks, tick labels """
     freqs = np.asarray(freqs).squeeze()
     # For freqs given as (low,high) bands, convert to band means
     if (freqs.ndim == 2) and (freqs.shape[1] == 2): freqs = freqs.mean(axis=1)
@@ -1873,25 +1800,28 @@ def frequency_plot_settings(freqs):
 # =============================================================================
 def cut_trials(data, trial_lims, smp_rate, axis=0):
     """
-    Cuts continuous (eg LFP) data into trials
+    Cut continuous (eg LFP) data into trials
 
-    cut_data = cut_trials(data, trial_lims, smp_rate, axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_timepts,...)
+        Continuous data unsegmented into trials.
+        Arbitrary dimensionality, could include multiple channels, etc.
 
-    ARGS
-    data        (...,n_timepts,...) array. Continuous data unsegmented into trials.
-                Arbitrary dimensionality, could include multiple channels, etc.
+    trial_lims : array-like, shape=(n_trials,2)
+        List of [start,end] of each trial (in s) to use to cut data.
 
-    trial_lims  (n_trials,2) array-like. List of [start,end] of each trial (in s)
-                to use to cut data.
+    smp_rate : scalar
+        Sampling rate of data (Hz).
 
-    smp_rate    Scalar. Sampling rate of data (Hz).
+    axis : int, default: 0 (1st axis)
+        Axis of data array corresponding to time samples
 
-    axis        Int. Axis of data array corresponding to time samples. Default: 0
-
-    RETURNS
-    cut_data    (...,n_trial_timepts,...,n_trials) array.
-                Continuous data segmented into trials.
-                Trial axis is appended to end of all axes in input data.
+    Returns
+    -------
+    cut_data : ndarray, shape=(...,n_trial_timepts,...,n_trials)
+        Continuous data segmented into trials.
+        Trial axis is appended to end of all axes in input data.
     """
     trial_lims = np.asarray(trial_lims)
     assert (trial_lims.ndim == 2) and (trial_lims.shape[1] == 2), \
@@ -1923,44 +1853,46 @@ def cut_trials(data, trial_lims, smp_rate, axis=0):
     return cut_data
 
 
-def realign_data(data, align_times, time_range=None, timepts=None, time_axis=0, trial_axis=-1):
+def realign_data(data, align_times, time_range, timepts, time_axis=0, trial_axis=-1):
     """
     Realigns trial-cut continuous (eg LFP) data to new set of within-trial times
     (eg new trial event) so that t=0 on each trial at given event.
     For example, data aligned to a start-of-trial event might
     need to be relaligned to the behavioral response.
 
-    realigned = realign_data(data,align_times,time_range,timepts,time_axis=0,trial_axis=-1)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_timepts,...,n_trials,...)
+        Continuous data segmented into trials.
+        Arbitrary dimensionality, could include multiple channels, etc.
 
-    ARGS
-    data        ndarray. Continuous data segmented into trials.
-                Arbitrary dimensionality, could include multiple channels, etc.
+    align_times : array-like, shape=(n_trials,)
+        New set of times (in old reference frame) to realign data to (in s)
 
-    align_times (n_trials,) array-like. New set of times (in old
-                reference frame) to realign data to (in s)
+    time_range : array-like, shape=(2,)
+        Time range to extract from each trial around new align time
+        ([start,end] in s relative to align_times).
+        eg, time_range=(-1,1) -> extract 1 s on either side of align event.
 
-    time_range  (2,) array-like. Time range to extract from each trial around
-                new align time ([start,end] in s relative to align_times).
-                eg, time_range=(-1,1) -> extract 1 s on either side of align event.
-                Must set value for this.
+    timepts : array-like, shape=(n_timepts)
+        Time sampling vector for data (in s)
 
-    timepts     (n_timepts) array-like. Time sampling vector for data (in s).
-                Must set value for this.
+    time_axis : int, default: 0 (1st axis of array)
+        Axis of data corresponding to time samples
 
-    time_axis   Int. Axis of data corresponding to time samples.
-                Default: 0 (1st axis of array)
+    trial_axis : int, default: -1 (last axis of array)
+        Axis of data corresponding to distinct trials
 
-    trial_axis  Int. Axis of data corresponding to distinct trials.
-                Default: -1 (last axis of array)
-
-    RETURNS
-    realigned   Data realigned to given within-trial times.
-                Time axis is reduced to length implied by time_range, but otherwise
-                array has same shape as input data.
+    Returns
+    -------
+    realigned : ndarray, shape=(...,n_timepts_out,...,n_trials,...)
+        Data realigned to given within-trial times.
+        Time axis is reduced to length implied by `time_range`, but otherwise
+        array has same shape as input data.
     """
     assert time_range is not None, \
-        "Desired time range to extract from each trial must be given in  <time_range>"
-    assert timepts is not None, "Data time sampling vector must be given in <timepts>"
+        "Desired time range to extract from each trial must be given in  `time_range`"
+    assert timepts is not None, "Data time sampling vector must be given in `timepts`"
 
     timepts     = np.asarray(timepts)
     align_times = np.asarray(align_times)
@@ -2010,31 +1942,18 @@ def realign_data(data, align_times, time_range=None, timepts=None, time_axis=0, 
 def realign_data_on_event(data, event_data, event, timepts, align_times, time_range,
                           time_axis=0, trial_axis=-1):
     """
-    Realigns trial-cut continuous (eg LFP) data to new within-trial event
-    so that t=0 on each trial at given event.
-
-    Convenience wrapper around realign_data() for relaligning to a given
+    Convenience wrapper around `realign_data` for relaligning to a given
     named event within a per-trial dataframe or dict variable.
 
-    realigned = realign_data_on_event(data,event_data,event,timepts,align_times,time_range,
-                                      time_axis=0,trial_axis=-1)
+    Only parameters differing from :func:`realign_data` are described here.
 
-    ARGS
-    data        ndarray. Continuous data segmented into trials.
-                Arbitrary dimensionality, could include multiple channels, etc.
+    Parameters
+    ----------
+    event_data : dict, {str : ndarray, shape=(n_trials,)} or DataFrame, shape=(n_trials,n_events)
+        Per-trial event timing data to use to realign spike timestamps.
 
-    event_data  {string:(n_trials,) array} dict | (n_trials,n_events) DataFrame.
-                Per-trial event timing data to use to realign spike timestamps.
-
-    event       String. Dict key or DataFrame column name whose associated values
-                are to be used to realign spike timestamps
-
-    See realign_data() for details on rest of arguments
-
-    RETURNS
-    realigned   Data realigned to given trial event.
-                Time axis is reduced to length implied by time_range, but otherwise
-                array has same shape as input data.
+    event : str
+        Dict key or DataFrame column name whose associated values are to be used to realign data
     """
     # Extract vector of times to realign on
     align_times = event_data[event]
@@ -2046,28 +1965,33 @@ def realign_data_on_event(data, event_data, event, timepts, align_times, time_ra
 
 def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):
     """
-    Returns frequency sampling vector (axis) for a given FFT-based computation
+    Return frequency sampling vector (axis) for a given FFT-based computation
 
-    ARGS
-    smp_rate     Scalar. Data sampling rate (Hz)
+    Parameters
+    ----------
+    smp_rate : scalar
+        Data sampling rate (Hz)
 
-    n_fft        Scalar. Number of samples (timepoints) in FFT output
+    n_fft : scalar
+        Number of samples (timepoints) in FFT output
 
-    freq_range   (2,) array-like | Scalar. Range of frequencies to keep in output,
-                either given as an explicit [low,high] range or just a scalar
-                giving the highest frequency to return.
-                Default: all frequencies from FFT
+    freq_range : array-like, shape=(2,) or scalar, default: all frequencies from FFT
+        Range of frequencies to retain in output, either given as an explicit [low,high]
+        range or just a scalar giving the highest frequency to return.
 
-    two_sided    Bool. If True, returns freqs for two-sided spectrum, including
-                both positive and negative frequencies (which have same amplitude
-                for all real signals).  If False [default], only returns positive
-                frequencies, in range (0,smp_rate/2).
 
-    RETURNS
-    freqs       (n_freqs,) ndarray. Frequency sampling vector (in Hz)
+    two_sided : bool, default: False
+        If True, return freqs for two-sided spectrum, including both positive and
+        negative frequencies (which have same amplitude for all real signals).
+        If False, only return positive frequencies, in range (0,smp_rate/2).
 
-    freq_bool   (n_fft,) ndarray of bools. Boolean vector flagging frequencies
-                in FFT output to retain, given desired freq_range
+    Returns
+    -------
+    freqs : ndarray, shape=(n_freqs,)
+        Frequency sampling vector (in Hz)
+
+    freq_bool : ndarray, shape=(n_fft,), dtype=bool
+        Boolean vector flagging frequencies in full FFT output to retain, given desired freq_range
     """
     freqs   = np.fft.fftfreq(n_fft,d=1/smp_rate) # All possible frequencies
 
@@ -2110,48 +2034,56 @@ def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):
 
 def remove_dc(data, axis=None):
     """
-    Removes constant DC component of signals, estimated as across-time mean
+    Remove constant DC component of signals, estimated as across-time mean
     for each time series (ie trial,channel,etc.)
 
-    data = remove_dc(data,axis=None)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_samples,...)
+        Raw data to remove DC component of.
+        Can be any arbitary shape, with time sampling along `axis`
 
-    ARGS
-    data    (...,n_obs,...) ndarray. Raw data to remove DC component of.
-            Can be any arbitary shape, with time sampling along axis <axis>
+    axis : int, Default: None (remove DC component computed across *full* data array)
+        Data axis corresponding to time
 
-    axis    Int. Data axis corresponding to time.
-            Default: remove DC component computed across *full* data array
-            (mirrors behavior of np.mean)
-
-    RETURNS
-    data    (...,n_obs,...) ndarray.  Data with DC component removed
+    Returns
+    -------
+    data : ndarray, shape=(...,n_samples,...)
+        Data with DC component removed (same shape as input)
     """
     return data - data.mean(axis=axis,keepdims=True)
 
 
 def remove_evoked(data, axis=0, method='mean', design=None):
     """
-    Removes estimate of evoked potentials phase-locked to trial events,
+    Remove estimate of evoked potentials phase-locked to trial events,
     returning data with (in theory) only non-phase-locked induced components
 
-    data = remove_evoked(data,axis=0,method='mean',design=None)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_samples,...)
+        Raw data to remove evoked components from.
+        Can be any arbitary shape, with observations (trials) along `axis`.
 
-    ARGS
-    data    (...,n_obs,...) ndarray. Raw data to remove evoked components from.
-            Can be any arbitary shape, with observations (trials) along axis <axis>
+    axis : int, default: 0 (1st axis)
+        Data axis corresponding to distinct observations/trials
 
-    axis    Int. Data axis corresponding to distinct observations/trials. Default: 0
+    method : {'mean','groupMean','regress'}, default: 'mean'
+        Method to use for estimating evoked potentials:
 
-    method  String. Method to use for estimating evoked potentials (default: 'mean'):
-            'mean'      : Grand mean signal across all observations (trials)
-            'groupMean' : Mean signal across observations with each group in <design>
-            'regress'   : OLS regresion fit of design matrix <design> to data
+        - 'mean'      : Grand mean signal across all observations (trials)
+        - 'groupMean' : Mean signal across observations with each group in `design`
+        - 'regress'   : OLS regresion fit of design matrix `design` to data
 
-    design  (n_obs,...) array-like. Design matrix to fit to data (method=='regress')
-            or group/condition labels for each observation (method=='groupMean')
+    design : array-like, shape=(n_samples,...), optional
+        Design matrix to fit to data (`method` == 'regress')
+        or group/condition labels for each observation (`method` == 'groupMean').
+        Not used for `method` == 'mean'.
 
-    RETURNS
-    data    (...,n_obs,...) ndarray.  Data with estimated evoked component removed
+    Returns
+    -------
+    data : ndarray, shape=(...,n_samples,...)
+        Data with estimated evoked component removed. Same shape as input `data`.
     """
     design = np.asarray(design)
 
@@ -2196,17 +2128,24 @@ def complex_to_spec_type(data, spec_type):
     """
     Converts complex spectral data to given spectral signal type
 
-    ARGS
-    data        ndarray of complex. Complex spectral (or time-frequency) data. Arbitrary shape.
-    spec_type   String. Type of spectral signal to return:
-                'power'     Spectral power of data
-                'phase'     Phase of complex spectral data (in radians)
-                'magnitude' Magnitude (square root of power) of complex data = signal envelope
-                'real'      Real part of complex data
-                'imag'      Imaginary part of complex data
+    Parameters
+    ----------
+    data : ndarray, shape=Any, dtype=complex
+        Complex spectral (or time-frequency) data. Arbitrary shape.
 
-    RETURNS
-    data        ndarray of float. Computed spectral signal. Same shape as input.
+    spec_type : {'power','phase','magnitude','real','imag'}
+        Type of spectral signal to return:
+
+        - 'power'     Spectral power of data
+        - 'phase'     Phase of complex spectral data (in radians)
+        - 'magnitude' Magnitude (square root of power) of complex data = signal envelope
+        - 'real'      Real part of complex data
+        - 'imag'      Imaginary part of complex data
+
+    Returns
+    -------
+    data : ndarray, shape=Any, dtype=complex
+        Computed spectral signal. Same shape as input.
     """
     if spec_type == 'complex':      return data
     elif spec_type == 'power':      return power(data)
@@ -2219,54 +2158,57 @@ def complex_to_spec_type(data, spec_type):
 
 
 def power(data):
-    """ Computes power from complex spectral data  """
+    """ Compute power from complex spectral data  """
     return (data*data.conj()).real  # Note: .real fixes small float errors
 
 def magnitude(data):
-    """ Computes magnitude (square root of power) from complex spectral data  """
+    """ Compute magnitude (square root of power) from complex spectral data  """
     return np.abs(data)
 
 def phase(data):
-    """ Computes phase of complex spectral data  """
+    """ Compute phase of complex spectral data  """
     return np.angle(data)
 
 def real(data):
-    """ Returns real part of complex spectral data  """
+    """ Return real part of complex spectral data  """
     return data.real
 
 def imag(data):
-    """ Returns imaginary part of complex spectral data  """
+    """ Return imaginary part of complex spectral data  """
     return np.imag(data)
 
 
 def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
     """
-    Pools (averages) spectral data within each of a given set of frequency bands
+    Pool (eg average) spectral data within each of a given set of frequency bands
 
-    data = pool_freq_bands(data,axis=0,method='mean',design=None)
+    Parameters
+    ----------
+    data : ndarray or xarray DataArray, shape=(...,n_freqs,...)
+        Raw data to pool within frequency bands. Any arbitary shape.
 
-    ARGS
-    data    (...,n_freqs,...) ndarray | xarray DataArray.
-            Raw data to pool within frequency bands. Any arbitary shape.
+    bands : array-like, shape=(n_bands,2) or dict {str : array-like, shape=(2,)}
+        Frequency bands to pool data within. Input either as a list of [low-cut, high-cut]
+        values or as a dict, with keys being frequency band names and their associated
+        values being the corresponding [low-cut, high-cut] pair.
+        Band edges are inclusive.
 
-    bands   {'name':[low,high]} dict | [[low_1,high_1],...,[low_n,high_n].
-            Frequency bands to pool data within, each given as pairs of
-            [low-cut, high-cut] values in a list or dict keyed by band names.
-            Band edges are inclusive.
+    axis : int
+        Data axis corresponding to frequency.
+        Only needed if `data` is not an xarray DataArray with dimension named 'freq'/'frequency'.
 
-    axis    Int. Data axis corresponding to frequency.
-            Only needed if <data> is not an xarray DataArray
-            with dimension named 'freq' or 'frequency'
+    freqs : array-like, shape=(n_freqs,)
+        Frequency sampling in `data`. Only needed if `data` is not an xarray DataArray.
 
-    freqs   (n_freqs,) array-like. Frequency sampling in <data>.
-            Only needed if <data> is not an xarray DataArray
+    func : str or callable, default: 'mean' (mean across all frequencies in band)
+        Function to use to pool values within each frequency band, given either as a
+        string specifier (options: 'mean' or 'sum') or a custom function that takes as input
+        an ndarray and returns an ndarray with its first axis reduced to length 1.
 
-    func    String | callable. Function to use to pool values within each frequency band.
-            Default: 'mean' (mean across all frequencies in band)
-
-    RETURNS
-    data    (...,n_freqbands,...) ndarray | xarray DataArray.
-            Data with values averaged within each of given frequency bands
+    Returns
+    -------
+    data : ndarray or xarray DataArray, shape=(...,n_freqbands,...)
+        Data with values pooled within each of given frequency bands
     """
     # Convert list of frequency band ranges to {'name':freq_range} dict
     if not isinstance(bands,dict):
@@ -2329,31 +2271,36 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
 def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
     """
-    Pools (averages) spectral data within each of a given set of time epochs
+    Pool (eg average) spectral data within each of a given set of time epochs
 
-    data = pool_time_epochs(data,epochs,axis=None,timepts=None,func='mean')
+    Parameters
+    ----------
+    data : ndarray or xarray DataArray, shape=(...,n_timepts,...)
+        Raw data to pool within time epochs. Any arbitary shape.
 
-    ARGS
-    data    (...,n_timepts,...) ndarray | xarray DataArray.
-            Raw data to pool within time epochs. Any arbitary shape.
+    epochs : array-like, shape=(n_epochs,2) or dict {str : array-like, shape=(2,)}
+        Time epochs to pool data within. Input either as a list of [start,end] times
+        or as a dict, with keys being time epoch names and their associated
+        values being the corresponding [start,end] pair.
+        Epoch edges are inclusive.
 
-    epochs  {'name':[start,end]} dict | [[start_1,end_1],...,[start_n,end_n].
-            Time epochs to pool data within, each given as a window of
-            [start time, end time] values in a list or dict keyed by epoch names.
-            Epoch edges are inclusive.
+    axis : int
+        Data axis corresponding to time.
+        Only needed if `data` is not an xarray DataArray with dimension named 'time'.
 
-    axis    Int. Data axis corresponding to time.
-            Only needed if <data> is not an xarray DataArray
+    timepts : array-like, shape(n_timepts,)
+        Time sampling in `data`.
+        Only needed if `data` is not an xarray DataArray with dimension named 'time'.
 
-    timepts (n_timepts,) array-like. Time sampling in <data>.
-            Only needed if <data> is not an xarray DataArray
+    func : str or callable, default: 'mean' (mean across all frequencies in band)
+        Function to use to pool values within each time epoch, given either as a
+        string specifier (options: 'mean' or 'sum') or a custom function that takes as input
+        an ndarray and returns an ndarray with its first axis reduced to length 1.
 
-    func    String | callable. Function to use to pool values within each time epoch.
-            Default: 'mean' (mean across all timepoints in band)
-
-    RETURNS
-    data    (...,nTimeEpochs,...) ndarray | xarray DataArray.
-            Data with values averaged within each of given time epochs
+    Returns
+    -------
+    data : ndarray or xarray DataArray, shape=(...,n_time_epochs,...)
+        Data with values pooled within each of given time epochs
     """
     # Convert list of time epoch ranges to {'name':time_range} dict
     if not isinstance(epochs,dict):
@@ -2409,27 +2356,28 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
 
 def one_over_f_norm(data, axis=None, freqs=None, exponent=1.0):
     """
-    Normalizes for ~ 1/frequency**alpha baseline distribution of power
+    Normalize to correct for ~ 1/frequency**alpha baseline distribution of power
     by multiplying by frequency, raised to a given exponent
 
-    data = one_over_f_norm(data, axis=None, freqs=None, exponent=1)
+    Parameters
+    ----------
+    data : ndarray or xarray DataArray, shape=(...,n_freqs,...)
+        Raw data to pool within frequency bands. Any arbitary shape.
 
-    ARGS
-    data    (...,n_freqs,...) ndarray | xarray DataArray.
-            Raw power data to normalize. Any arbitary shape.
+    axis : int
+        Data axis corresponding to frequency.
+        Only needed if `data` is not an xarray DataArray with dimension named 'freq'/'frequency'.
 
-    axis    Int. Data axis corresponding to frequency.
-            Only needed if <data> is not an xarray DataArray
-            with dimension named 'freq' or 'frequency'
+    freqs : array-like, shape=(n_freqs,)
+        Frequency sampling in `data`. Only needed if `data` is not an xarray DataArray.
 
-    freqs   (n_freqs,) array-like. Frequency sampling in <data>.
-            Only needed if <data> is not an xarray DataArray
+    exponent : float, default: 1 (correct for 1/f, w/o exponent)
+        Exponent ('alpha') to raise freqs to for normalization.
 
-    exponent Float. Exponent ('alpha') to raise freqs to for normalization.
-            Default: 1
-
-    RETURNS
-    data    1/f normalized data. Same shape as input.
+    Returns
+    -------
+    data : ndarray or xarray DataArray, shape=(...,n_freqs,...)
+        1/f normalized data. Same shape as input.
     """
     if HAS_XARRAY and isinstance(data,xr.DataArray):
         dims = np.asarray(data.dims)
@@ -2453,36 +2401,60 @@ def one_over_f_norm(data, axis=None, freqs=None, exponent=1.0):
     return data * freqs**exponent
 
 
-def one_sided_to_two_sided(data,freqs,smp_rate,freq_axis=0):
+def one_sided_to_two_sided(data, freqs, smp_rate, axis=0):
     """
-    Converts a one-sided Fourier or wavelet transform output to the equivalent
-    two-sided output, assuming conjugate symmetry across positive and negative
-    frequencies (as is the case when the original signals were real).  Also
-    extrapolates values for f=0, as is necessary for wavelet transforms.
+    Convert a one-sided Fourier/wavelet transform output to the two-sided equivalent.
+
+    Assumes conjugate symmetry across positive and negative frequencies (as is the case
+    only when the original raw signals were real).
+
+    Also extrapolates values for f=0, as is necessary for wavelet transforms.
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_freqs,...), dtype=complex
+        Complex (1-sided) frequency-transformed data. Any arbitary shape.
+
+    freqs : array-like, shape=(n_freqs,)
+        Frequency sampling in `data`
+
+    smp_rate : scalar
+        Data sampling rate (Hz)
+
+    axis : int, default: 0 (1st axis)
+        Data axis corresponding to frequency
+
+    Returns
+    -------
+    data : ndarray, shape=(...,2*n_freqs+1,...), dtype=complex
+        2-sided equivalent of input `data`
+
+    freqs : ndarray, shape=(2*n_freqs+1,)
+        List of (positive and negative) freqs in 2-sided output `data`
     """
     assert np.isclose(freqs[-1],smp_rate/2), \
         "Need to have sampling up to 1/2 sampling rate (Nyquist freq=%d Hz)" % (smp_rate/2)
 
     # If f=0 is not in data, numerically extrapolate values for it
     if not np.isclose(freqs,0).any():
-        f0 = interp1(freqs,data,0,axis=freq_axis,kind='cubic',fill_value='extrapolate')
-        f0 = np.expand_dims(f0,freq_axis)
-        data = np.concatenate((f0,data),axis=freq_axis)
+        f0 = interp1(freqs,data,0,axis=axis,kind='cubic',fill_value='extrapolate')
+        f0 = np.expand_dims(f0,axis)
+        data = np.concatenate((f0,data),axis=axis)
         freqs = np.concatenate(([0],freqs))
 
     # Convert values at Nyquist freq to complex conjugate at negative frequency
-    slices = axis_index_slices(freq_axis,-1,data.ndim)
+    slices = axis_index_slices(axis,-1,data.ndim)
     data[slices] = data[slices].conj()
     freqs[-1] *= -1
 
     # Replicate values for all freqs (s.t. 0 < f < nyquist)
     # as complex conjugates at negative frequencies
     idxs    = slice(-2,1,-1)
-    slices  = axis_index_slices(freq_axis,idxs,data.ndim)
-    data    = np.concatenate((data, data[slices].conj()), axis=freq_axis)
+    slices  = axis_index_slices(axis,idxs,data.ndim)
+    data    = np.concatenate((data, data[slices].conj()), axis=axis)
     freqs   = np.concatenate((freqs, -freqs[idxs]))
 
-    return data,freqs
+    return data, freqs
 
 
 # =============================================================================
@@ -2492,49 +2464,56 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
                          freq_sd=0, amp_sd=0, phase_sd=0,
                          smp_rate=1000, time_range=1.0, burst_rate=0, burst_width=4, seed=None):
     """
-    Generates synthetic data with oscillation at given parameters.
+    Generate synthetic data with oscillation at given parameters.
 
-    Generates multiple trials with constant oscillatory signal +
-    random additive Gaussian noise.
+    Generate multiple trials with constant oscillatory signal + random additive Gaussian noise.
 
-    data = simulate_oscillation(frequency,amplitude=5.0,phase=0,noise=1.0,n_trials=1000,
-                                smp_rate=1000,time_range=1.0,burst_rate=0,burst_width=4,seed=None)
+    Parameters
+    ----------
+    frequency : scalar
+        Frequency to simulate oscillation at (Hz)
 
-    ARGS
-    frequency   Scalar. Frequency to simulation oscillation at (Hz)
+    amplitude : scalar, default: 5.0
+        Amplitude of simulated oscillation (a.u.)
 
-    amplitude   Scalar. Amplitude of oscillation (a.u.). Default: 5.0
+    phase : scalar, default: 0
+        Phase of oscillation (rad)
 
-    phase       Scalar. Phase of oscillation (rad). Default: 0
+    noise : scalar, default: 1.0
+        Amplitude of additive Gaussian noise (a.u)
 
-    noise       Scalar. Amplitude of additive Gaussian noise (a.u). Default: 1.0
+    n_trials : int, default: 1000
+        Number of trials/observations to simulate
 
-    n_trials    Int. Number of trials/observations to simulate. Default: 1000
+    freq_sd,amp_sd,phase_sd : scalar, Default: 0 (no inter-trial variation)
+        Inter-trial variation in frequency/amplitude/phase, given as Gaussian SD
+        (same units as base parameters, which are used as Gaussian mean)
 
-    freq/amp/phase_sd Scalar. Inter-trial variation in frequency/amplitude/phase,
-                given as Gaussian SD (same units as base parameters, which are used
-                as Gaussian mean). Default: 0 (no inter-trial variation)
+    smp_rate : int, default: 1000
+        Sampling rate for simulated data (Hz)
 
-    smp_rate    Int. Sampling rate for simulate data (Hz). Default: 1000
+    time_range : scalar, default: 1 s
+        Full time range to simulate oscillation over (s)
 
-    time_range  Scalar. Full time range to simulate oscillation over (s). Default: 1 s
+    burst_rate : scalar, default: 0 (not bursty)
+        Oscillatory burst rate (bursts/trial). Set=0 to simulate constant, non-bursty oscillation.
 
-    burst_rate  Scalar. Oscillatory burst rate (bursts/trial). Set=0 to simulate
-                constant, non-bursty oscillation. Default: 0 (not bursty)
+    burst_width : scalar, default: 4
+        Half-width of oscillatory bursts (Gaussian SD, in cycles)
 
-    burst_width Scalar. Half-width of oscillatory bursts (Gaussian SD, in cycles). Default: 4
+    seed : int, default: None
+        Random generator seed for repeatable results. Set=None for unseeded random numbers.
 
-    seed        Int. Random generator seed for repeatable results.
-                Set=None [default] for fully random numbers.
-
-    RETURNS
-    data        (n_timepts,n_trials) ndarray. Simulated oscillation-in-noise data.
+    Returns
+    -------
+    data : ndarray, shape=(n_timepts,n_trials)
+        Simulated oscillation-in-noise data
     """
     if seed is not None: set_random_seed(seed)
 
     def _randn(*args):
         """
-        Generates unit normal random variables in a way that reproducibly matches output
+        Generate unit normal random variables in a way that reproducibly matches output
         of Matlab with same seed != 0. (np.random.randn() does not work here for unknown reasons)
         stackoverflow.com/questions/3722138/is-it-possible-to-reproduce-randn-of-matlab-with-numpy?noredirect=1&lq=1
         """
@@ -2593,24 +2572,26 @@ def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=
 # =============================================================================
 def _undo_standardize_array_newaxis(data,data_shape,axis=0):
     """
-    Reshapes data array from unwrapped form back to ~ original
+    Reshape data array from unwrapped form back to ~ original
     multi-dimensional form in special case where a new frequency axis was
     inserted before time axis (<axis>)
 
-    data = _undo_standardize_array_newaxis(data,data_shape,axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(axis_len,m)
+        Data array w/ all axes > 0 unwrapped into single dimension, where m = prod(shape[1:])
 
-    ARGS
-    data    (axis_len,m) ndarray. Data array w/ all axes > 0 unwrapped into
-            single dimension, where m = prod(shape[1:])
+    data_shape : tuple, len=Any
+        Original shape of data array
 
-    data_shape Tuple. Original shape of data array
+    axis : int, default: 0
+        Axis of original data corresponding to distinct observations,
+        which has become axis 1, but will be permuted back to original axis.
 
-    axis    Int. Axis of original data corresponding to distinct observations,
-            which has become axis 1, but will be permuted back to original axis.
-            Default: 0
-
-    RETURNS
-    data       (...,n_freqs,n_timepts,...) ndarray. Data array reshaped back to original shape
+    Returns
+    -------
+    data: ndarray, shape=(...,n_freqs,n_timepts,...)
+        Data array reshaped back to original shape
     """
     data_shape  = np.asarray(data_shape)
     if axis < 0: axis = len(data_shape) + axis
@@ -2638,15 +2619,13 @@ def _undo_standardize_array_newaxis(data,data_shape,axis=0):
 
 
 def _next_power_of_2(n):
-    """
-    Rounds x up to the next power of 2 (smallest power of 2 greater than n)
-    """
+    """ Find next power of 2 (smallest power of 2 greater than n) """
     # todo  Think about switching this to use scipy.fftpack.next_fast_len
     return 1 if n == 0 else 2**ceil(log2(n))
 
 
 def _infer_freq_scale(freqs):
-    """ Determines if frequency sampling vector is linear, logarithmic, or uneven """
+    """ Determine if frequency sampling vector is linear, logarithmic, or uneven """
     # Determine if frequency scale is linear (all equally spaced)
     if np.allclose(np.diff(np.diff(freqs)),0):
         return 'linear'
@@ -2665,13 +2644,26 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
     """
     Extracts windowed chunks of data around given set of event times
 
-    ARGS
-    event_times (n_events,) array-like. List of times (s) of event triggers to
-                extract data around. Times are referenced to 1st data sample (t=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(n_samples,...)
+        Data to cut triggered snippets out of
+        NOTE: Not coded up for arbitrary-shaped data
 
-    window      (2,) array-like. [start,end] of window (in s) to extract
-                around each trigger.
+    smp_rate : int, default: 1000
+        Sampling rate for `data` (Hz)
 
+    event_times : array-like, shape=(n_events,)
+        List of times (s) of event triggers to extract data around.
+        Times are referenced to 1st data sample (t=0).
+
+    window : array-like, shape=(2,)
+        [start,end] of window (in s) to extract around each trigger
+
+    Returns
+    -------
+    data : ndarray, shape=(n_samples_per_window,n_events,...)
+        Data cut at event triggers
     """
     # Convert event_times, window from s -> samples
     event_times = np.floor(np.asarray(event_times)*smp_rate).astype(int)
@@ -2688,8 +2680,9 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
 
     return data_out
 
+
 def _str_to_pool_func(func):
-    """ Converts string specifier to callable pooling function """
+    """ Convert string specifier to callable pooling function """
     # If it's already a callable, return as-is
     if callable(func):      return func
     else:

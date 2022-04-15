@@ -55,6 +55,14 @@ def _enclose_in_object_array(data):
     return out
 
 
+def _isbinary(x):
+    """ Test whether variable contains only binary values (True,False,0,1) """
+    x = np.asarray(x)
+    return (x.dtype == bool) or \
+           (np.issubdtype(x.dtype,np.number) and \
+            np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
+
+
 def _has_method(obj, method):
     """
     Determines if given object class instance has given method

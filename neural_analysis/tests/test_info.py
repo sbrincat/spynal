@@ -7,7 +7,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from patsy import dmatrix
 
 
-from neural_analysis.tests.data_fixtures import two_sample_data, one_way_data, two_way_data
+from neural_analysis.tests.data_fixtures import two_sample_data, one_way_data, two_way_data, \
+                                                MISSING_ARG_ERRS
 from neural_analysis.info import neural_info, neural_info_2groups, neural_info_ngroups
 
 
@@ -155,7 +156,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
 
 
@@ -287,7 +288,7 @@ def test_one_way_info(one_way_data, method, params, result):
         assert np.allclose(stats['mu'].squeeze(), mu, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
 
 
@@ -408,7 +409,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
             assert np.allclose(stats['mu'][term].squeeze(), mu[term], rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         info = neural_info(labels, data, axis=0, method=method, model='anova2', interact=interact,
                            foo=None)
         info = neural_info(design, data, axis=0, method=method, model='regress', foo=None)

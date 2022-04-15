@@ -194,7 +194,7 @@ def test_bin_rate(spike_data, data_type, output, result):
         assert np.isclose(result_checker(rates), result, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         rates, bins = rate(data, method='bin', lims=[0,1], output=output, axis=-1,
                            timepts=timepts, foo=None)
 
@@ -252,7 +252,7 @@ def test_density(spike_data, data_type, kernel, result):
     assert np.isclose(rates.mean(), result, rtol=0.01, atol=0.01)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0,
                         axis=-1, timepts=timepts, foo=None)
 
@@ -296,7 +296,7 @@ def test_rate_stats(spike_data, data_type, stat, result):
     assert np.isclose(stats[0,0,0], result, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         stats = rate_stats(rates, stat=stat, axis=0, foo=None)
 
 
@@ -346,7 +346,7 @@ def test_isi_stats(spike_data, data_type, stat, result):
     assert np.isclose(stats[0,0], result, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         ISIs = isi(data, axis=-1, timepts=timepts, foo=None)
         stats = isi_stats(ISIs, stat=stat, axis=axis, foo=None)
 
@@ -415,7 +415,7 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
                 assert np.allclose(cut_data[trial,unit], data[trial,unit])
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
-        with pytest.raises((TypeError,AssertionError)):
+        with pytest.raises(MISSING_ARG_ERRS):
             cut_data = cut_trials(uncut_data, trial_lims, trial_refs=np.arange(0,n_trials), foo=None).T
 
     else:
@@ -425,7 +425,7 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
         assert (cut_data == data).all()
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
-        with pytest.raises((TypeError,AssertionError)):
+        with pytest.raises(MISSING_ARG_ERRS):
             cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1, foo=None).transpose((2,0,1))
 
     assert cut_data.shape == data.shape
@@ -459,7 +459,7 @@ def test_realign_data(spike_data, data_type):
                 assert np.allclose(realigned[unit,trial], data[trial,unit])
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
-        with pytest.raises((TypeError,AssertionError)):
+        with pytest.raises(MISSING_ARG_ERRS):
             realigned = realign_data(data, 0.5*np.ones((n_trials,)), trial_axis=0, foo=None)
 
     # For boolean data, realign to 2 distinct times, then concatenate together and test if same
@@ -484,7 +484,7 @@ def test_realign_data(spike_data, data_type):
         assert (realigned == data.T).all()
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
-        with pytest.raises((TypeError,AssertionError)):
+        with pytest.raises(MISSING_ARG_ERRS):
             realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
                                             timepts=timepts, time_axis=0, trial_axis=-1, foo=None)
 

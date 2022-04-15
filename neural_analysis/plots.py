@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-plots   A module of functions for generating data plots and plotting-related utilities
+Functions for generating common data plots and plotting-related utilities
 
-FUNCTIONS
-### Plot-generating functions ###
-plot_line_with_error_fill   Plots 1d data as line(s) w/ transparent fill(s) to indicate errors
-plot_heatmap        Plots 2d data as a heatmap (pseudocolor) plot
-plot_lineseries     Plots 2d data as series of offset lines
+Function list
+-------------
+Plot-generating functions
+^^^^^^^^^^^^^^^^^^^^^^^^^
+- plot_line_with_error_fill :   Plot 1d data as line(s) w/ transparent fill(s) to indicate errors
+- plot_heatmap :                Plot 2d data as a heatmap (pseudocolor) plot
+- plot_lineseries :             Plot 2d data as series of offset lines
 
-### Plotting utilities ###
-plot_markers        Plots set of markers (eg to mark trial event times) on given axis/es
-full_figure         Creates full-screen figure
+Plotting utilities
+^^^^^^^^^^^^^^^^^^
+- full_figure :                 Creates full-screen figure
+- plot_markers :                Plot set of markers (eg to mark trial event times) on given axis(s)
 
-
-Created on Tue Nov 23 14:22:47 2021
-
-@author: sbrincat
+Function reference
+------------------
 """
+# Created on Tue Nov 23 14:22:47 2021
+#
+# @author: sbrincat
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -48,57 +53,69 @@ IMSHOW_PARAMS = ['aspect','origin'] + _settable_attributes(AxesImage)
 # =============================================================================
 def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=None, **kwargs):
     """
-    Plots 1d data as line plot(s) +/- error(s) as a semi-transparent fill in given axis using
-    matplotlib.pyplot.plot and .fill
+    Plot 1d data as line plot(s) +/- error(s) as semi-transparent fill(s) in given axis
 
-    Can plot multiple lines/errors in same axis by inputting multiple data series,
-    as decribed below.
+    Can plot multiple lines/errors with same x-axis values in same axis by inputting
+    multiple data/error series
 
-    lines,patches,ax = plot_line_with_error_fill(x,data,err=None,ax=plt.gca(),color=['C0',...,'CN'],
-                                                 events=None, **kwargs)
+    Uses :func:`plt.plot` and :func:`plt.fill`
 
-    ARGS
-    x       (n,) array-like. x-axis sampling vector for both data and err.
+    Parameters
+    ----------
+    x : array-like, shape=(n,)
+        x-axis sampling vector for both `data` and `err`.
 
-    data    (n,) | (n_lines,n) array-like. Values to plot on y-axis as line(s) (typically means).
-            To plot multiples lines with the same x-axis values, input a 2-d array where
-            each row will be plotted as a separate line.
+    data : array-like, shape=(n,) or (n_lines,n)
+        Values to plot on y-axis as line(s) (typically means or medians).
+        To plot multiples lines with the same x-axis values, input a 2D array where
+        each row will be plotted as a separate line.
 
-    err     (n,) | (n_lines,n) | (2*n_lines,n) ndarray. Error values (SEM/confints/etc.)
-            to plotas semi-transparent fill around line.
-            If vector-valued or (n_lines,n) array, errors are treated as 1-sided (like SEMs),
-            and data[j,:] +/- err[j,:] is plotted for each line j.
-            If given as (2*n_lines,n) array, it's treated as 2-sided [upper; lower] error ranges
-            (like confidence intervals), with the odd rows = upper and even rows = lower errors
-            corresponding to each line.
-            If err=None [default], only the data line(s) are plotted without error fills
-            (to simplify calling code with optional errors).
+    err : array-like, shape=(n,) or (n_lines,n) or (2*n_lines,n), default: (no errorbars)
+        Error values (SEMs/confints/etc.) to plot as semi-transparent fill around line(s).
 
-    color   Color specification(s). Color to plot both line(s) and error fill(s) in.
-            Default: standard matplotlib color order (['C0',...,'C<n_lines>'])
+        If vector-valued or (n_lines,n) array, errors are treated as 1-sided (like SEMs),
+        and `data[j,:]` +/- `err[j,:]` is plotted for each line j.
 
-    events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
-            List of event values (eg times) to plot markers on x-axis for
-            -or- callable function that will plot the event markers itself.
-            Markers plotted underneath line + fill. See plot_markers() for details.
+        If given as (2*n_lines,n) array, it's treated as 2-sided [upper; lower] error ranges
+        (like confidence intervals), with the odd rows = upper and even rows = lower errors
+        corresponding to each line.
 
-    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
-            (settable Axes object attributes), plt.plot() (Line2D object attributes),
-            or plt.fill() (Polygon object attributes), including the following
-            (with given default values):
+        If err=None [default], only the data line(s) are plotted without error fills
+        (to simplify calling code with optional errors).
 
-    linewidth Scalar. Line width to plot data line(s) in. Default: 1.5
+    color : Color spec or (n_lines,) of Color specs, default: (standard matplotlib color order)
+        Color to plot each line(s) and error fill(s) in.
+        Can input either a single color spec to use for all lines/fills, or 1 per line/fill pair.
+        Can input in any of the ways matplotlib colors are defined (strings, 3-tuples, etc.)
 
-    alpha   Float, range(0-1). Alpha value for plotting error fill(s). 1=fully opaque, 0=fully
-            transparent. Default: 0.25
+    events : callable or array-like, shape=(n_events,)
+        List of event values (eg times) to plot as markers on x-axis
+        -or- callable function that will just plot the event markers itself.
+        See :func:`plot_markers` for details.
 
-    ACTION
-    Generate semi-transparent fill + overlaid line plot in same color, in given axis.
+    **kwargs
+        Any additional keyword args are interpreted as parameters of :func:`plt.axes`
+        (settable Axes object attributes), :func:`plt.plot` (Line2D object attributes),
+        or :func:`plt.fill` (Polygon object attributes) and passsed to the proper function.
+        A few commonly used options, with custom defaults:
 
-    RETURNS
-    lines   List of Line2D objects. ax.plot output. Allows access to line properties of line.
-    patches List of Polygon objects. ax.fill output. Allows access to patch properties of fill.
-    ax      Axis object. Axis plotted into.
+        linewidth : scalar, default: 1.5
+            Width of all plotted data line(s)
+
+        alpha : float, range=[0,1], default: 0.25
+            Transparency alpha value for plotting all error fill(s).
+            1=fully opaque, 0=fully transparent.
+
+    Returns
+    -------
+    lines : list of Line2D objects
+        ax.plot output. Allows access to line properties of line.
+
+    patches : list of Polygon objects
+        ax.fill output. Allows access to patch properties of fill.
+
+    ax : Axis object
+        Axis plotted into
     """
     x = np.asarray(x)
     data = np.asarray(data)
@@ -171,45 +188,52 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
 
 def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     """
-    Plots 2d data as a heatmap (aka pseudocolor) plot in given axis using matplotlib.pyplot.imshow
+    Plot 2D data as a heatmap (aka pseudocolor) plot in given axis
 
-    img,ax = plot_heatmap(x,y,data,ax=plt.gca(),clim=(data.min,data.max),events=None,**kwargs)
+    Uses :func:`plt.imshow`
 
-    ARGS
-    x       (n_x,) array-like. Sampling vector for data dimension to be plotted along x-axis
+    Parameters
+    ----------
+    x : array-like, shape=(n_x,)
+        Sampling vector for data dimension to be plotted along x-axis
 
-    y       (n_y,) array-like. Sampling vector for data dimension to be plotted along y-axis
+    y : array-like, shape=(n_y,)
+        Sampling vector for data dimension to be plotted along y-axis
 
-    data    (n_y,n_x) ndarray. Data to plot on color axis.  NOTE: Data array must be 2d,
-            with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
+    data  : ndarray, shape=(n_y,n_x)
+        Data to plot on color axis.  NOTE: Data array must be 2d,
+        with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
 
-    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca() (current axis)
+    ax : Pyplot Axis object, default: plt.gca() (current axis)
+        Axis to plot into.
 
-    clim    (2,) array-like. [low,high] limits of color axis. Default: [min(data),max(data)]
+    clim : array-like, shape=(2,), default: (data.min(),data.max()) (full range of data)
+        [low,high] limits of color axis
 
-    events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
-            List of event values (eg times) to plot markers on x-axis for
-            -or- callable function that will plot the event markers itself.
-            Markers plotted overlaid on heatmap. See plot_markers() for details.
+    events : callable or array-like, shape=(n_events,)
+        List of event values (eg times) to plot as markers on x-axis
+        -or- callable function that will just plot the event markers itself.
+        See :func:`plot_markers` for details.
 
-    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
-            (settable Axes object attributes) or plt.imshow() (AxesImage object attributes),
-            including the following (with given default values):
+    **kwargs
+        Any additional keyword args are interpreted as parameters of :func:`plt.axes`
+        (settable Axes object attributes) or :func:`plt.imshow` (AxesImage object attributes).
+        A few commonly used options, with custom defaults:
 
-    cmap    String | Colormap object. Colormap to plot heatmap in, given either as name of
-            matplotlib colormap or custom matplotlib.colors.Colormap object instance.
-            Default: 'viridis' (perceptually uniform dark-blue to yellow colormap)
+        cmap  : str | Colormap object. default: 'viridis' (linear dark-blue to yellow colormap)
+            Colormap to plot heatmap in, given either as name of matplotlib colormap or custom
+            matplotlib.colors.Colormap object instance.
 
-    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'=top.
-            Default: 'lower'
+        origin : {'lower','upper'}, default: 'lower'
+            Where 1st value in data is plotted along y-axis: 'lower'=bottom, 'upper'=top.
 
-    ACTIONS
-    Plots a heatmap plot in given axis, with given parameters. Unless set in kwargs,
-    the aspect ratio is set='auto', and the origin='lower' (ie not upside-down)
+    Returns
+    -------
+    img : AxesImage object
+        Output of ax.imshow(). Allows access to image properties.
 
-    RETURNS
-    img     AxesImage object. Output of ax.imshow(). Allows access to image properties.
-    ax      Axis object. Axis plotted into.
+    ax : Axis object
+        Axis plotted into.
     """
     x = np.asarray(x)
     y = np.asarray(y)
@@ -265,52 +289,63 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
 def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
                     events=None, **kwargs):
     """
-    Plots 2d data as series of vertically-offset line plots with same x-axis.
+    Plot 2d data as series of vertically-offset line plots with same x-axis values
+
     Used for example when plotting time-series traces from multiple electrodes on a linear probe.
 
-    lines,ax = plot_lineseries(x,y,data,scale=1.5,color='C0',origin='upper',
-                               events=None, **kwargs)
+    Uses :func:`plt.plot`
 
-    ARGS
-    x       (n_x,) array-like. Sampling vector for data dimension to be plotted along x-axis.
-            This will usually be timepoints.
+    Parameters
+    ----------
+    x : array-like, shape=(n_x,)
+        Sampling vector for data dimension to be plotted on x-axis. This will often be timepoints.
 
-    y       (n_y,) array-like. Sampling vector for data dimension to be plotted along y-axis.
-            Determines what is plotted for y-axis ticks (one at each plotted line).
-            This will usually be channel numbers or channel labels.
+    y : array-like, shape=(n_y,)
+        Sampling vector for data dimension to be plotted along y-axis. Can be either numeric or
+        string labels ot plot for y-axis ticklabels (one at each plotted line).
+        This will often be channel numbers or channel labels.
 
-    data    (n_y,n_x) ndarray. Data to plot as vertically-offset line series. NOTE: Data array
-            must be 2d, with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
+    data : ndarray, shape=(n_y,n_x)
+        Data to plot as vertically-offset line series. NOTE: Data array must be 2d,
+        with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
 
-    ax      Pyplot Axis object. Axis to plot into. Default: plt.gca()
+    ax :  Pyplot Axis object, default: plt.gca() (current axis)
+         Axis to plot into
 
-    scale   Float. Scale factor for plotting data. 1 = max range of data extends to next
-            offset plotted line, >1 = extends farther. Default: 1.5
+    scale : float, default: 1.5
+        Scale factor for plotting data. 1 = max range of entire data maps to offset between
+        successive lines in plot; >1 = extends farther; <1 = scaled smaller than offset.
 
-    color   Color specification | (n_y,) of Color specifications. Color(s) to use to plot each
-            line in line series. Must input 1 value per line OR a single value that will be used
-            for ALL lines plotted. Default: 'C0' (blue for all lines)
+    color : Color spec | (n_y,) of Color specs, default: 'C0' (blue for all lines)
+        Color(s) to use to plot each line in line series.
+        Can input either a single color spec to use for all lines/fills, or 1 per line/fill pair.
+        Can input in any of the ways matplotlib colors are defined (strings, 3-tuples, etc.)
 
-    origin  String. Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'=top.
-            Default: 'upper' (so plot has same order as a probe numbered from topmost contact)
+    origin : {'lower','upper'}, default: 'upper'
+        Where 1st value in data is plotted along y-axis;'lower'=bottom, 'upper'=top.
+        Default order plots in same order as a probe numbered from topmost contact.
 
-    events  Callable | (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
-            List of event values (eg times) to plot markers on x-axis for
-            -or- callable function that will plot the event markers itself.
-            Markers plotted underneath lineseries. See plot_markers() for details.
+    events : callable or array-like, shape=(n_events,)
+        List of event values (eg times) to plot as markers on x-axis
+        -or- callable function that will just plot the event markers itself.
+        See :func:`plot_markers` for details.
 
-    **kwargs Any additional keyword args are interpreted as parameters of plt.axes()
-            (settable Axes object attributes) or plt.plot() (Line2D object attributes),
-            including the following (with given default values):
+    **kwargs
+        Any additional keyword args are interpreted as parameters of :func:`plt.axes`
+        (settable Axes object attributes) or :func:`plt.plot` (Line2D object attributes)
+        and passsed to the proper function.
+        A few commonly used options, with custom defaults:
 
-    linewidth Scalar. Line width to plot data line(s) in. Default: 1
+        linewidth : scalar, default: 1
+            Width of all plotted data line
 
-    ACTION
-    Plots line series data into given axes using multiple calls to ax.plot()
+    Returns
+    -------
+    lines : list of Line2D objects
+        ax.plot output. Allows access to line properties of line.
 
-    RETURNS
-    lines   List of Line2D objects. ax.plot output. Allows access to line properties.
-    ax      Pyplot Axis object. Axis for plot
+    ax : Axis object
+        Axis plotted into.
     """
     x = np.asarray(x)
     y = np.asarray(y)
@@ -370,16 +405,16 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
                  linecolor=[0.50,0.50,0.50], linewidth=0.5,
                  fillcolor=[0.50,0.50,0.50], fillalpha=0.2):
     """
-    Plot set of markers (eg to mark trial event times) on given axis/axes
+    Plot set of markers on given axis/axes (eg to mark trial event times)
 
-    Single point events should be input as scalars in <values>, and are plotted as
+    Single point events should be input as scalars in `values`, and are plotted as
     a single line of given color and width.
 
     Events extending over a range/duration should be input as 2-length (start,end) tuples,
-    in <values>, and are plotted as filled rectangles of given color and alpha (transparency).
+    in `values`, and are plotted as filled rectangles of given color and alpha (transparency).
 
     Events that reflect a central value (eg mean) +/- a range or error (eg SDs) should
-    be input as 3-length (center-error,center,center+error) tuples in <values>, and are
+    be input as 3-length (center-error,center,center+error) tuples in `values`, and are
     plotted as a solid central line with dashed error lines, in the given color and width.
 
     All marker types extend the full length of the opposing axis.
@@ -387,23 +422,25 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     NOTE: If limits are explicitly input for the axis the markers are plotted on, any marker fully
     outside of the plot limits will not be plotted, to avoid surprise expansion of the plot limits.
 
-    INPUTS
-    values      (n_events,) array-like of scalars, 2-tuples, and/or 3-tuples.
-                List of values (eg trial event times) on given axes to plot markers for.
-                Each entry in list can be a scalar (plotted as a line), a (start,end)
-                2-length tuple (plotted as a filled rectangle), or a (-err,center,+err)
-                3-length tuple (plotted as solid line with surrounding dashed lines).
+    Parameters
+    ----------
+    values : array-like, shape=(n_events,), dtype=scalars and/or 2-tuples and/or 3-tuples
+        List of values (eg trial event times) on given axes to plot markers for.
+        Each entry in list can be a scalar (plotted as a line), a (start,end)
+        2-length tuple (plotted as a filled rectangle), or a (-err,center,+err)
+        3-length tuple (plotted as solid line with surrounding dashed lines).
 
-    axis        String. Which axis to plot markers on: 'x'|'y'|'both'.  Default: 'x'
+    axis : {'x','y','both'}, default: 'x'
+        Which axis to plot markers on -- x-axis, y-axis, or both axes (eg for time x time plot)
 
-    ACTIONS
-    Plots appropriate marker(s) for each value in values
+    Returns
+    -------
+    ax : Axis object
+        Axis plotted into.
 
-    RETURNS
-    ax      Axis object. Axis plotted into.
-    handles List of Line2D, Polygon, or lists of Line2D objects. ax.plot/fill outputs for each
-            marker plotted, in the same order as input. Allows access to properties of marker
-            lines/fills.
+    handles : List of Line2D, Polygon, or lists of Line2D objects
+        plt.plot/fill outputs for each marker plotted, in the same order as input.
+        Allows access to properties of marker lines/fills.
     """
     if isinstance(values,float) or isinstance(values,int): values = [values]
     xlim_input = xlim is not None
@@ -488,30 +525,24 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
 
 def full_figure(**kwargs):
     """
-    Creates full-screen figure. Wrapper around plt.figure() that sets size to full screen.
+    Create full-screen figure
 
-    ARGS
-    **kwargs    Any keyword args passed directly to plt.figure()
+    Wrapper around :func:`plt.figure` that sets size to full screen.
 
-    ACTION      Opens new figure that fills entire screen
+    Parameters
+    ----------
+    **kwargs
+        Any keyword args passed directly to :func:`plt.figure`
 
-    RETURNS
-    fig         Figure object. Output of plt.figure()
+    Returns
+    -------
+    fig : Figure object
+        Output of :func:`plt.figure`
     """
     if 'frameon' not in kwargs: kwargs.update(frameon=True) # WAS False (changed due to MPL 3.1.0)
     fig = plt.figure(**kwargs)
-    maximize_figure()
+    _maximize_figure()
     return fig
-
-
-def maximize_figure():
-    """
-    Maximizes size of current Pyplot figure to fill full screen
-
-    SOURCE  gist.github.com/smidm/d26d34946af1f59446f0
-    """
-    fig_manager = plt.get_current_fig_manager()
-    if hasattr(fig_manager, 'window'): fig_manager.window.showMaximized()
 
 
 # =============================================================================
@@ -519,21 +550,27 @@ def maximize_figure():
 # =============================================================================
 def _hash_kwargs(args_dict, attr_lists):
     """
-    Given a dict of keyword args input into a plotting function, determines which
+    Given a dict of keyword args input into a plotting function, determine which
     are attributes of each of a given set of plot objects (eg Axes, Lines2D, etc.).
 
-    ARGS
-    args_dict   Dict. List of all keyword args (name:value pairs) input into a plotting function.
-    attr_lists  List of lists. Set of lists of attributes of plotting objects that keywords args
-                may be attributes of. Function matches each args to its proper attribute list
-                (and thus, to its corresponding plotting object).
+    Parameters
+    ----------
+    args_dict : dict {str:value}
+        List of all keyword args (name:value pairs) input into a plotting function
+        
+    attr_lists : List of lists
+        Set of lists of attributes of plotting objects that keywords args
+        may be attributes of. Function matches each args to its proper attribute list
+        (and thus, to its corresponding plotting object).
 
-    OUTPUTS
-    **hashed_attrs Tuple of dicts. Each dict contains name:value pairs for all keyword args
-                corresponding to each attr_list/plotting object (ie 1st output = args
-                corresponding to attr_lists[0], 2nd output ~ attr_lists[1], etc.)
+    Returns
+    -------
+    **hashed_attrs : tuple of dicts {str:value}
+        Each dict contains name:value pairs for all keyword args
+        corresponding to each attr_list/plotting object (ie 1st output = args
+        corresponding to `attr_lists[0]`, 2nd output ~ `attr_lists[1]`, etc.)
 
-                Any keyword args not matched to any attr_list will raise an error.
+        Any keyword args not matched to any `attr_list` will raise an error.
     """
     # Create list of empty dictionaries to hash arguments into
     hashed_attrs = [{} for _ in range(len(attr_lists))]
@@ -559,7 +596,7 @@ def _hash_kwargs(args_dict, attr_lists):
 
 
 def _set_plot_colors(color, n_plot_objects):
-    """ Sets plotting colors, including defaults and expanding colors to # of plot objects """
+    """ Set plotting colors, including defaults and expanding colors to # of plot objects """
     # If no color set, set default = ['C0','C1',...,'CN'] = default matplotlib plotting color order
     if color is None:
         color = ['C'+str(j) for j in range(n_plot_objects)]
@@ -579,3 +616,13 @@ def _set_plot_colors(color, n_plot_objects):
                            " or a single value that is used for all plot objects")
 
     return color
+
+
+def _maximize_figure():
+    """
+    Maximize size of current Pyplot figure to fill full screen
+
+    REFERENCE  gist.github.com/smidm/d26d34946af1f59446f0
+    """
+    fig_manager = plt.get_current_fig_manager()
+    if hasattr(fig_manager, 'window'): fig_manager.window.showMaximized()

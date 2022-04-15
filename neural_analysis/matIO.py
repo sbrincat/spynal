@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-matIO   Functions for loading from and saving to Matlab MAT files
+Functions for loading from and saving to Matlab MAT files
 
-FUNCTIONS
-loadmat Loads variables from any Matlab MAT file. Also aliased as 'load'.
+Function list
+-------------
+- loadmat : Loads variables from any Matlab MAT file. Also aliased as 'load'.
 
-whomat  Lists all variables in any MAT file. Also aliased as 'who'.
+- savemat : Saves given variables into a MAT file. Also aliased as 'save'.
 
-savemat Saves given variables into a MAT file. Also aliased as 'save'.
-        NOTE: Currently only version 7 MAT files are supported, and thus you
-        cannot save variables > 2GB.
+- whomat :  Lists all variables in any MAT file. Also aliased as 'who'.
 
-variables_to_mat Converts given Python variables into MATfile-compatible
-        variable types
+Dependencies
+------------
+- h5py :    Python interface to the HDF5 binary data format (used for mat v7.3 files)
 
-DEPENDENCIES
-h5py    Python interface to the HDF5 binary data format (used for mat v7.3 files)
-
-
-Created on Mon Mar 12 17:20:26 2018
-
-@author: sbrincat
+Function reference
+------------------
 """
+# Created on Mon Mar 12 17:20:26 2018
+#
+# @author: sbrincat
+
 import time
 import sys
 from types import SimpleNamespace
@@ -40,7 +39,7 @@ except ImportError:
     _HAS_XARRAY = False
     # print("xarray module is not installed. No support for loading/saving xarray format")
 
-from neural_analysis.helpers import _enclose_in_object_array
+from neural_analysis.helpers import _isbinary, _enclose_in_object_array
 
 # Uncomment to print out detailed debugging statements in loading functions
 DEBUG = False
@@ -49,75 +48,74 @@ DEBUG = False
 # =============================================================================
 # Matfile loading functions
 # =============================================================================
-def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=True,
-            order='Matlab', version=None, verbose=True):
+def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab', verbose=True):
     """
-    Loads variables from a given MAT file (of any version), and returns them
-    either individually or in a dict, where each variable maps to a key/value pair,
-    and value types are logical Python equivalents of Matlab types:
-    Matlab      ->      Python
-    ------              ------
-    double/single       float
-    int                 int
-    char,string         str
-    logical             bool (returns as int for v7, complain to scipy)
-    array               Numpy ndarray of appropriate dtype
-    cell array          Numpy ndarray of object dtype
-    struct              dict or Pandas Dataframe (for table-like structs; depends on typemap)
-
-    NOTE: Some proprietary or custom Matlab variables CANNOT be loaded, including:
-    table/timetable, datetime, categorical, function_handle, map container, any custom object class
+    Load variables from a given MAT file and return them in appropriate Python types
 
     Handles both older (v4-v7) and newer (v7.3) versions of MAT files,
     transparently to the user.
 
-    loadmat(filename,variables=None,typemap=None,asdict=False,extract_elem=True,
-            order='Matlab',version=None,verbose=True)
+    Variables returned individually or in a dict, where each variable maps to key/value pair
 
-    USAGE
-    data_dict = loadmat(filename,variable,asdict=True)
-    variable1,variable2,... = loadmat(filename,variable,asdict=False)
+    Returned variable types are logical Python equivalents of Matlab types:
+    ======              ======
+    MATLAB              PYTHON
+    ======              ======
+    double/single       float
+    int                 int
+    char,string         str
+    logical             bool
+    array               Numpy ndarray of appropriate dtype
+    cell array          Numpy ndarray of object dtype
+    struct              dict or Pandas Dataframe (for table-like structs; depends on typemap)
+    ======              ======
 
-    INPUT
-    filename    String. Full-path name of MAT-file to load from
+    Single-element Matlab arrays are converted to the contained item type (eg float/int/str)
 
-    variables   List of strings. Names of variables to load. Default: all file variables
+    NOTE: Some proprietary or custom Matlab variables cannot be loaded, including:
+    table/timetable, datetime, categorical, function_handle, map container, any custom object class
 
-    typemap     {string:string} Dict. Maps names of Matlab variable types or
-                specific Matlab variable names to Python variable types.
-                Matlab types: 'array' = numerical array, 'cell' = cell array,
-                    'struct' = structure).
-                Python types: 'array' = Numpy ndarray, 'dataframe' = Pandas
-                    DataFrame, 'dict' = dictionary
-                Default: {'array':'array', 'cell':'array', 'struct':'dict'}
+    Parameters
+    ----------
+    filename : str
+        Full-path name of MAT file to load from
 
-    asdict      Bool. If True, returns variables in a {'variable_name':value} dict.
-                If False [default], returns variables separately in tuple.
+    variables : list of str, default: <all variables in file>
+        Names of all variables to load
 
-    extract_elem Bool. If False, 1-item ndarrays are returned as such.
-                If True [default], the element value is extracted and returned as
-                the type implied by its array dtype (eg float/int/string).
+    typemap : dict {str:str}, default: {'array':'array', 'cell':'array', 'struct':'dict'}
+        Maps names of Matlab variables or variable types to returned Python variable types.
+        Currently alternative options only supported for table-like structs, which can
+        return either as 'dict' or 'dataframe' (Pandas DataFrame).
 
-    order       String. Dimension order of loaded/returned arrays (Default: Matlab):
-                  'Matlab'/'F'  : Use Matlab dimensional ordering (column-major-compatible;
-                                   default behavior for scipy.io.loadmat)
-                  'Python'/'C'  : Use Python dimensional ordering (row-major compatible;
-                                   default behavior for h5py)
+    asdict : bool, default: False
+        If True, returns variables in a {'variable_name':value} dict.
+        If False, returns variables separately (as tuple).
 
-    version     Float. Version of MAT file: 7 (older) | 7.3 (newer/HDF5).
-                Default: finds it from mat file header
+    order : str, default: 'Matlab'
+        Dimension order of returned arrays. Determines how values are arranged when reshaped.
+        Options:
+        - 'Matlab'/'F'  : Use Matlab/Fortran dimensional ordering (column-major-compatible)
+        - 'Python'/'C'  : Use Python/C dimensional ordering (row-major compatible)
 
-    verbose     Logical. Set to print names and shapes of all loaded variables to stdout
-                Default: True
+    verbose : bool, default: True
+        If True, prints names and shapes of all loaded variables to stdout
 
-    OUTPUT
-    data_dict   {String:<variable>} dict. Dictionary holding all loaded variables,
-                mapping variable name to its value.
+    Returns
+    -------
+    data_dict : dict {str:<variable>}
+        Dictionary holding all loaded variables, mapping variable name to its value
+
     -or-
-    vbl1,vbl2,... Tuple of variables.
 
-    For both output types, Matlab arrays are generally returned as Numpy arrays;
-    Matlab structs are returned as (sub)dicts or Pandas DataFrames (with fieldnames as keys)
+    vbl1,vbl2,... :
+        Variables returned individually, as in 2nd example above
+
+    Examples
+    --------
+    data_dict = loadmat(filename, variable, asdict=True)
+
+    variable1, variable2, ... = loadmat(filename, variable, asdict=False)
     """
     # If variables input as string, convert to list
     if isinstance(variables,str):  variables = [variables]
@@ -128,7 +126,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
     assert order.upper() in ['MATLAB','F','COL','COLMAJOR','PYTHON','C','ROW','ROWMAJOR'], \
         "<order> must be 'Matlab' or 'Python' (%s given)" % order
 
-    if version is None: version = _get_matfile_version(filename)
+    version = _get_matfile_version(filename)
 
     # Use h5py to load v7.3 MAT-files (which are a type of hdf5 file)
     if version == 7.3:  data = _load73(filename,variables,typemap,order)
@@ -137,12 +135,6 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
     else:               data = _load7(filename,variables,typemap,order)
 
     if variables is None: variables = list(data.keys())
-
-    # Extract values from 1-item arrays as their given dtype
-    if extract_elem:
-        for vbl in variables:
-            if isinstance(data[vbl], np.ndarray) and (data[vbl].size == 1):
-                data[vbl] = data[vbl].item()
 
     if verbose:
         for vbl in variables:
@@ -167,32 +159,27 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_elem=T
 
 
 load = loadmat
-""" Also alias loadmat() as load() """
+""" Alias of :func:`loadmat`. See there for details. """
 
 
-def whomat(filename, version=None, verbose=True):
+def whomat(filename, verbose=True):
     """
-    Returns list of variables in a given MAT file (of any version)
-    and/or prints them to stdout
+    Return list of variables in a given MAT file and/or print them to stdout
 
-    variables = whomat(filename,version=None,verbose=True)
+    Parameters
+    ----------
+    filename : str
+        Full-path name of MAT-file to examine
 
-    Handles both older (v4-v7) and newer (v7.3) versions of MAT files,
-    transparently to the user.
+    verbose : bool, default: True
+        If True, prints names of all file variables to stdout
 
-    INPUT
-    filename    String. Full-path name of MAT-file to examine
-
-    version     Float. Version of MAT file: 7 (older) | 7.3 (newer/HDF5).
-                Default: finds it from mat file header
-
-    verbose     Logical. Set to print names of all file variables to stdout
-                Default: True
-
-    OUTPUT
-    variables   List of strings. Names of variables in file
+    Returns
+    -------
+    variables : list of str
+        Names of variables in file
     """
-    if version is None: version = _get_matfile_version(filename)
+    version = _get_matfile_version(filename)
 
     # Use h5py to load v7.3 MAT-files (which are a type of hdf5 file)
     if version == 7.3:  variables = _who73(filename)
@@ -204,36 +191,39 @@ def whomat(filename, version=None, verbose=True):
 
     return variables
 
+
 who = whomat
-""" Also alias whomat() as who() """
+""" Alias of :func:`whomat`. See there for details. """
+
 
 # =============================================================================
 # Matfile saving functions
 # =============================================================================
 def savemat(filename, variables, version=None, **kwargs):
     """
-    Saves data variables to a Matlab MAT file
+    Save data variables to a Matlab MAT file
 
-    savemat(filename,variables,version=None,do_compression=False)
+    NOTE: Currently can only save older (v7), not newer (v7.3), versions of MAT files
 
-    Currently handles only older (v7), not newer (v7.3), versions of MAT files
+    Parameters
+    ----------
+    filename : str
+        Full-path name of MAT file to save to
 
-    INPUT
-    filename    String. Full-path name of MAT-file to save to
+    variables : dict {str:<variable>}
+        Names and values of variables to save
 
-    variables   {String:<vbl>} dict. Names and values of variables to save.
+    version : float, default: (7.3 if any variable is > 2 GB; 7 otherwise)
+        Version of MAT file: 7 (older) | 7.3 (newer/HDF5).
 
-    version     Float. Version of MAT file: 7 (older) | 7.3 (newer/HDF5).
-                Default: 7.3 if any variable is > 2 GB; 7 otherwise
-
-    **kwargs    All other keyword args passed to scipy.io.savema()
-
-    ACTION
-    Saves given variables to a MAT file of given (or internally set) version
+    **kwargs
+        All other keyword args passed to scipy.io.savemat()
     """
+    assert (version is None) or (version in [7,7.3]), ValueError("version must be 7 or 7.3")
+
     # Do any necessary conversions to get all variables into matfile-compatible format
     # Note: Use deepcopy to create copy of all variables to avoid changing in caller
-    variables = variables_to_mat(deepcopy(variables))
+    variables = _variables_to_mat(deepcopy(variables))
 
     # If version is not set or set=7, check to make sure no variables are > 2 GB
     if version != 7.3:
@@ -242,7 +232,7 @@ def savemat(filename, variables, version=None, **kwargs):
         max_size = np.max(np.asarray(sizes))/(1024.0**3)
         # If any veriable is > 2GB, must use v7.3, otherwise default to v7
         if max_size >= 2:
-            if version == 7.3: print('WARNING: Variable > 2 GB, switching to MAT file v7.3')
+            if version == 7: print('WARNING: Variable > 2 GB, switching to MAT file v7.3')
             version = 7.3
         else:
             version = 7
@@ -257,64 +247,7 @@ def savemat(filename, variables, version=None, **kwargs):
 
 
 save = savemat
-""" Also alias savemat() as save() """
-
-
-def variables_to_mat(variables):
-    """
-    Does any necessary conversions to get all variables into matfile-compatible
-    variable types format
-
-    variables = variables_to_mat(variables)
-
-    INPUT
-    variables   {String:<vbl>} dict. Names and values of variables to convert
-
-    OUTPUT
-    variables   Same, but with variables converted to mat compatible types:
-                xarray.DataArray -> Numpy ndarray + {string:*} dict with metadata
-                attributes (stored in separate variable named <variable>_attr)
-                strings, lists of strings -> Numpy object ndarray
-    """
-    new_vbl_dict = {}     # In case we need to create new variables in loop below
-
-    def _size_general(x):
-        if isinstance(x,np.ndarray):        return x.size
-        elif isinstance(x, (list,tuple)):   return len(x)
-        else:                               return 1
-
-    for variable,value in variables.items():
-        # Call function recursively with dictionary variables
-        if isinstance(value,dict):
-            variables[variable] = variables_to_mat(value)
-
-        elif isinstance(value,list):
-            # Convert lists with any strings or with unequal-length entries -> object arrays
-            # (same-length numerical lists are auto-converted to numerical arrays)
-            # todo should we recurse here in case of nested lists?
-            is_str = np.any([isinstance(item,str) for item in value])
-            sizes = [_size_general(item) for item in value]
-            is_unequal_size = np.any(np.diff(sizes) != 0)
-            if is_str or is_unequal_size:
-                variables[variable] = np.asarray(value,dtype=object)
-
-        # Convert strings to Numpy object arrays
-        elif isinstance(value,str):
-            variables[variable] = np.asarray([value],dtype=object)
-
-        # Convert Pandas DataFrame to dict and call this func recursively on items (cols)
-        elif isinstance(value,pd.DataFrame):
-            variables[variable] = variables_to_mat(value.to_dict(orient='list'))
-
-        # Conversion from xarray -> numpy array + dict (skip if xarray not installed)
-        # Extract metadata attributes as new dict variable called <variable>_attr
-        elif _HAS_XARRAY and isinstance(value,xr.DataArray):
-            variables[variable],new_vbl_dict[variable+'_attr'] = \
-                _xarray_to_array(value)
-
-
-    # Merge any newly-created variables into existing variable dict
-    return {**variables, **new_vbl_dict}
+""" Alias of :func:`savemat`. See there for details. """
 
 
 # =============================================================================
@@ -641,7 +574,7 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
         for _ in range(obj.size):
             coords = flatiter.coords    # Multidim coordinates into array
             # Infer Matlab variable type of cell array element
-            matlab_elem_type = _v7_matlab_type(obj[coords])            
+            matlab_elem_type = _v7_matlab_type(obj[coords])
             converted[coords] = _process_v7_object(obj[coords], typemap=typemap,
                                                    matlab_vbl_type=matlab_elem_type,
                                                    transpose=transpose, level=level)
@@ -762,16 +695,6 @@ def _v7_matlab_type(obj):
         raise TypeError("Undetermined type of variable:", obj)
 
 
-def _isbinary(x):
-    """
-    Tests whether variable contains only binary values (True,False,0,1)
-    """
-    x = np.asarray(x)
-    return (x.dtype == bool) or \
-           (np.issubdtype(x.dtype,np.number) and \
-            np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
-
-
 # =============================================================================
 # Other helper functions
 # =============================================================================
@@ -784,7 +707,6 @@ def _get_matfile_version(filename):
 
     OUTPUT
     version     Float. Version of MAT file: 7 (older) | 7.3 (newer/HDF5)
-
     """
     # Read in first 10 bytes of MAT file header and convert to string ("with" auto-closes file)
     with open(filename, 'rb') as file:
@@ -998,6 +920,64 @@ def _parse_typemap(typemap_in=None):
             % typemap_out['struct']
 
     return typemap_out
+
+
+def _variables_to_mat(variables):
+    """
+    Does any necessary conversions to get all variables into matfile-compatible
+    variable types format
+
+    variables = _variables_to_mat(variables)
+
+    INPUT
+    variables   {String:<vbl>} dict. Names and values of variables to convert
+
+    OUTPUT
+    variables   Same, but with variables converted to mat compatible types:
+                xarray.DataArray -> Numpy ndarray + {string:*} dict with metadata
+                attributes (stored in separate variable named <variable>_attr)
+                strings, lists of strings -> Numpy object ndarray
+    """
+    new_vbl_dict = {}     # In case we need to create new variables in loop below
+
+    def _size_general(x):
+        if isinstance(x,np.ndarray):        return x.size
+        elif isinstance(x, (list,tuple)):   return len(x)
+        else:                               return 1
+
+    for variable,value in variables.items():
+        # Call function recursively with dictionary variables
+        if isinstance(value,dict):
+            variables[variable] = _variables_to_mat(value)
+
+        elif isinstance(value,list):
+            # Convert lists with any strings or with unequal-length entries -> object arrays
+            # (same-length numerical lists are auto-converted to numerical arrays)
+            # todo should we recurse here in case of nested lists?
+            is_str = np.any([isinstance(item,str) for item in value])
+            sizes = [_size_general(item) for item in value]
+            is_unequal_size = np.any(np.diff(sizes) != 0)
+            if is_str or is_unequal_size:
+                variables[variable] = np.asarray(value,dtype=object)
+
+        # Convert strings to Numpy object arrays
+        elif isinstance(value,str):
+            variables[variable] = np.asarray([value],dtype=object)
+
+        # Convert Pandas DataFrame to dict and call this func recursively on items (cols)
+        elif isinstance(value,pd.DataFrame):
+            variables[variable] = _variables_to_mat(value.to_dict(orient='list'))
+
+        # Conversion from xarray -> numpy array + dict (skip if xarray not installed)
+        # Extract metadata attributes as new dict variable called <variable>_attr
+        elif _HAS_XARRAY and isinstance(value,xr.DataArray):
+            variables[variable],new_vbl_dict[variable+'_attr'] = \
+                _xarray_to_array(value)
+
+
+    # Merge any newly-created variables into existing variable dict
+    return {**variables, **new_vbl_dict}
+
 
 
 # Setup so module can be run from command line using:  python matIO.py <arguments>

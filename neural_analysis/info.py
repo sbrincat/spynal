@@ -1,90 +1,86 @@
 # -*- coding: utf-8 -*-
 """
-info    A module for computing measures of neural information about task/behavioral variables
+Compute measures of neural information about task/behavioral variables
 
-Functionality for computing information in neural activity about experimental variables 
-(task conditions and/or behavior) using various different methods, which different assumptions
-about form of data:
-- PEV -- Measures percent of variance in neural activity explained by experimental variable(s).
-    Assumes task->activity encoding described by linear model, and data is ~ normally distributed
-    with same variance for all conditions. 
+Overview
+--------
+Functionality for computing information in neural activity about experimental variables
+(task conditions and/or behavior) using various different methods, which have different
+assumptions about distribution of neural activity and task->activity encoding model:
+
+- **PEV** : Percent of variance in neural activity explained by experimental variable(s).
+    Assumes encoding described by linear model, and data is ~ normally distributed
+    with same variance for all conditions.
     Can handle any arbitary combinations of multi-level categorical or continuous task variables.
 
-- dprime -- Measures distance between data means normalized by their pooled standard deviations.
+- **dprime** : Distance between data means normalized by their pooled standard deviations.
     Assumes task->activity encoding is based on a change in mean activity, data is normal.
     Can only handle two-sample data (ie contrasts between two categorical task conditions).
 
-- area under ROC -- Measures area under ROC curve for discriminating activity btwn two conditions.
-    Assumes task->activity encoding is based on a change in mean activity, but no assumption of
+- **area under ROC** : Area under ROC curve for discriminating activity between two conditions.
+    Assumes encoding is based on a change in mean activity, but no assumption of
     any specific data distributions.
     Can only handle two-sample data (ie contrasts between two categorical task conditions).
 
-- mutual information -- Measures mutual information between neural activity and task variable
+- **mutual information** : Mutual information between neural activity and task variable
     (roughly, how much knowing the neural activity reduces uncertainty about the task variable).
-    Makes NO assumptions about data distribution or form of task->activity encoding model.
+    Makes NO assumptions about data distribution or encoding model.
     But, as a result, requires more data to reliably estimate.
     Can only handle two-sample data (ie contrasts between two categorical task conditions).
 
-- decoding -- Measures accuracy in decoding (classifying) task variable from neural activity
-    Unlike other methods here, this is based on a decoding (activity->task), rather than encoding
-    (task->activity), model.
-    Unlike other models, this method is multivariate (looks at information across multiple neural
-    channels), rather than univariate (looks at information only in a single channel at a time).
-    Commonly-used linear decoders assume activity->task decoding is described a linear model, and
-    often also assume activity is distributed as a multivariate normal. However, user can also use
-    any custom decoding model (with different assumptions) with this function.
+- **decoding** : Accuracy in decoding (classifying) task variable from neural activity
+    Unlike other methods here, this is based on a *decoding* (activity->task), rather than
+    *encoding* (task->activity), model.
+    Unlike other models, this method is *multivariate* (looks at information across multiple neural
+    channels), rather than *univariate* (looks at information only in a single channel at a time).
+    Commonly-used linear decoders assume activity->task decoding is described by a linear model,
+    and often also assume activity is distributed as a multivariate normal. However, user can also 
+    use any custom decoding model (with different assumptions) with this function.
     Can only handle multi-level categorical (multinomial) task variables.
-    
-Most functions perform operations in a mass-univariate (or mass-multivariate) manner. This means
-that rather than embedding function calls in for loops over channels, timepoints, etc., like this:
 
-for channel in channels:
-    for timepoint in timepoints:
-        results[timepoint,channel] = compute_something(data[timepoint,channel])
+Most functions perform operations in a mass-univariate (or mass-multivariate) manner. This means
+that rather than embedding function calls in for loops over channels, timepoints, etc., like this::
+
+    for channel in channels:
+        for timepoint in timepoints:
+            results[timepoint,channel] = compute_something(data[timepoint,channel])
 
 You can instead execute a single call on ALL the data, labeling the relevant axis
 for the computation (usually trials/observations here), and it will run in parallel (vectorized)
 across all channels, timepoints, etc. in the data, like this:
 
-results = compute_something(data, axis)
+``results = compute_something(data, axis)``
 
+Function list
+-------------
+High-level information computation wrapper functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- neural_info :         Compute neural information using any given method
+- neural_info_2groups : Compute binary neural info with 2 data groups as inputs
+- neural_info_ngroups : Compute multi-class neural info with n data groups as inputs
 
-FUNCTIONS
-### High-level information computation wrapper functions ###
-neural_info     Wrapper function computes neural information using any given method
-neural_info_2groups Wrapper function computes binary neural info with 2 data groups as inputs
-neural_info_ngroups Wrapper function computes multi-class neural info with n data groups as inputs
+Specific information measures
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- decode :      Compute accuracy of decoding task conds from neural activity
+- mutual_info : Compute Shannon mutual information btwn response and task conds
+- auroc :       Compute area under Receiver Operating Curve
+- dprime :      Compute d-prime (Cohen's d) -- difference in means/pooled SD
+- pev :         Compute percent explained variance by task conds (with optional stats)
+    - anova1 :      Compute PEV and stats using 1-way ANOVA
+    - anova2 :      Compute PEV and stats using 2-way ANOVA
+    - regress :     Compute PEV and stats using multi-factor linear regression
 
-### Multivariate population decoding (classification accuracy) ###
-decode          Computes neural info as accuracy of decoding task conds from neural activity
+Dependencies
+------------
+- patsy :       Python package for describing statistical models
 
-### Shannon mutual information-related functions ###
-mutual_info     Computes neural info as Shannon mutual information btwn response and task conds
-
-### Area under receiver operating characteristic curve-related functions ###
-auroc           Computes neural info as area under ROC curve
-
-### D-prime/Cohen's d-related functions ###
-dprime          Computes neural information as d-prime (Cohen's d) -- difference in means/pooled SD
-
-### Percent explained variance-related functions ###
-pev             Computes neural info as percent explained variance (with optional stats)
-anova1          Computes PEV and stats using 1-way ANOVA
-anova2          Computes PEV and stats using 2-way ANOVA
-regress         Computes PEV and stats using 2-way linear regression
-
-### Utility functions ###
-patsy_terms_to_columns Returns regress term corresponding to each col in patsy DesignMatrix
-
-
-DEPENDENCIES
-patsy           Python package for describing statistical models
-
-
-Created on Mon Sep 17 00:05:25 2018
-
-@author: sbrincat
+Function reference
+------------------
 """
+# Created on Mon Sep 17 00:05:25 2018
+#
+# @author: sbrincat
+
 import numpy as np
 
 from scipy.stats import f as Ftest
@@ -107,30 +103,33 @@ def neural_info(labels, data, axis=0, method='pev', **kwargs):
     Wrapper function to compute mass-univariate neural information about
     some task/behavioral variable(s)
 
-    info = neural_info(labels,data,axis=0,method='pev',**kwargs)
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,) or (n_obs,n_terms)
+        List of labels or design matrix to measure information about.
+        Must be same length as data.shape along dimension `axis`
 
-    ARGS
-    labels  (n_obs,) | (n_obs,n_terms) array-like. List of labels or design matrix.
-            Must be same length as data.shape[0] along dimension <axis>.
+    data : ndarray, shape=(...,n_obs,...)
+        Neural data to measure information in
+        Axis `axis` should correspond to observations (trials), while rest of
+        axis(s) can be any independent data series (channels, time points,
+        frequencies, etc.) that will be analyzed separately using the same labels.
 
-    data    (...,n_obs,...) ndarray. Neural data to fit. Axis <axis> should
-            correspond to observations (trials), while rest of axis(s) are any
-            independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels.
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    axis    Int. Axis of data array to perform analysis on, corresponding
-            to trials/observations. Default: 0 (first axis)
+    method : {'pev','dprime','auroc','mutual_info','decode'}, default: 'pev'
+        Method to use to compute information. See specific functions for details.
 
-    method  String. Method to use to compute information. Options:
-            'pev' | 'dprime' | 'auroc' | 'mutual_info' | 'decode'
-            Default: 'pev'
+    **kwargs
+        All other kwargs passed directly to specific information method function
 
-    **kwargs All other kwargs passed directly to information method function
-
-    RETURNS
-    info    (...,1,...). Measure of information in data about labels
-            Shape is same as data, with observation axis reduced to length = 1
-            (or = n_terms for pev/regression method).
+    Returns
+    -------
+    info  : ndarray, shape=(...,1,...) or (...,n_terms,...)
+        Measure of information in data about labels.
+        Shape is same as data, with observation `axis` reduced to length = 1
+        (or = n_terms for pev/regression method).
     """
     method = method.lower()
     info_func = _string_to_info_func(method)
@@ -147,24 +146,30 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
     thus preferred, but otherwise the main reason to use it is for convenience
     if your data is already formatted into two groups
 
-    info = neural_info_2groups(data1,data2,axis=0,method='pev',**kwargs)
+    Parameters
+    ----------
+    data1 : ndarray, shape=(...,n_obs1,...)
+        Set of values for one condition/group to be compared.
 
-    ARGS
-    data1/2 (...,n_obs1/n_obs2,...) ndarrays of arbitary size except for <axis>.
-            Sets of values for each of two distributions to be compared.
+    data2 : ndarray, shape=(...,n_obs2,...)
+        Set of values for a second condition/group to be compared.
+        Can have different number of observations (trials), but must otherwise
+        have same shape as data1.
 
-    axis    Int. Axis of data array to perform analysis on, corresponding
-            to trials/observations. Default: 0 (first axis)
+    axis : int, default: 0 (first axis)
+        Axis of data arrays to perform analysis on, corresponding to trials/observations
 
-    method  String. Method to use to compute information. Options:
-            'pev' | 'dprime' | 'auroc' | 'mutual_info' | 'decode'
-            Default: 'pev'
+    method : {'pev','dprime','auroc','mutual_info','decode'}, default: 'pev'
+        Method to use to compute information. See specific functions for details.
 
-    **kwargs All other kwargs passed directly to information method function
+    **kwargs
+        All other kwargs passed directly to specific information method function
 
-    RETURNS
-    info    (...,n_terms,...). Measure of information in data about labels
-            Shape is same as data, with observation axis reduced to length = n_terms.
+    Returns
+    -------
+    info  : ndarray, shape=(...,1,...)
+        Measure of information in data about labels
+        Shape is same as data, with observation `axis` reduced to length = 1
     """
     method = method.lower()
 
@@ -172,7 +177,7 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 
     assert (data1.shape[axis] != 0) and (data2.shape[axis] != 0), \
         "Data contains no observations (trials) for one or more groups"
-        
+
     # Methods that prefer to call 2-group version bc it's faster -- just call 2-group version
     if method in two_group_methods:
         if method in ['dprime','d','cohensd']:                  info_func = _dprime_2groups
@@ -192,31 +197,32 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', **kwargs):
 def neural_info_ngroups(*args, axis=0, method='pev', **kwargs):
     """
     Wrapper function to compute mass-univariate neural information about
-    some multi-class (ie n group) variable, with the inputs being the
-    data for each of the possible conditions: (data1, data2, ..., data_k)
+    some multi-class variable, with the inputs being the data for each
+    of the possible conditions 1-k: (data1, data2, ..., data_k)
 
-    Note: Some methods (dprime, auroc) are designed for only binary comparisons
+    NOTE: Some methods (dprime, auroc, mutual_info) are designed for only binary comparisons
     and will raise an error if you try to call them with this function
 
-    info = neural_info_ngroups(data1,data2,...,data_k,axis=0,method='pev',**kwargs)
+    Parameters
+    ----------
+    data1...data_k : ndarray, shape=(...,n_obs[j],...)
+        Sets of values for each data distribution to be compared.
+        Can have different number of observations (trials), but must otherwise all have same shape.
+        
+    axis : int, default: 0 (first axis)
+        Axis of data arrays to perform analysis on, corresponding to trials/observations
 
-    ARGS
-    data1...k (...,n_obs1/k,...) ndarrays of arbitary size except for <axis>.
-            Sets of values for each data distribution to be compared.
+    method : {'pev','decode'}, default: 'pev'
+        Method to use to compute information. See specific functions for details.
 
-    axis    Int. Axis of data array to perform analysis on, corresponding
-            to trials/observations. Default: 0 (first axis)
+    **kwargs
+        All other kwargs passed directly to specific information method function
 
-    method  String. Method to use to compute information. Options:
-            'pev' | 'dprime' | 'auroc' | 'mutual_info' | 'decode'
-            Default: 'pev'
-
-    **kwargs All other kwargs passed directly to information method function
-
-    RETURNS
-    info    (...,n_terms,...). Measure of information in data about difference between
-            data1 vs data2 vs ... data_k
-            Shape is same as data, with observation axis reduced to length = n_terms.
+    Returns
+    -------
+    info  : ndarray, shape=(...,1,...)
+        Measure of information in data about difference between data1 vs data2 vs ... data_k
+        Shape is same as data, with observation `axis` reduced to length = 1
     """
     # TODO Add 'mutual_information','mutual_info' when mutual_info is updated for multi-class
     n_group_methods = ['decode','decoder','decoding', 'pev']
@@ -250,85 +256,109 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     """
     Mass-multivariate population decoding analysis using given classifier method
 
-    accuracy = decode(labels,data,axis=0,feature_axis=1,decoder='LDA',cv='auto',seed=None,
-                      groups=None,as_pct=False,return_stats=False,stats=None,**kwargs)
+    Returns cross-validated decoding accuracy, and (optionally) additional stats
+    from decoding classifier.
 
-    accuracy,stats = decode(labels,data,axis=0,feature_axis=1,decoder='LDA',cv='auto',seed=None,
-                            groups=None,as_pct=False,return_stats=True,stats=None,**kwargs)
+    Computation is performed over trial/observation `axis`, using features along
+    `feature_axis` in mass-univariate fashion across data series in all other data
+    dimensions (time points, frequencies, etc.).
 
-    INPUTS
-    labels  (n_obs,) ndarray. Labels/target values for each trial to predict
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,)
+        Labels/target values for each observation (trial) to predict
 
-    data    (...,n_obs,...,n_features,...) ndarray. Neural data to decode from.
-            Arbitrary shape, but <axis> should correspond to observations (trials) and
-            <feature_axis> should correspond to decoder features (eg neural channels),
-            while rest of axis(s) can be any independent data series (time points,
-            frequencies, etc.) that are analyzed separately (ie separate decoder fit
-            and evaluated at each time point, frequency, etc.).
+    data : ndarray, shape=(...,n_obs,...,n_features,...)
+        Neural data to decode labels from.
+        Arbitrary shape, but `axis` should correspond to observations (trials) and
+        `feature_axis` should correspond to decoder features (eg neural channels),
+        while rest of axis(s) can be any independent data series (time points,
+        frequencies, etc.) that are analyzed separately (ie separate decoder fit
+        and evaluated at each time point, frequency, etc.).
 
-    axis    Int. Axis of data corresponding to distinct observations/trials. Default: 0 (1st axis)
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    feature_axis Int. Axis of data corresponding to decoder features (usually distinct neural
-            channels/electrodes/units). Default: 1 (2nd axis)
+    feature_axis : int, default: 1 (second axis)
+        Axis of data array corresponding to decoder features (usually distinct neural
+        channels/electrodes/units)
 
-    decoder String | sklearn classifier object. Decoding classifier method to use.
-            Can input either as a string specifier or as a scikit-learn classifier object instance.
-            'LDA' :     Linear discriminant analysis using
-                        sklearn.discriminant_analysis.LinearDiscriminantAnalysis
-                        Unlike scikit's empirical prior, sets a uniform prior unless specified
-                        otherwise (bc any imbalance in emprical probabilities of task conditions is
-                        usually happenstance, not predictive and not something we want to use)
-            'logistic': Logistic regression using sklearn.linear_model.LogisticRegression
-                        Sets penalty='none' unless specified otherwise in kwargs, unlike scikit's
-                        default 'l2' (L2 regularization) bc seems safer to make users opt-in.
-            'SVM' :     Support vector machine classification using sklearn.svm.SVC
-                        Sets kernel='linear' unless specified otherwise in kwargs, unlike scikit's
-                        default 'rbf' (nonlinear radial basis functions) bc linear classifiers are
-                        much more common in the field (and safer to make users opt-in to nonlinear)
+    decoder : {'LDA','logistic','SVM'} or sklearn classifier object, default: 'LDA'
+        Classifier method to use for decoding. Options:
 
-            Can use custom objects, but must follow sklearn API (ie has 'fit' and 'score' methods).
+        - 'LDA' : Linear discriminant analysis using
+            sklearn.discriminant_analysis.LinearDiscriminantAnalysis
+            Unlike scikit's empirical prior, sets a uniform prior unless specified
+            otherwise (bc any imbalance in emprical probabilities of task conditions is
+            usually happenstance, not predictive and not something we want to use)
+        - 'logistic' : Logistic regression using sklearn.linear_model.LogisticRegression
+            Sets penalty='none' unless specified otherwise in kwargs, unlike scikit's
+            default 'l2' (L2 regularization) bc seems safer to make users opt-in.
+        - 'SVM' : Support vector machine classification using sklearn.svm.SVC
+            Sets kernel='linear' unless specified otherwise in kwargs, unlike scikit's
+            default 'rbf' (nonlinear radial basis functions) bc linear classifiers are
+            much more common in the field (and safer to make users opt-in to nonlinear)
 
-    cv      String | sklearn.model_selection "Splitter" object. Determines how cross
-            validation is done. Set = 'auto' for default. Set = None for no cross-validation.
-            Can use custom objects, but must follow "Splitter' object API (ie has 'split' method).
-            Default: StratifiedKFold(n_splits=5,shuffle=True)
+        Can also input scikit-learn classifier object instance or custom objects that follow sklearn
+        API (ie has 'fit' and 'score' methods).
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for unseeded random numbers.
+    cv : str or sklearn.model_selection "Splitter" object, default: StratifiedKFold(n_splits=5,shuffle=True)
+        Determines how cross-validation is done.
+        Set = 'auto' for default. Set = None for no cross-validation.
+        Can use custom objects that follow "Splitter' object API (ie has 'split' method).
 
-    groups  Array-like. Which group labels from <labels> to use. Useful for computing information
-            on subset of groups/classes in labels.
-            Default: unique(labels) (all distinct values in <labels>)
+    seed : int, default: None (unseeded random numbers)
+        Random generator seed for repeatable results
 
-    as_pct  Bool. Set=True to return decoding accuracy as a percent (range ~ 0-100).
-            Set=False [default] to return accuracy as a proportion (range ~ 0-1)
+    groups : array-like, shape=(n_groups,), default: unique(labels) (all distinct values)
+        Which group labels from `labels` to use. Useful for computing information on
+        subset of groups/classes in labels.
 
-    return_stats Bool. Set=True to return additional classifier stats. Default: False
+    as_pct : bool, default: False
+        Set=True to return decoding accuracy as a percent (range ~ 0-100).
+        Set=False to return accuracy as a proportion (range ~ 0-1)
 
-    stats   String | List of strings. List of additional classifier stats to return:
-            'predict' : Predicted class for each trial/observation
-            'prob' :    Posterior probability for each class, for each trial/observation
-            Default: If return_stats=True, stats defaults to ['predict','prob']
+    return_stats : bool, default: False
+        Set=True to return additional classifier stats
 
-    **kwargs All other kwargs passed directly to decoding object constructor
+    stats : string or list of str, default: ['predict','prob'] (if return_stats=True)
+        List of additional classifier stats to return. Options:
+        'predict' : Predicted class for each trial/observation
+        'prob' :    Posterior probability for each class, for each trial/observation
 
-    OUTPUTS
-    accuracy ndarray. Decoding accuracy. Shape is same as input data, but with <axis> and
-            <feature_axis> reduced to length 1. Accuracy given as proportion or percent
-            correct, depending on value of <as_pct>. Chance = [100 *] 1/n_classes.
+    **kwargs
+        All other kwargs passed directly to decoding object constructor
 
-    stats   Dict. Optional output. Additional per-trial decoding-related stats, as requested in
-            input argument <stats>. May include the following:
-            'predict' : (...,_n_obs,...,1,...) ndarray. Predicted class for each observation/trial.
-                        Same shape as accuracy, but <axis> has length n_obs.
-            'prob' :    (...,_n_obs,...,n_classes,...) ndarray. Posterior probabilty for each class
-                        and each observation (trial). Same shape as accuracy, but <axis> has length
-                        n_obs and <feature_axis> has length n_classes.
+    Returns
+    -------
+    accuracy : ndarray, , shape=(...,1,...,1,...)
+        Decoding accuracy. Shape is same as input data, but with `axis` and
+        `feature_axis` reduced to length 1. Accuracy given as proportion or percent
+        correct, depending on value of `as_pct`. Chance = [100 x] 1/n_classes.
 
-    REFERENCE
-    https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
-    https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
-    https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html
+    stats : dict, optional
+        Additional per-trial decoding-related stats, as requested in
+        input argument `stats`. May include the following:
+
+        - 'predict' : ndarray, shape=(...,_n_obs,...,1,...)
+            Predicted class for each observation/trial.
+            Same shape as accuracy, but `axis` has length n_obs.
+        - 'prob' : ndarray, shape=(...,_n_obs,...,n_classes,...)
+            Posterior probabilty for each class and each observation (trial).
+            Same shape as accuracy, but `axis` has length
+            n_obs and `feature_axis` has length n_classes.
+
+    Examples
+    --------
+    accuracy = decode(labels,data,return_stats=False)
+
+    accuracy,stats = decode(labels,data,return_stats=True)
+
+    References
+    ----------
+    - https://scikit-learn.org/stable/modules/generated/sklearn.discriminant_analysis.LinearDiscriminantAnalysis.html
+    - https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
+    - https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html
     """
     labels = np.asarray(labels)
     data = np.asarray(data)
@@ -519,58 +549,66 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
 
     NOTE: Currently only 2-class (binary) conditions are supported
 
-    info = mutual_info(labels,data,axis=0,bins='fd',resp_entropy=None,groups=None)
+    info = 0 indicates no mutual information between responses and experimental conditions
+    info = 1 indicates maximum possible information btwn responses and conditions
 
+    Computation is performed over trial/observation `axis`, in mass-univariate
+    fashion across data series in all other data dimensions (channels, time points,
+    frequencies, etc.).
+
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,)
+        List of categorical group labels labelling observations from each group.
+        NOTE: Should be only two groups represented, unless sub-selecting two groups
+        using `groups` argument.
+
+    data : ndarray, shape=(...,n_obs,...)
+        Data values to compute mutual information with labels.
+        If it is not discrete-valued (eg spike counts), it will be discretized using `bins`
+
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
+
+    bins : array-like, shape=(n_bins,2) or string, default: 'fd' (Freedman–Diaconis rule)
+        Non-integer data must be binned for mutual information computation.
+        Bins can be given either explicitly, as an array of bin [left,right] edges,
+        or as a string indicating the type of binning rule to use in np.histogram_bin_edges().
+        Data is binned only if it is non-integer-valued or if a value is input for bins.
+
+    resp_entropy  : ndarray, shape=(...,1,...)
+        Total response entropy. Can optionally compute and input this to save repeated
+        calculations (eg for distinct contrasts on same data).
+
+    groups : array-like, shape=(2,), default: unique(labels) (all distinct values)
+        Which group labels from `labels` to use. Useful for computing information on
+        subset of groups/classes in labels.
+
+    Returns
+    -------
+    info : ndarray, shape=(...,1,...)
+        Mutual information between responses and experimental conditions (in bits).
+
+    Notes
+    -----
     Computes Shannon mutual information using standard equation (cf. Dayan & Abbott, eqn. 4.7):
     I = H - Hnoise = -Sum(p(r)*log(p(r)) + Sum(p(cat)*p(r|s)*log(p(r|s)))
 
     where H = total response entropy, Hnoise = noise entropy, p(r) is response probability
     distribution, and p(r|s) is conditional probability of response given experimental condition
 
-    info = 0 indicates no mutual information between responses and experimental conditions
-    info = 1 indicates maximum possible information btwn responses and conditions
+    Freedman–Diaconis rule for binning: bin width = 2*interquartile_range(data)/cuberoot(n)).
+    See np.histogram_bin_edges() for details.
 
-    Computation is performed over trial/observation <axis>, in mass-univariate
-    fashion across data series in all other data dimensions (channels, time points,
-    frequencies, etc.).
-
-    ARGS
-    labels      (n_obs,) array-like. List of categorical group labels labelling observations
-                from each group. NOTE: Should be only two groups represented, unless sub-selecting
-                two groups using <groups> argument.
-
-    data        (...,n_obs,...) ndarray. Data values to compute mutual information with labels.
-                If it is not discrete-valued (eg spike counts), it will be discretized using 'bins'
-
-    axis        Scalar. Axis of data array to perform analysis on, corresponding
-                to trials/observations. Default: 0 (first axis)
-
-    bins        (n_bins,2) array-like | string. Non-integer data must be binned for
-                mutual information computation. Bins can be given either explicitly, as an
-                array of bin [left,right] edges, or as a string indicating the type of
-                binning rule to use in np.histogram_bin_edges() (see there for details).
-                Default: 'fd' (Freedman–Diaconis rule: bin width = 2*IQR(data)/cuberoot(n))
-                Data is binned only if it is non-integer-valued or if a value is input for bins.
-
-    resp_entropy   (...,1,...). Total response entropy. Can optionally compute and input
-                this to save repeated calculations (eg for distinct contrasts on same data)
-
-    groups      (2,) array-like. Which group labels from <labels> to use.
-                Useful for computing info btwn pairs of groups in data with > 2 groups,
-                Default: unique(labels) (all distinct values in <labels>)
-
-    RETURNS
-    info        (...,1,...) ndarray. Mutual information between responses
-                and experimental conditions (in bits).
-
-    REFERENCE   Dayan & Abbott, _Theoretical neuroscience_ ch. 4.1
-    (binning)   https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
-    (binning)   https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
+    References
+    ----------
+    - Dayan & Abbott, "Theoretical neuroscience" ch. 4.1
+    - https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
+    - https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
     """
     # TODO  Recode for > 2 groups
     labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
-    
 
     # Reshape data array -> (n_observations,n_data_series) matrix
     data, data_shape = standardize_array(data, axis=axis, target_axis=0)
@@ -668,19 +706,19 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None)
 
     return info
 
-
 mutual_information = mutual_info
-""" Aliases function pev as percent_explained_variance """
+""" Alias of :func:`mutual_info`. See there for details. """
+
 
 # =============================================================================
 # Area under ROC curve (AUROC) analysis
 # =============================================================================
+# Note: This is actually a wrapper around _auroc_2groups(), which accepts
+# two data distributions as arguments, and is faster.
 def auroc(labels, data, axis=0, signed=True, groups=None):
     """
     Mass-univariate area-under-ROC-curve metric of discriminability
     between two data distributions
-
-    roc = auroc(labels,data,axis=0,signed=True,groups=None)
 
     Calculates area under receiver operating characteristic curve (AUROC)
     relating hits to false alarms in a binary classification/discrimination
@@ -688,38 +726,40 @@ def auroc(labels, data, axis=0, signed=True, groups=None):
     AUROC = 0.5 indicates no difference between distributions, and
     AUROC = 1 indicates data distributions are completely discriminable.
 
-    Computation is performed over trial/observation <axis>, in mass-univariate
+    Computation is performed over trial/observation `axis`, in mass-univariate
     fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
 
-    Note: This is actually a wrapper around _auroc_2groups(), which accepts
-    two data distributions as arguments, and is faster.
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,)
+        List of group labels labelling observations from each group. Should be only two groups
+        represented, unless sub-selecting two groups using `groups` argument.
 
-    ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from
-                each group. Should be only two groups represented, unless sub-selecting
-                two groups using <groups> argument.
+    data : ndarray, shape=(...,n_obs,...)
+        Data values for both distributions to be compared.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    axis        Scalar. Axis of data array to perform analysis on, corresponding
-                to trials/observations. Default: 0 (first axis)
+    signed  : bool, default: True
+        If True, returns standard AUROC. If False, returns AUROC rectified around 0.5,
+        corresponding to finding "preferred" distribution for each data series (non-trial dims).
 
-    signed      Bool. If True [default], returns signed AUROC. If False, returns absolute
-                value of AUROC, corresponding to finding "preferred" distribution for each
-                data series (non-trial dims).
+        NOTE: rectified AUROC is a biased metric--its expected value is > 0 even for identical
+        data distributions. You might want to use resampling methods to estimate the bias
+        and correct for it.
 
-                NOTE: absolute AUROC is a biased metric--its expected value is > 0 even
-                for identical data distributions. You might want to use resampling
-                methods estimate the bias and correct for it.
+    groups : array-like, shape=(2,), default: unique(labels) (all distinct values in `labels`)
+        Which group labels from `labels` to use.
+        Useful for enforcing a given order to groups (eg sign to signed AUROC),
+        or for computing info btwn pairs of groups within data with > 2 groups.
 
-    groups      (2,) array-like. Which group labels from <labels> to use.
-                Useful for enforcing a given order to groups (eg sign to signed AUROC),
-                or for computing info btwn pairs of groups in data with > 2 groups,
-                Default: unique(labels) (all distinct values in <labels>)
-
-    RETURNS
-    roc         (...,1,...) ndarray.  AUROC btwn. groups along given axis.
+    Returns
+    -------
+    roc : ndarray, shape=(...,1,...)
+        AUROC between groups along given axis. Same shape as `data`,
+        with `axis` reduced to length 1.
     """
     labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -804,50 +844,56 @@ def dprime(labels, data, axis=0, signed=True, groups=None):
     """
     Mass-univariate d' metric of difference between two data distributions
 
-    d = dprime(labels,data,axis=0,signed=True,groups=None)
-
-    Calculates d' (aka Cohen's d) metric of difference btwn two distributions,
-    under (weak-ish) assumption they are IID normal, using formula:
-    d' = (mu1 - mu2) / sd_pooled
-
     d' = 0 indicates no difference between distribution means. d' is unbounded, and
     increases monotonically with the difference btwn group means and inversely with
     the pooled std deviation.
 
-    Computation is performed over trial/observation <axis>, in mass-univariate
+    Computation is performed over trial/observation `axis`, in mass-univariate
     fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).
 
     Note: This is actually a wrapper around _dprime_2groups(), which accepts
     two data distributions as arguments, and is faster.
 
-    ARGS
-    labels      (n_obs,) array-like. List of group labels labelling observations from
-                each group. Should be only two groups represented, unless sub-selecting
-                two groups using <groups> argument.
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,)
+        List of group labels labelling observations from each group. Should be only two groups
+        represented, unless sub-selecting two groups using `groups` argument.
 
-    data        (...,n_obs,...) ndarray. Data values for both distributions to be compared.
+    data : ndarray, shape=(...,n_obs,...)
+        Data values for both distributions to be compared.
 
-    axis        Scalar. Axis of data array to perform analysis on, corresponding
-                to trials/observations. Default: 0 (first axis)
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    signed      Bool. If True [default], returns signed d'. If False, returns absolute
-                value of d', corresponding to finding "preferred" distribution for each
-                data series (non-trial dims).
+    signed  : bool, default: True
+        If True, returns standard d'. If False, returns absolute value of d',
+        corresponding to finding "preferred" distribution for each data series (non-trial dims).
 
-                NOTE: absolute d' is a biased metric--its expected value is > 0 even
-                for identical data distributions. You might want to use resampling
-                methods estimate the bias and correct for it.
+        NOTE: absolute d' is a biased metric--its expected value is > 0 even for identical
+        data distributions. You might want to use resampling methods estimate the bias and
+        correct for it.
 
-    groups      (2,) array-like. Which group labels from <labels> to use.
-                Useful for enforcing a given order to groups (sign to results d'),
-                or for computing d' btwn pairs of groups in data with > 2 groups,
-                Default: unique(labels) (all distinct values in <labels>)
+    groups : array-like, shape=(2,), default: unique(labels) (all distinct values in `labels`)
+        Which group labels from `labels` to use.
+        Useful for enforcing a given order to groups (eg sign to signed d'),
+        or for computing info btwn pairs of groups within data with > 2 groups.
 
-    RETURNS
-    d           (...,1,...) ndarray.  d' btwn. groups along given axis.
+    Returns
+    -------
+    d : ndarray, shape=(...,1,...)
+        d' between groups along given axis. Same shape as `data`, with `axis` reduced to length 1.
 
-    REFERENCE   Dayan & Abbott _Theoretical Neuroscience_ eqn. 3.4 (p.91)
+    Notes
+    -----
+    Calculates d' (aka Cohen's d) metric of difference btwn two distributions,
+    under (weak-ish) assumption they are IID normal, using formula::
+    d' = (mu1 - mu2) / sd_pooled
+
+    References
+    ----------
+    Dayan & Abbott "Theoretical Neuroscience" eqn. 3.4 (p.91)
     """
     labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -909,52 +955,59 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
     Computes the percentage (or proportion) of variance explained in data by
     predictors in design matrix/list of labels, using one of a few types of linear models.
 
-    exp_var = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
-                  return_stats=False,**kwargs)
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,n_terms) or patsy DesignMatrix object
+        Design matrix (group labels for ANOVA models, or regressors for regression model) for
+        each observation (trial). labels.shape[0] must be same length as data.shape[axis].
 
-    exp_var,stats = pev(labels,data,axis=0,model=None,omega=True,as_pct=True,
-                        return_stats=False,**kwargs)
+    data  : ndarray, shape=(...,n_obs,...)
+        Data to fit with linear model. `axis` should correspond to observations (trials),
+        while any other axes can be any independent data series (channels, time points,
+        frequencies, etc.) that will be fit separately using the same list of group labels.
 
-    ARGS
-    labels  (n_obs,n_terms) array-like | patsy DesignMatrix object. Design matrix
-            (group labels for ANOVA models, or regressors for regression model) for
-            each observation (trial). labels.shape[0] must be same length as observation
-            <axis> of data.
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    data    (...,n_obs,...) ndarray. Data to fit with linear model. Axis <axis> should
-            correspond to observations (trials), while any other axes can be any
-            independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels <labels>.
+    model : str, default: (we attempt to infer from `labels`; safest to set explicitly)
+        Type of linear model to fit, in order to compute PEV.
 
-    axis    Int. Data axis corresponding to distinct observations. Default: 0
+        - 'anova1' : 1-way ANOVA model. Labels has shape (n_obs,). See :func:`anova1`.
+        - 'anova2' : 2-way ANOVA model. Labels has shape (n_obs,2). See :func:`anova2`.
+        - 'anovan' : n-way ANOVA model. Labels has shape (n_obs,n_terms).
+        - 'regress': linear regression model. Labels has shape (n_obs,n_params). See :func:`regress`.
 
-    model   String. Type of linear model to fit, in order to compute PEV.
-            'anova1'    : 1-way ANOVA model (labels is (n_obs,) vector)
-            'anova2'    : 2-way ANOVA model (labels must be a (n_obs,2) array)
-            'anovan'    : n-way ANOVA model (labels must be a (n_obs,n_terms) array)
-            'regress'   : linear regression model (labels is (n_obs,nModelParams) array)
-            Default: we attempt to infer from <labels>. Safest to set explicitly.
+    omega : bool, default: True
+        If True, uses bias-corrected omega-squared formula for PEV.
+        If False uses eta-squared/R-squared formula, which is positively biased.
 
-    omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
-            otherwise uses eta-squared/R-squared formula, which is positively biased.
-            Default: True
+    as_pct : bool, default: True
+        If True, return PEV as a percent (range ~ 0-100).
+        If False, return PEV as a proportion (range ~ 0-1)
 
-    as_pct  Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
-            Otherwise PEV returned as a proportion (range ~ 0-1)
+    return_stats : bool, default: False
+        If True, return several stats on model fit (eg F-stat,p) in addition to PEV
+        If False, just return PEV.
 
-    return_stats Bool. Set=True to return several stats on model fit (eg F-stat,p)
-            in addition to PEV. Otherwise, just returns PEV. Default: False
+    **kwargs
+        All other kwargs passed directly to model function. See those for details.
 
-    **kwargs Passed directly to model function. See those for details.
+    Returns
+    -------
+    exp_var : ndarray, shape=(...,n_terms,...)
+        Percent (or proportion) of variance in data explained by labels
+        Shape is same as data, with observation axis reduced to length = n_terms.
 
-    RETURNS
-    exp_var (...,n_terms,...). Percent (or proportion) of variance in data explained by labels
-            Shape is same as data, with observation axis reduced to length = n_terms.
+    stats : dict, optional
+        If `return_stats` set, statistics on each fit also returned.
+        See model functions for specific stats returned by each.
 
-    stats   Dict. If <return_stats> set, statistics on each fit also returned.
-            See model function for specific stats returned by each.
+    Examples
+    --------
+    exp_var = pev(labels,data,return_stats=False)
+
+    exp_var,stats = pev(labels,data,return_stats=True)
     """
-    # TODO Add anovan model
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
 
@@ -965,7 +1018,7 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
         # If labels has constant/intercept term (column of all 1's), assume regression model
         elif (labels == 1).all(axis=0).any():               model = 'regress'
         # If labels has > 3 columns, assume n-way ANOVA
-        # TODO ADD: elif labels.shape[1] > 3:                   model = 'anovan'
+        # TODO ADD anovan model: elif labels.shape[1] > 3:                   model = 'anovan'
         # Otherwise, could be ANOVA2, ANOVAn, regress ... dangerous to assume
         else:
             raise ValueError("Could not determine appropriate linear model.\n" \
@@ -991,7 +1044,7 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
         raise ValueError("'%s' model is not supported for computing PEV" % model)
 
 percent_explained_variance = pev
-""" Aliases function pev as percent_explained_variance """
+""" Alias of :func:`pev`. See there for details. """
 
 
 def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs',
@@ -1000,54 +1053,71 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     Mass-univariate 1-way ANOVA analyses of one or more data vector(s)
     on single list of group labels
 
-    exp_var = anova1(labels,data,axis=0,omega=True,groups=None,gm_method='mean_of_obs',
-                     as_pct=True,return_stats=False)
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,)
+        Group labels for each observation (trial), identifying which group/factor level
+        each observation belongs to. Must be same length as data.shape[axis].
 
-    exp_var,stats = anova1(labels,data,axis=0,omega=True,groups=None,gm_method='mean_of_obs',
-                           as_pct=True,return_stats=False)
+    data : ndarray, shape=(...,n_obs,...)
+        Data to fit with ANOVA model. `axis` should correspond to observations (trials),
+        while any other axes can be any independent data series (channels, time points,
+        frequencies, etc.) that will be fit separately using the same list of group labels.
 
-    ARGS
-    labels  (n_obs,) array-like. Group labels for each observation (trial),
-            identifying which group/factor level each observation belongs to.
-            Number of rows(labels.shape[0] = n_obs) be same length as data.shape[axis].
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    data    (...,n_obs,...) ndarray. Data to fit with ANOVA model. <axis> should
-            correspond to observations (trials), while rest of axis(s) are any
-            independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels labels.
+    omega : bool, default: True
+        If True, uses bias-corrected omega-squared formula for PEV.
+        If False uses eta-squared formula, which is positively biased.
 
-    axis    Int. Data axis corresponding to distinct observations. Default: 0
+    groups : array-like, shape=(n_groups,), default: unique(labels) (all distinct values)
+        Which group labels from `labels` to use.
+        Useful for enforcing a given order to groups (reflected in mu's),
+        or for computing info btwn pairs of groups within data with > 2 groups.
 
-    omega   Bool. Determines formula for calculating PEV.  Default: True
-            True  : Bias-corrected omega-squared PEV formula [default]
-            False : Standard eta-squared formula. Positively biased for small N.
+    gm_method : str, Default: 'mean_of_obs'
+        Method used to calculate grand mean for ANOVA formulas. Options:
+        
+        - 'mean_of_obs' : Mean of all observations (more standard ANOVA formula)
+        - 'mean_of_means' : Mean of group means--less downward-bias of PEV,F for unbalanced grp n's
 
-    groups  (n_groups,) array-like. Which group labels from <labels> to use.
-            Useful for enforcing a given order to groups (reflected in mu's),
-            or for computing PEV btwn subsets of groups in data.
-            Default: unique(labels) (all distinct values in <labels>)
+    as_pct : bool, default: True
+        If True, return PEV as a percent (range ~ 0-100).
+        If False, return PEV as a proportion (range ~ 0-1)
 
-    gm_method String. Method used to calculate grand mean for ANOVA formulas.
-            'mean_of_obs'   : Mean of all observations (more standard ANOVA formula)
-            'mean_of_means' : Mean of group means--less downward-biasing of PEV,F
-                              for unbalanced grp n's
-            Default: 'mean_of_obs'
+    return_stats : bool, default: False
+        If True, return several stats on model fit (eg F-stat,p) in addition to PEV
+        If False, just return PEV.
 
-    as_pct  Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
-            Otherwise PEV returned as a proportion (range ~ 0-1)
+    Returns
+    -------
+    exp_var : ndarray, shape=(...,1,...)
+        Percent (or proportion) of variance in data explained by labels.
+        Shape is same as data, with observation axis reduced to length 1.
 
-    return_stats Bool. Set=True to return several stats on model fit (eg F-stat,p)
-            in addition to PEV. Otherwise, just returns PEV. Default: False
+    stats : dict, optional
+        If `return_stats` set, statistics on each fit also returned:
 
-    RETURNS
-    exp_var (..,1,...). Percent (or proportion) of variance in data explained by labels.
-            Shape is same as data, with observation axis reduced to length 1.
+        - p :  ndarray, shape=(...,1,...)
+            F-test p values for each datapoint. Same shape as `exp_var`.
+        - F : ndarray, shape=(...,1,...)
+            F-statistic for each datapoint. Same shape as `exp_var`.
+        - mu : ndarray, shape=(...,n_groups,...)
+            Group mean for each group/level
+        - n : ndarray, shape=(...,n_groups,)
+            Number of observations (trials) in each group/level
 
-    stats   Dict. If <return_stats> set, statistics on each fit also returned:
-        p   (...,1,...). F-test p values for each datapoint. Same shape as exp_var.
-        F   (...,1,...). F-statistic for each datapoint. Same shape as exp_var.
-        mu  (...,n_groups,...). Group mean for each group/level
-        n   (...,n_groups,). Number of observations (trials) in each group/level
+    Examples
+    --------
+    exp_var = anova1(labels,data,return_stats=False)
+
+    exp_var,stats = anova1(labels,data,return_stats=True)
+    
+    References
+    ----------
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
+    - https://en.wikipedia.org/wiki/Effect_size    
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1146,72 +1216,89 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
     Mass-univariate 2-way ANOVA analyses of one or more data vector(s)
     on single set of group labels
 
-    exp_var = anova2(labels,data,axis=0,interact=None,omega=True,partial=False,total=False,
-                     gm_method='mean_of_obs',as_pct=True,return_stats=False)
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,n_terms=2 or 3)
+        Group labels for each observation (trial), identifying which group (factor level)
+        each observation belongs to. Can either set interaction term labels for column 3,
+        or set `interact` = True and we will auto-generate interaction term.
+        labels.shape[0] must be same length as data.shape[axis].
 
-    exp_var,stats = anova2(labels,data,axis=0,interact=None,omega=True,partial=False,total=False,
-                           gm_method='mean_of_obs',as_pct=True,return_stats=False)
+    data : ndarray, shape=(...,n_obs,...)
+        Data to fit with ANOVA model. `axis` should correspond to observations (trials),
+        while rest of axis(s) are any independent data series (channels, time points,
+        frequencies, etc.) that will be fit separately using the same list of group labels.
 
-    ARGS
-    labels  (n_obs,n_terms=2|3) array-like. Group labels for each observation (trial),
-            identifying which group/factor level each observation belongs to.
-            Can either set interaction term labels for column 3, or set
-            interact==True and we will auto-generate interaction term
-            Number of rows(labels.shape[0] = n_obs) be same length as data.shape[axis].
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    data    (...,n_obs,...) ndarray. Data to fit with ANOVA model. <axis> should
-            correspond to observations (trials), while rest of axis(s) are any
-            independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels.
+    interact : bool, default: True iff `labels` has 3rd column (for interaction)
+        Determines whether an interaction term is included in model.
+        If True, but but no 3rd entry is given in `labels`, we auto-generate an interaction
+        term based on all unique combinations of levels in labels[:,0] & labels[:,1].
 
-    axis    Int. Data axis corresponding to distinct observations/trials. Default: 0
+    omega : bool, default: True
+        If True, uses bias-corrected omega-squared formula for PEV.
+        If False uses eta-squared formula, which is positively biased.
 
-    interact Bool. Determines whether an interaction term is included in model.
-            If set, but but no 3rd entry is given in labels, we auto-generate an interaction
-            term based on all unique combinations of levels in labels[:,0] & labels[:,1].
-            Default: true iff labels has 3rd column/entry (for interaction)
+    partial : bool, default: False
+        Determines method used to calc PEV -- full-model or partial.
+        If False, uses standard full-model PEV = SS_factor / SS_total.
+        Increase in PEV for one factor will decrease all others.
+        If True, uses partial factor PEV = SS_factor / (SS_factor + SS_error).
+        Factor EV's are therefore independent of each other.
 
-    omega   Bool. Determines formula for calculating PEV.  Default: True
-              True  : Bias-corrected omega-squared PEV formula [default]
-              False : Standard eta-squared formula. Positively biased for small N.
+    total : bool, default: False
+        If True, total PEV summed across all model terms is appended to
+        to end of terms axis in `exp_var`.
 
-    partial Logical. Determines method used to calc PEV -- full-model or partial.
-              False : Standard full-model PEV = SS_factor / SS_total.
-                      Increase in PEV for one factor will decrease all others.
-              True  : Partial factor PEV = SS_factor / (SS_factor + SS_error).
-                      Factor EV's are therefore independent of each other.
-            Default: False
+    as_pct : bool, default: True
+        If True, return PEV as a percent (range ~ 0-100).
+        If False, return PEV as a proportion (range ~ 0-1)
 
-    total   Bool. Set=True to append total PEV, summed across all model terms,
-            to end of terms axis in <exp_var>.  Default: False
+    gm_method : str, Default: 'mean_of_obs'
+        Method used to calculate grand mean for ANOVA formulas. Options:
 
-    as_pct   Bool. Set=True [default] to return PEV as a percent (range ~ 0-100).
-            Otherwise PEV returned as a proportion (range ~ 0-1)
+        - 'mean_of_obs' : Mean of all observations (more standard ANOVA formula)
+        - 'mean_of_means' : Mean of group (cell) means--less downward-bias of PEV,F
+            for unbalanced grp n's. For this option, MUST have interact==True.
 
-    gm_method String. Method used to calculate grand mean for ANOVA formulas.
-            'mean_of_obs'   : Mean of all observations (more standard ANOVA formula)
-            'mean_of_means' : Mean of group (cell) means--less downward-biasing of PEV,F
-                            for unbalanced grp n's. For this option, MUST have interact==True.
-            Default: 'mean_of_obs'
+    return_stats : bool, default: False
+        If True, return several stats on model fit (eg F-stat,p) in addition to PEV
+        If False, just return PEV.
 
-    return_stats Bool. Set=True to return several stats on model fit (eg F-stat,p)
-            in addition to PEV. Otherwise, just returns PEV. Default: False
+    Returns
+    -------
+    exp_var : ndarray, shape=(...,n_terms,...)
+        Percent (or proportion) of variance in data explained by labels.
+        Shape is same as data, with observation axis reduced to length = n_terms.
 
-    RETURNS
-    exp_var (n_terms,...). Percent (or proportion) of variance in data explained by labels.
-            Shape is same as data, with observation axis reduced to length = n_terms.
+    stats : dict, optional
+        If `return_stats` is True, statistics on each fit also returned:
 
-    stats   Dict. If <return_stats> set, statistics on each fit also returned:
-        p   (...,n_terms,...). F-test p values for each datapoint. Same shape as exp_var.
-        F   (...,n_terms,...). F-statistic for each datapoint. Same shape as exp_var.
-        mu  [n_terms] list of (...,n_groups,...). Group mean for each group (level),
-            in a separate list element for each model term (b/c n_groups not same).
-        n   [n_terms] list of (...,n_groups,...). Number of observations (trials)
-            in each group/level, in a separate list element for each model term.
+        - p : ndarray, shape=(...,n_terms,...)
+            F-test p values for each datapoint. Same shape as `exp_var`.
+        - F : ndarray, shape=(...,n_terms,...)
+            F-statistic for each datapoint. Same shape as `exp_var`.
+        - mu : list, shape=(n_terms,) of [ndarray, shape=(...,n_groups,...)]
+            Group mean for each group (level), in a separate list element for each
+            model term (b/c n_groups not necesarily same for different terms).
+        - n : list, shape=(n_terms,) of [ndarray, shape=(...,n_groups,...)]
+            Number of observations (trials) in each group/level, in a separate
+            list element for each model term.
 
-    REFERENCE   Zar _Biostatistical Analysis_ 4th ed.
+    Examples
+    --------
+    exp_var = anova2(labels,data,return_stats=False)
+
+    exp_var,stats = anova2(labels,data,return_stats=True)
+
+    References
+    ----------
+    - Zar "Biostatistical Analysis" 4th ed.
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
+    - https://en.wikipedia.org/wiki/Effect_size    
     """
-    # TODO Add <groups> arg with list of group labels to use?
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
 
@@ -1340,71 +1427,84 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
     Mass-univariate ordinary least squares regression analyses of one or more
     data vector(s) on single design matrix
 
-    exp_var = regress(labels,data,axis=0,col_terms=None,omega=True,constant=True,
-                      partial=False,total=False,as_pct=True,return_stats=False)
+    Parameters
+    ----------
+    labels : array-like, shape=(n_obs,n_params) or patsy DesignMatrix object
+        Regression design matrix. Each row corresponds to a distinct observation (trial),
+        and each column to a distinct predictor (coefficient to fit). If `constant` is True,
+        a constant (intercept) column will be appended to end of labels, if not already present.
+        labels.shape[0] (number of rows) be same length as data.shape[axis].
 
-    exp_var,stats = regress(labels,data,axis=0,col_terms=None,omega=True,constant=True,
-                            partial=False,total=False,as_pct=True,return_stats=False)
+    data : ndarray, shape=(...,n_obs,...)
+        Data to fit with regression model. `axis` should correspond to observations (trials),
+        while rest of axis(s) are any independent data series (channels, time points, frequencies,
+        etc.) that will be fit separately using the same list of group labels.
 
-    ARGS
-    labels  (n_obs,n_params) array-like | patsy DesignMatrix object.
-            Regression design matrix. Each row corresponds to a distinct
-            observation (trial), and each column to a distinct predictor
-            (coefficient to fit). If <constant> == True, a constant
-            (intercept) column will be appended to end of labels, if not already present.
-            Number of rows(labels.shape[0] = n_obs) be same length as data.shape[axis].
+    axis : int, default: 0 (first axis)
+        Axis of data array to perform analysis on, corresponding to trials/observations
 
-    data    (...,n_obs,...) ndarray. Data to fit with regression model. <axis> should
-            correspond to observations (trials), while rest of axis(s) are any
-            independent data series (channels, time points, frequencies, etc.)
-            that will be fit separately using the same list of group labels.
+    col_terms : array-like, shape=(n_params,), default: (assume 1:1 mapping from term:column)
+        Lists regression term (eg as integer or string name) corresponding to each column
+        (predictor) in labels. Mapping may not be 1:1 due to multiple dummy-variable columns
+        arising from categorical terms with > 2 levels. PEV/stats are computed separately
+        for all columns/predictors of each term pooled together.
+        If `labels` is a DesignMatrix, we obtain this from its attributes.
+        Otherwise, we assume 1:1 mapping from term:column (col_terms = np.arange(n_params)).
 
-    axis    Int. Data axis corresponding to distinct observations/trials. Default: 0
+    omega : bool, default: True
+        If True, uses bias-corrected omega-squared formula for PEV,
+        If False uses eta-squared formula, which is positively biased.
 
-    col_terms (n_params,) array-like. Lists regression term (eg as integer or string
-            name) corresponding to each column (predictor) in labels. Mapping may not
-            be 1:1 due to multiple dummy-variable columns arising from
-            categorical terms with > 2 levels. PEV/stats are computed separately
-            for all columns/predictors of each term pooled together.
-            Default: If DesignMatrix, obtained from its attributes.
-            Otherwise, assume 1:1 mapping from term:column (col_terms = np.arange(n_params))
+    constant : bool, Default: True
+        If True, ensures there is a constant column in labels to fit an
+        intercept/bias term (appends if missing, does nothing if present).
 
-    omega   Bool. If True, uses bias-corrected omega-squared formula for PEV,
-            otherwise uses R-squared formula, which is positively biased.
-            Default: True
+    partial : bool, default: False
+        If True, uses partial-factor formula for PEV, where each term's
+        EV is expressed relative to only that term + error variance, and
+        thus changes in one term's EV do not necessarily affect other terms.
+        If False, the standard full-model PEV formula is used.
 
-    constant Bool. If True, ensures there is a constant column in labels to fit an
-            intercept/bias term (appends if missing, does nothing if present).
-            Default: True (include constant/intercept term)
+    total : bool, default: False
+        If True, total PEV summed across all model terms is appended to
+        to end of terms axis in `exp_var`.
 
-    partial Bool. If True, uses partial-factor formula for PEV, where each term
-            EV is expressed relative to only that term + error variance, and
-            thus changes in one term's EV do not necessarily affect other terms.
-            Otherwise, the standard full-model PEV formula is used. Default: False
+    as_pct : bool, default: True
+        If True, return PEV as a percent (range ~ 0-100).
+        If False, return PEV as a proportion (range ~ 0-1)
 
-    total   Bool. If True, appends total model explained variance (sum of all
-            individual terms) to end of term axis. Default: False
+    return_stats : bool, default: False
+        If True, return several stats on model fit (eg F-stat,p) in addition to PEV
+        If False, just return PEV.
 
-    as_pct  Bool. If True, returns PEV as a percent (range ~ 0-100), else PEV
-            is returned as a proportion (range ~ 0-1). Default: True
+    Returns
+    -------
+    exp_var : ndarray, shape=(...,n_terms,...)
+        Percent (or proportion) of variance in data explained by labels.
+        Shape is same as data, with observation `axis` reduced to length = n_terms.
 
-    return_stats Bool. If True, computes and returns several statistics of fitted
-            model in addition to PEV. Default: False
+    stats : dict, optional
+        If `return_stats` is True, statistics on each fit also returned:
 
-    RETURNS
-    exp_var (...,n_terms,...). Percent (or proportion) of variance in data explained by labels.
-            Shape is same as data, with observation axis reduced to length = n_terms.
+        - p : ndarray, shape=(...,n_terms,...)
+            F-test p values for each datapoint. Same shape as exp_var.
+        - F : ndarray, shape=(...,n_terms,...)
+            F-statistic for each datapoint. Same shape as exp_var.
+        - B : ndarray, shape=(...,n_params,...)
+            Fitted regression coefficients for each predictor (column in `labels`).
+            Same shape as exp_var, but with B.shape[axis] = n_params.
 
-    stats   Dict. If <return_stats> set, statistics on each fit also returned:
-        p   (...,n_terms,...). F-test p values for each datapoint. Same shape as exp_var.
-        F   (...,n_terms,...). F-statistic for each datapoint. Same shape as exp_var.
-        B   (...,nPredictors,...). Fitted regression coefficients for each predictor
-            (column in labels). Same shape as exp_var, but with B.shape[axis] = nPredictors.
+    Examples
+    --------
+    exp_var = regress(labels,data,return_stats=False)
 
-    REFERENCE
-    Regression eqn's: Draper & Smith _Applied Regression Analysis (1998) sxn's 1.3, 6.1
-    Omega^2 stat:     Snyder & Lawson (1993) J of Experimental Education
-                      wikipedia.org/wiki/Effect_size
+    exp_var,stats = regress(labels,data,return_stats=True)
+
+    References
+    ----------
+    - Draper & Smith "Applied Regression Analysis" (1998) sxn's 1.3, 6.1
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
+    - https://en.wikipedia.org/wiki/Effect_size
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1444,7 +1544,7 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     # Fit full model to data, save coefficients, and compute prediction of data
     model.fit(labels,data)
-    # Reshape coeffs (n_series,nPredictors) -> (nPredictors,n_series)
+    # Reshape coeffs (n_series,n_params) -> (n_params,n_series)
     B           = model.coef_.T
     # Full-model Error Sums of Squares
     SS_error_full= np.sum((data - model.predict(labels))**2, axis=0)
@@ -1525,20 +1625,21 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 # =============================================================================
 def patsy_terms_to_columns(labels):
     """
-    Given a patsy DesignMatrix, maps model terms to design matrix columns,
+    Given a patsy DesignMatrix, map model terms to design matrix columns,
     returning a vector listing the term corresponding to each column.
 
     Note that this correspondence may not be 1:1 due to categorical terms
     generating multiple dummy columns.
 
-    col_terms = patsy_terms_to_columns(labels)
+    Parameters
+    ----------
+    labels : patsy DesignMatrix object, shape=(n_observations,n_columns)
 
-    ARGS
-    labels   (n_observations,n_columns) patsy DesignMatrix object.
-
-    RETURNS
-    col_terms (n_columns,) array of strings. Lists term name (from labels.design_info.term_names)
-            corresponding to each column in design matrix <labels>.
+    Returns
+    -------
+    col_terms : ndarray, shape=(n_columns,), dtype=object(str)
+        Lists term name (from labels.design_info.term_names)
+        corresponding to each column in design matrix `labels`.
     """
     # todo  Should we option list of int indexes instead string names? faster downstream?
     assert isinstance(labels,DesignMatrix), \
@@ -1560,64 +1661,64 @@ def patsy_terms_to_columns(labels):
 # Low-level information metric computation functions
 # =============================================================================
 def entropy(P):
-    """ Computes entropy from probabilty density P """
+    """ Compute entropy from probabilty density P """
     return -(P * np.log2(P)).sum()
 
 
 def R_squared(SS_model, SS_total):
     """
-    Computes full-model R-squared/eta-squared statistic of explained variance.
-    Statistic is positively biased, especially for small N.
-    Formula :   exp_var = SS_model / SS_total
-    Also aliased as eta_squared()
+    Compute full-model R-squared/eta-squared statistic of explained variance.
 
-    exp_var = R_squared(SS_model,SS_total)
+    Note: Statistic is positively biased, especially for small N.
+    Formula : exp_var = SS_model / SS_total
     """
     return SS_model / SS_total
 
-eta_squared = R_squared   # alias for Rsquared -- same formula
+# Alias R_squared as eta_squared -- same formula
+eta_squared = R_squared
+""" Alias of :func:`R_squared`. See there for details. """
 
 
 def R_squared_partial(SS_model, SS_error):
     """
-    Computes partial R-squared/eta-squared statistic of explained variance.
-    Statistic is positively biased, especially for small N.
-    Formula :   pev = SS_model / (SS_model + SS_error)
-    Also aliased as eta_squared_partial()
+    Compute partial R-squared/eta-squared statistic of explained variance.
 
-    pev = R_squared_partial(SS_model,SS_error)
+    Note: Statistic is positively biased, especially for small N.
+    Formula :   pev = SS_model / (SS_model + SS_error)
     """
     return SS_model / (SS_model + SS_error)
 
-eta_squared_partial = R_squared_partial     # alias for Rsquared -- same formula
+# Alias R_squared_partial as eta_squared_partial -- same formula
+eta_squared_partial = R_squared_partial
+""" Alias of :func:`R_squared_partial`. See there for details. """
 
 
 def omega_squared(SS_model, SS_total, MS_error, df_model):
     """
-    Computes full-model omega-squared statistic of explained variance.
+    Compute full-model omega-squared statistic of explained variance.
+
     Statistic is bias-corrected, unlike R-squared/eta-squared.
     Formula :   pev = (SS_model - df_model*MS_error) / (SS_total + MS_error)
 
-    pev = omega_squared(SS_model,SS_total,MS_error)
-
-    REFERENCE
-        Olejnik & Algina (2003) Psychological Methods
-        Snyder & Lawson (1993) J of Experimental Education
+    References
+    ----------
+    - Olejnik & Algina (2003) https://psycnet.apa.org/doi/10.1037/1082-989X.8.4.434
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
     """
     return (SS_model - np.outer(df_model,MS_error)) / (SS_total + MS_error)
 
 
 def omega_squared_partial(SS_model, SS_total, MS_error, df_model, n_obs):
     """
-    Computes partial omega-squared statistic of explained variance.
+    Compute partial omega-squared statistic of explained variance.
+
     Statistic is bias-corrected, unlike R-squared/eta-squared.
     Formula :   pev = (SS_model - df_model*MS_error) / (SS_total + (n_obs-df_model)*MS_error)
 
-    pev = omega_squared_partial(SS_model,SS_total,MS_error,n_obs)
-
-    REFERENCE
-        Olejnik & Algina (2003) Psychological Methods
-        Snyder & Lawson (1993) J of Experimental Education
+    References
+    ----------
+    - Olejnik & Algina (2003) https://psycnet.apa.org/doi/10.1037/1082-989X.8.4.434
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
     """
     return ((SS_model - np.outer(df_model,MS_error)) /
             (SS_total + np.outer((n_obs-df_model),MS_error)))

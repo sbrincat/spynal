@@ -5,7 +5,7 @@ import numpy as np
 from neural_analysis.utils import data_labels_to_data_groups
 
 from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data, \
-                                                one_way_data, two_way_data
+                                                one_way_data, two_way_data, MISSING_ARG_ERRS
 from neural_analysis.randstats import one_sample_tstat, one_sample_test, \
                                       paired_tstat, paired_sample_test, paired_sample_test_labels, \
                                       paired_sample_association_test, paired_sample_association_test_labels, \
@@ -92,7 +92,7 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = one_sample_test(data, axis=0, method=method, seed=1,
                                                   n_resamples=n_resamples, return_stats=True,
                                                   foo=None)
@@ -236,7 +236,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
         assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, seed=1,
                                             n_resamples=n_resamples, return_stats=True, foo=None)
 
@@ -340,7 +340,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, seed=1,
                                             n_resamples=n_resamples, return_stats=True, foo=None)
 
@@ -441,7 +441,7 @@ def test_two_way_test(two_way_data, method, result_p, result_obs, result_resmp):
     assert np.allclose(stat_resmp[:,0,:].mean(axis=-1), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = two_way_test(data, labels, axis=0, method=method, seed=1,
                                             n_resamples=n_resamples, return_stats=True, foo=None)
 
@@ -521,7 +521,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = one_sample_confints(data, axis=0, n_resamples=n_resamples,
                                                     seed=1, return_stats=True, foo=None)
 
@@ -620,6 +620,6 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
-    with pytest.raises((TypeError,AssertionError)):
+    with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples,
                                             seed=1, return_stats=True, foo=None)

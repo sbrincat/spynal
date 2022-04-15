@@ -8,6 +8,7 @@ from scipy.stats.mstats import gmean
 from neural_analysis.spectra import simulate_oscillation
 
 # Possible errors to expect when inputting a missing/misspelled argument
+# Used for unit tests against silently ignoring incorrect arguments
 MISSING_ARG_ERRS = (TypeError,AttributeError,AssertionError)
 
 

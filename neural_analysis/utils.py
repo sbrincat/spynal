@@ -1,50 +1,69 @@
 # -*- coding: utf-8 -*-
 """
-utils   A module of Python utilities helpful for data preprocessing and analysis
+General-purpose python utilities for data preprocessing and analysis
 
 Includes:
-- numerical methods: interpolation, correlation, z-scoring, signal-to-noise measures
+
+- basic statistics: z-scoring, t/F-stats, SNR measures (Fano,CV,etc.), correlation
+- numerical methods: interpolation, setting random seed
 - functions to reshape data arrays and dynamically index into specific array axes
 - functions for dealing w/ Numpy "object" arrays (similar to Matlab cell arrays)
 - various other useful little utilities
 
-FUNCTIONS
-### Numerical utility functions ###
-set_random_seed     Seeds Python/Numpy random number generators with given seed
-interp1             Interpolates 1d data vector at given index values
-fano                Computes Fano factor (variance/mean) of data
-cv                  Computes Coefficient of Variation (SD/mean) of data
-cv2                 Computes local Coefficient of Variation (Holt 1996) of data
-lv                  Computes Local Variation (Shinomoto 2009) of data
-zscore              Z-scores data along given axis (or whole array)
-correlation         Pearson product-moment correlation btwn two variables
-rank_correlation    Spearman rank correlation btwn two variables
-gaussian            Evaluates parameterized 1D Gaussian function at given datapoint(s)
-gaussian_2d         Evaluates parameterized 2D Gaussian function at given datapoint(s)
-gaussian_nd         Evaluates parameterized N-D Gaussian function at given datapoint(s)
+Function list
+-------------
+Basic statistics
+^^^^^^^^^^^^^^^^
+- zscore :            Mass univariate Z-score data along given axis (or whole array)
+- fano :              Fano factor (variance/mean) of data
+- cv :                Coefficient of Variation (SD/mean) of data
+- cv2 :               Local Coefficient of Variation (Holt 1996) of data
+- lv :                Local Variation (Shinomoto 2009) of data
 
-### Data indexing and reshaping functions ###
-index_axis          Dynamically index into arbitrary axis of ndarray
-axis_index_slices   Generates list of slices for dynamic axis indexing
-standardize_array   Reshapes array to 2D w/ "business" axis at 0 or -1 for analysis
-undo_standardize_array Undoes effect of standardize_array after analysis
+- one_sample_tstat :  Mass univariate 1-sample t-statistic
+- paired_tstat :      Mass univariate paired-sample t-statistic
+- two_sample_tstat :  Mass univariate 2-sample t-statistic
+- one_way_fstat :     Mass univariate 1-way F-statistic
+- two_way_fstat :     Mass univariate 2-way (with interaction) F-statistic
 
-### Other utilities ###
-iarange             np.arange(), but with an inclusive endpoint
-unsorted_unique     np.unique(), but without sorting values
-isarraylike         Tests if variable is "array-like" (ndarray, list, or tuple)
-isnumeric           Tests if array dtype is numeric (int, float, or complex)
-setup_sliding_windows Generates set of sliding windows using given parameters
-object_array_compare Compare each object within an object array
-concatenate_object_array Concatenates objects across one/more axes of object array
+- correlation :       Pearson product-moment correlation btwn two variables
+- rank_correlation :  Spearman rank correlation btwn two variables
 
-Created on Fri Apr  9 13:28:15 2021
+Numerical utility functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- set_random_seed :   Seed Python/Numpy random number generators with given seed
+- interp1 :           Interpolate 1d data vector at given index values
+- gaussian :          Evaluate parameterized 1D Gaussian function at given datapoint(s)
+- gaussian_2d :       Evaluate parameterized 2D Gaussian function at given datapoint(s)
+- gaussian_nd :       Evaluate parameterized N-D Gaussian function at given datapoint(s)
 
-@author: sbrincat
+Data indexing and reshaping functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- index_axis :        Dynamically index into arbitrary axis of ndarray
+- axis_index_slices : Generates list of slices for dynamic axis indexing
+- standardize_array : Reshapes array to 2D w/ axis relevant for analysis at start or end
+- undo_standardize_array : Undoes effect of standardize_array after analysis
+
+Other utilities
+^^^^^^^^^^^^^^^
+- iarange :           np.arange(), but with an inclusive endpoint
+- unsorted_unique :   np.unique(), but without sorting values
+- isarraylike :       Tests if variable is "array-like" (ndarray, list, or tuple)
+- isnumeric :         Tests if array dtype is numeric (int, float, or complex)
+- setup_sliding_windows :       Generates set of sliding windows using given parameters
+- object_array_compare :        Compare each object within an object ndarray
+- concatenate_object_array :    Concatenates objects across one/more axes of object ndarray
+
+Function reference
+------------------
 """
+# Created on Fri Apr  9 13:28:15 2021
+#
+# @author: sbrincat
+
 import time
 import random
-from math import cos, sin
+from math import cos, sin, sqrt
 import numpy as np
 
 from scipy.interpolate import interp1d
@@ -53,156 +72,243 @@ from scipy.stats import rankdata
 from neural_analysis.helpers import _standardize_to_axis_0, _undo_standardize_to_axis_0, \
                                     _standardize_to_axis_end, _undo_standardize_to_axis_end
 
-
 # =============================================================================
-# Numerical utility functions
+# Basic statistics
 # =============================================================================
-def set_random_seed(seed=None):
+def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
+           ddof=0, zerotol=1e-6, return_stats=False):
     """
-    Seeds built-in Python and Numpy random number generators with given seed
+    Z-score data along given axis (or over entire array)
 
-    seed = set_random_seed(seed=None)
+    Optionally also returns mean,SD (eg, to compute on training set and apply to test set)
 
-    INPUT
-    seed    Int | String. Seed to use. If string given, converts each char to
-            ascii and sums the resulting values. If no seed given, seeds based
-            on current clock time
+    Parameters
+    ----------
+    data : array-like, shape=(...,n_obs,...)
+        Data to z-score. Arbitrary dimensionality.
 
-    OUTPUT
-    seed    Int. Actual integer seed used
+    axis : int, default: None (compute z-score across entire data array)
+        Array axis to compute mean/SD along for z-scoring (usually corresponding to
+        distict trials/observations). If None, computes mean/SD across entire
+        array (analogous to np.mean/std).
+
+    time_range : array-like, shape=(2,), default: None (compute mean/SD over all time points)
+        Optionally allows for computing mean/SD within a given time window, then using
+        these to z-score ALL timepoints (eg compute mean/SD within a "baseline" window,
+        then use to z-score all timepoints). Set=[start,end] of time window. If set, MUST
+        also provide values for `time_axis` and `timepts`.
+
+    time_axis : int, optional
+        Axis corresponding to timepoints. Only necessary if `time_range` is set.
+
+    timepts : array-like, shape=(n_timepts,), optional
+        Time sampling vector for data. Only necessary if `time_range` is set, unused otherwise.
+
+    ddof : int, default: 0
+        Sets divisor for computing SD = N - ddof. Set=0 for max likelihood estimate,
+        set=1 for unbiased (N-1 denominator) estimate
+
+    zerotol : float, default: 1e-6
+        Any SD values < `zerotol` are treated as 0, and corresponding z-scores set = np.nan
+
+    return_stats : bool, default: False
+        If True, also returns computed mean, SD. If False, only returns z-scored data.
+
+    Returns
+    -------
+    data : ndarray, shape=(...,n_obs,...)
+        Z-scored data. Same shape as input `data`.
+
+    mean : ndarray, shape=(...,n_obs,...), optional
+        Computed means for z-score. Only returned if `return_stats` is True.
+        Same as input `data` with 'axis`reduced to length 1.
+
+    sd : ndarray, shape=(...,n_obs,...), optional
+        Computed standard deviations for z-score. Only returned if `return_stats` is True.
+        Same as input `data` with 'axis`reduced to length 1.
+
+    Examples
+    --------
+    data = zscore(data, return_stats=False)
+
+    data, mu, sd = zscore(data, return_stats=True)
     """
-    if seed is None:            seed = int(time.time()*1000.0) % (2**32 - 1)
-    # Convert string seeds to int's (convert each char->ascii and sum them)
-    elif isinstance(seed,str):  seed = np.sum([ord(c) for c in seed])
+    # Compute mean/SD separately for each timepoint (axis not None) or across all array (axis=None)
+    if time_range is None:
+        # Compute mean and standard deviation of data along <axis> (or entire array)
+        mu = data.mean(axis=axis, keepdims=True)
+        sd = data.std(axis=axis, ddof=ddof, keepdims=True)
 
-    # Set Numpy random number generator
-    np.random.seed(seed)
-    # Set built-in random number generator in Python random module
-    random.seed(seed)
+    # Compute mean/SD within given time range, then apply to all timepoints
+    else:
+        assert (len(time_range) == 2) and (time_range[1] > time_range[0]), \
+            "time_range must be given as [start,end] time of desired time window"
+        assert timepts is not None, "If time_range is set, must also input value for timepts"
+        assert time_axis is not None, "If time_range is set, must also input value for time_axis"
 
-    return seed
+        # Compute mean data value across all timepoints within window = "baseline" for z-score
+        win_bool = (timepts >= time_range[0]) & (timepts <= time_range[1])
+        win_data = index_axis(data, time_axis, win_bool).mean(axis=time_axis, keepdims=True)
+
+        # Compute mean and standard deviation of data along <axis>
+        mu = win_data.mean(axis=axis, keepdims=True)
+        sd = win_data.std(axis=axis, ddof=ddof, keepdims=True)
+
+    # Compute z-score -- Subtract mean and normalize by SD
+    data = (data - mu) / sd
+
+    # Find any data values w/ sd ~ 0 and set data = NaN for those points
+    if axis is None:
+        if np.isclose(sd,0,rtol=zerotol): data = np.nan
+    else:
+        zero_points = np.isclose(sd,0,rtol=zerotol)
+        tiling = [1]*data.ndim
+        tiling[axis] = data.shape[axis]
+        if time_range is not None: tiling[time_axis] = data.shape[time_axis]
+        data[np.tile(zero_points,tiling)] = np.nan
+
+    if return_stats:    return data, mu, sd
+    else:               return data
 
 
-def interp1(x, y, xinterp, **kwargs):
+def fano(data, axis=None, ddof=0, keepdims=True):
     """
-    Interpolates 1d data vector <y> sampled at index values <x> to
-    new sampling vector <xinterp>
-    Convenience wrapper around scipy.interpolate.interp1d w/o weird call structure
-    """
-    return interp1d(x,y,**kwargs).__call__(xinterp)
-
-
-def fano(data, axis=None, ddof=0):
-    """
-    Computes Fano factor (variance/mean) of data along a given array axis
-    (eg trials) or across an entire array
+    Computes Fano factor of data along a given array axis or across entire array
 
     np.nan is returned for cases where the mean ~ 0
 
+    Fano factor = variance/mean
+
     Fano factor has an expected value of 1 for a Poisson distribution/process.
 
-    fano = fano(data, axis=None, ddof=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data of arbitrary shape
 
-    ARGS
-    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    axis : int, default: None (compute across entire array)
+        Array axis to compute Fano factor on (usually corresponding to distict
+        trials/observations). If None, computes Fano factor across entire array
+        (analogous to np.mean/var).
 
-    axis        Int. Array axis to compute Fano factor on (usually corresponding to
-                distict trials/observations). If None [default], computes Fano
-                factor across entire array (analogous to np.mean/var).
+    ddof : int, default: 0
+        Sets divisor for computing variance = N - ddof. Set=0 for max likelihood
+        estimate, set=1 for unbiased (N-1 denominator) estimate.
 
-    ddof        Int. Sets divisor for computing variance = N - ddof. Set=0 for max
-                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
-                Default: 0
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
 
-    RETURNS
-    fano        Float | (...,1,...) ndarray. Fano factor (variance/mean) of data.
-                For vector data or axis=None, a single scalar value is returned.
-                Otherwise, it's an array w/ same shape as data, but with <axis>
-                reduced to length 1.
+    Returns
+    -------
+    fano : float or ndarray, shape=(...,[1,] ...)
+        Fano factor of data.
+        For 1d data or axis=None, a single scalar value is returned.
+        Otherwise, it's an array w/ same shape as data, but with `axis` reduced to length 1
+        if `keepdims` is True, and with `axis` removed if `keepdims` is False.
     """
-    mean    = data.mean(axis=axis,keepdims=True)
-    var     = data.var(axis=axis,keepdims=True,ddof=ddof)
+    mean    = data.mean(axis=axis, keepdims=keepdims)
+    var     = data.var(axis=axis, keepdims=keepdims, ddof=ddof)
     fano_   = var/mean
     # Find any data values w/ mean ~ 0 and set output = NaN for those points
     fano_[np.isclose(mean,0)] = np.nan
 
     if fano_.size == 1: fano_ = fano_.item()
-
     return fano_
 
-# Alias fano() as fano_factor()
 fano_factor = fano
+""" Alias of :func:`fano`. See there for details """
 
 
-def cv(data, axis=None, ddof=0):
+def cv(data, axis=None, ddof=0, keepdims=True):
     """
-    Computes Coefficient of Variation (std dev/mean) of data, computed along
-    a given array axis (eg trials) or across an entire array
+    Compute Coefficient of Variation of data, along a given array axis or across entire array
 
     np.nan is returned for cases where the mean ~ 0
 
-    CV has an expected value of 1 for a Poisson distribution/process.
+    CV = standard deviation/mean
 
-    CV = cv(data, axis=None, ddof=0)
+    CV has an expected value of 1 for a Poisson distribution or Poisson process.
 
-    ARGS
-    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data of arbitrary shape
 
-    axis        Int. Array axis to compute CV on (usually corresponding to
-                distict trials/observations). If None [default], computes Fano
-                factor across entire array (analogous to np.mean/var).
+    axis : int, default: None (compute across entire array)
+        Array axis to compute Fano factor on (usually corresponding to distict
+        trials/observations). If None, computes Fano factor across entire array
+        (analogous to np.mean/var).
 
-    ddof        Int. Sets divisor for computing std dev = N - ddof. Set=0 for max
-                likelihood estimate, set=1 for unbiased (N-1 denominator) estimate.
-                Default: 0
+    ddof : int, default: 0
+        Sets divisor for computing variance = N - ddof. Set=0 for max likelihood
+        estimate, set=1 for unbiased (N-1 denominator) estimate.
 
-    RETURNS
-    CV          Float | (...,1,...) ndarray. CV (SD/mean) of data.
-                For vector data or axis=None, a single scalar value is returned.
-                Otherwise, it's an array w/ same shape as data, but with <axis>
-                reduced to length 1.
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
+
+    Returns
+    -------
+    CV : float or ndarray, shape=(...,[1,] ...)
+        CV (SD/mean) of data.
+        For 1d data or axis=None, a single scalar value is returned.
+        Otherwise, it's an array w/ same shape as data, but with `axis` reduced to length 1
+        if `keepdims` is True, and with `axis` removed if `keepdims` is False.
     """
-    mean    = data.mean(axis=axis,keepdims=True)
-    sd      = data.std(axis=axis,keepdims=True,ddof=ddof)
+    mean    = data.mean(axis=axis, keepdims=keepdims)
+    sd      = data.std(axis=axis, keepdims=keepdims, ddof=ddof)
     CV      = sd/mean
     # Find any data values w/ mean ~ 0 and set output = NaN for those points
     CV[np.isclose(mean,0)] = np.nan
 
     if CV.size == 1: CV = CV.item()
-
     return CV
 
-# Alias cv() as coefficient_of_variation()
 coefficient_of_variation = cv
+""" Alias of :func:`cv`. See there for details """
 
 
-def cv2(data, axis=0):
+def cv2(data, axis=0, keepdims=True):
     """
-    Computes local Coefficient of Variation (CV2) of data, computed along
-    a given array axis (eg trials). Typically used as measure of local variation
-    in inter-spike intervals.
+    Compute local Coefficient of Variation (CV2) of data, along a given array axis
 
     CV2 reduces effects of slow changes in data (eg changes in spike rate) on
     measure of variation by only comparing adjacent data values (eg adjacent ISIs).
+
     CV2 has an expected value of 1 for a Poisson process.
 
-    CV2 = cv2(data, axis=0)
+    Typically used as measure of local variation in inter-spike intervals.
 
-    ARGS
-    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data of arbitrary shape
 
-    axis        Int. Array axis to compute CV2 on (usually corresponding to
-                distict trials/observations). Default: 0
+    axis : int, default: 0
+        Array axis to compute CV2 on. Unlike CV, computing CV2 over entire array is
+        not permitted and will raise an error, as it is a locally-defined measure.
 
-    RETURNS
-    CV2         Float | (...,1,...) ndarray. CV2 of data.
-                For vector data or axis=None, a single scalar value is returned.
-                Otherwise, it's an array w/ same shape as data, but with <axis>
-                reduced to length 1.
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
 
-    REFERENCE
+    Returns
+    -------
+    CV2 : float or ndarray, shape=(...,[1,] ...)
+        CV2 of data.
+        For 1d data, a single scalar value is returned.
+        Otherwise, it's an array w/ same shape as data, but with `axis` reduced to length 1
+        if `keepdims` is True, and with `axis` removed if `keepdims` is False.
+
+    References
+    ----------
     Holt et al. (1996) Journal of Neurophysiology https://doi.org/10.1152/jn.1996.75.5.1806
     """
+    assert axis is not None, \
+        ValueError("Must input int value for `axis`. \
+                    CV2 is locally-defined and not computable across entire array")
+
     # Difference between adjacent values in array, along <axis>
     diff    = np.diff(data,axis=axis)
     # Sum between adjacent values in array, along <axis>
@@ -210,39 +316,52 @@ def cv2(data, axis=0):
               index_axis(data, axis, range(1,data.shape[axis]))
 
     # CV2 formula (Holt 1996 eqn. 4)
-    CV2     = (2*np.abs(diff) / denom).mean(axis=axis)
+    CV2     = (2*np.abs(diff) / denom).mean(axis=axis, keepdims=keepdims)
 
-    if CV2.size == 1: CV2 = CV2.item()
-
+    if CV2.size == 1:   CV2 = CV2.item()
     return CV2
 
 
-def lv(data, axis=0):
+def lv(data, axis=0, keepdims=True):
     """
-    Computes Local Variation (LV) of data, computed along a given array axis (eg trials).
-    Typically used as measure of local variation in inter-spike intervals.
+    Compute Local Variation (LV) of data along a given array axis
 
     LV reduces effects of slow changes in data (eg changes in spike rate) on
     measure of variation by only comparing adjacent data values (eg adjacent ISIs).
+
     LV has an expected value of 1 for a Poisson process.
 
-    LV = lv(data, axis=0)
+    Typically used as measure of local variation in inter-spike intervals.
 
-    ARGS
-    data        (...,n_obs,...) ndarray. Data of arbitrary shape.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data of arbitrary shape
 
-    axis        Int. Array axis to compute LV on (usually corresponding to
-                distict trials/observations). Default: 0
+    axis : int, default: 0
+        Array axis to compute LV on. Unlike CV, computing LV over entire array is
+        not permitted and will raise an error, as it is a locally-defined measure.
 
-    RETURNS
-    LV          Float | (...,1,...) ndarray. LV of data.
-                For vector data or axis=None, a single scalar value is returned.
-                Otherwise, it's an array w/ same shape as data, but with <axis>
-                reduced to length 1.
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
 
-    REFERENCE
+    Returns
+    -------
+    LV : float or ndarray, shape=(...,[1,]...)
+        LV of data.
+        For vector data, a single scalar value is returned.
+        Otherwise, it's an array w/ same shape as data, but with `axis` reduced to length 1
+        if `keepdims` is True, and with `axis` removed if `keepdims` is False.
+
+    References
+    ----------
     Shinomoto et al. (2009) PLoS Computational Biology https://doi.org/10.1371/journal.pcbi.1000433
     """
+    assert axis is not None, \
+        ValueError("Must input int value for `axis`. \
+                    LV is locally-defined and not computable across entire array")
+
     # Difference between adjacent values in array, along <axis>
     diff    = np.diff(data,axis=axis)
     # Sum between adjacent values in array, along <axis>
@@ -252,45 +371,379 @@ def lv(data, axis=0):
 
     # LV formula (Shinomoto 2009 eqn. 2)
     # Note: np.diff() reverses sign from original formula, but it gets squared anyway
-    LV     = (((diff/denom)**2) * (3/(n-1))).sum(axis=axis)
+    LV     = (((diff/denom)**2) * (3/(n-1))).sum(axis=axis, keepdims=keepdims)
 
-    if LV.size == 1: LV = LV.item()
-
+    if LV.size == 1:    LV = LV.item()
     return LV
+
+
+# Note: In timeit tests, ran ~2x as fast as scipy.stats.ttest_1samp
+def one_sample_tstat(data, axis=0, mu=0, keepdims=True):
+    """
+    Mass univariate 1-sample t-statistic, relative to expected mean under null `mu`
+
+    t = (mean(data) - mu) / SEM(data)
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...)
+        Data to compute stat on. `axis` should correspond to distinct observations/trials;
+        other axes Z treated as independent data series, and stat is computed separately for each
+
+    axis : int, default: 0 (1st axis)
+        Axis of data corresponding to distinct trials/observations.
+
+    mu : float, default: 0
+        Expected mean under the null hypothesis.
+
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
+
+    Returns
+    -------
+    t : float or ndarray, shape=(...[,1,]...)
+        1-sample t-statistic for data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True or removed if `keepdims` is False.
+    """
+    data = np.asarray(data)
+
+    n   = data.shape[axis]
+
+    if mu != 0:  data = data - mu
+
+    # Compute mean and unbiased standard deviation of data
+    mu  = data.mean(axis=axis,keepdims=keepdims)
+    sd  = data.std(axis=axis,ddof=1,keepdims=keepdims)
+
+    # t statistic = mean/SEM
+    t = mu / (sd/sqrt(n))
+
+    if t.size == 1: t = t.item()
+    return t
+
+
+def paired_tstat(data1, data2, axis=0, d=0, keepdims=True):
+    """
+    Mass univariate paired-sample t-statistic, relative to mean difference under null `d`
+
+    d_obs = data1 - data2
+
+    t = (mean(d_obs) - d) / SEM(d_obs)
+
+    Parameters
+    ----------
+    data1/data2 : ndarray, shape=(...,n,...)
+        Data from two groups to compare.
+        Shape is arbitrary, but must be same for data1,2.
+
+    axis : int, default: 0 (1st axis)
+        Axis of data corresponding to distinct trials/observations.
+
+    d : float, default: 0
+        Hypothetical difference in means under null hypothesis
+
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
+
+    Returns
+    -------
+    t : float or ndarray, shape=(...[,1,]...)
+        Paired-sample t-statistic for given data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True or removed if `keepdims` is False.
+    """
+    return one_sample_tstat(data1 - data2, axis=axis, mu=d, keepdims=keepdims)
+
+
+# Note: In timeit tests, ran ~2x as fast as scipy.stats.ttest_ind
+def two_sample_tstat(data1, data2, axis=0, equal_var=True, d=0, keepdims=True):
+    """
+    Mass univariate 2-sample t-statistic, relative to mean difference under null `d`
+
+    t = (mean(data1) - mean(data2) - mu) / pooledSE(data1,data2)
+
+    (where the formula for pooled SE differs depending on `equal_var`)
+
+    Parameters
+    ----------
+    data1 : ndarray, shape=(...,n1,...)
+        Data from one group to compare.
+
+    data2 : ndarray, shape=(...,n2,...)
+        Data from a second group to compare.
+        Need not have the same n as data1, but all other dim's must be
+        same size/shape. For both, `axis` should correspond to
+        distinct observations/trials; other axes are treated as
+        independent data series, and stat is computed separately for each.
+
+    axis : int, default: 0 (1st axis)
+        Axis of data corresponding to distinct trials/observations.
+
+    equal_var : bool, default: True
+        If True, compute standard t-stat assuming equal population variances for 2 groups.
+        If False, compute Welch’s t-stat, which does not assume equal population variances.
+
+    d : float, default: 0
+        Hypothetical difference in means under null hypothesis
+
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
+
+    Returns
+    -------
+    t : float or ndarray, shape=(...[,1,]...)
+        2-sample t-statistic for data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True or removed if `keepdims` is False.
+
+    References
+    ----------
+    - Indep t-test : https://en.wikipedia.org/wiki/Student%27s_t-test#Independent_two-sample_t-test
+    - Welch's test : https://en.wikipedia.org/wiki/Welch%27s_t-test
+    """
+    data1 = np.asarray(data1)
+    data2 = np.asarray(data2)
+
+    n1  = data1.shape[axis]
+    n2  = data2.shape[axis]
+
+    # Compute mean of each group and their difference (offset by null mean)
+    d   = data1.mean(axis=axis,keepdims=keepdims) - \
+          data2.mean(axis=axis,keepdims=keepdims) - d
+
+    # Compute variance of each group
+    var1 = data1.var(axis=axis,ddof=1,keepdims=keepdims)
+    var2 = data2.var(axis=axis,ddof=1,keepdims=keepdims)
+
+    # Standard independent 2-sample t-test (assumes homoscedasticity)
+    if equal_var:
+        # Compute pooled standard deviation across data1,data2 -> standard error
+        df1         = n1 - 1
+        df2         = n2 - 1
+        sd_pooled   = np.sqrt((var1*df1 + var2*df2) / (df1+df2))
+        se          = sd_pooled * sqrt(1/n1 + 1/n2)
+
+    # Welch's test (no homoscedasticity assumption)
+    else:
+        se      = np.sqrt(var1/n1 + var2/n2)
+
+    # t statistic = difference in means / pooled standard error
+    t = d / se
+
+    if t.size == 1: t = t.item()
+    return t
+
+
+# Note: In timeit tests, this code ran slightly faster than scipy.stats.f_oneway
+def one_way_fstat(data, labels, axis=0, groups=None, keepdims=True):
+    """
+    Mass univariate 1-way F-statistic on given data and labels
+
+    F = var(between groups) / var(within groups)
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...)
+        Data to compute stat on. `axis` should correspond to distinct observations/trials;
+        other axes are treated as independent data series, and stat is computed separately for each
+
+    labels : array-like, shape=(n,)
+        Group labels for each observation (trial), identifying which group (factor level)
+        each observation belongs to.
+
+    axis : int, default: 0 (1st axis)
+        Axis of data corresponding to distinct trials/observations.
+
+    groups : array-like, shape=(n_groups,), optional, default: np.unique(labels)
+        List of labels for each group (condition). Used to test only a subset of labels.
+
+    keepdims : bool, default: True
+        If True, retains reduced observations `axis` as length-one axes in output.
+        If False, removes reduced observations `axis` from outputs.
+
+    Returns
+    -------
+    F : float or ndarray, shape=(...[,1,]...)
+        F-statistic for data. For 1d data, returned as scalar value.
+        For n-d data, it has same shape as data, with `axis` reduced to length 1
+        if `keepdims` is True or removed if `keepdims` is False.
+    """
+    labels  = np.asarray(labels)
+    # Find all groups/levels in list of labels (if not given)
+    if groups is None: groups = np.unique(labels)
+
+    data_shape = data.shape
+    n = data_shape[axis]
+
+    SS_shape = list(data_shape)
+    SS_shape[axis] = 1
+
+    # Compute grand mean across all observations (for each data series)
+    grand_mean = data.mean(axis=axis,keepdims=True)
+
+    # Total Sums of Squares
+    SS_total = ((data - grand_mean)**2).sum(axis=axis,keepdims=True)
+
+    # Groups (between-group) Sums of Squares
+    SS_groups = np.zeros(SS_shape)
+    for group in groups:
+        group_bool = labels == group
+        # Number of observations for given group
+        n = group_bool.sum()
+        # Group mean for given group
+        group_mean = data.compress(group_bool,axis=axis).mean(axis=axis,keepdims=True)
+        # Groups Sums of Squares for given group
+        SS_groups += n*(group_mean - grand_mean)**2
+
+    # Error (within-group) Sums of Squares
+    SS_error = SS_total - SS_groups
+
+    df_groups   = len(groups) - 1   # Groups degrees of freedom
+    df_error    = n-1 - df_groups   # Error degrees of freedom
+
+    F = (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
+    
+    if F.size == 1:     F = F.item()
+    elif not keepdims:  F = F.squeeze(axis=axis)
+    return F
+
+
+# Note: In timeit tests, this code ran much faster than ols and statsmodels.anova_lm
+def two_way_fstat(data, labels, axis=0, groups=None):
+    """
+    Mass univariate 2-way (with interaction) F-statistic on given data and labels
+
+    F = var(between groups) / var(within groups)
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...)
+        Data to compute stat on. `axis` should correspond to distinct observations/trials;
+        other axes are treated as independent data series, and stat is computed separately for each
+
+    labels : array-like, shape=(n,n_terms=2|3)
+        Group labels for each model term and observation (trial), identifying which group
+        (factor level) each observation belongs to for each term. First 2 columns should reflect
+        main effects, and optional third column should be their interaction.
+
+    axis : int, default: 0 (1st axis)
+        Axis of data corresponding to distinct trials/observations.
+
+    groups : array_like, shape=(n_terms,) of [array-like, shape=(n_groups(term),)], default: all
+        List of group labels to use for each for each model term.
+        Used to test only a subset of labels. Default to using all values in `labels`.
+
+    Returns
+    -------
+    F : ndarray, shape=(...,n_terms,...)
+        F-statistic for given data. Same shape as data, with `axis` reduced to length=n_terms.
+
+    References
+    ----------
+    Zar "Biostatistical Analysis" ch.12
+    """
+    labels  = np.asarray(labels)
+    n_terms  = labels.shape[1]
+    doInteract = n_terms == 3
+    # Find all groups/levels in list of labels (if not given)
+    if groups is None:
+        groups = [np.unique(labels[:,term]) for term in range(n_terms)]
+    n_groups = np.asarray([len(termGroups) for termGroups in groups])
+
+    data_shape = data.shape
+    n = data_shape[axis]
+
+    SS_shape = list(data_shape)
+    SS_shape[axis] = 1
+
+    # Compute grand mean across all observations (for each data series)
+    grand_mean = data.mean(axis=axis,keepdims=True)
+
+    # Total Sums of Squares
+    SS_total = ((data - grand_mean)**2).sum(axis=axis,keepdims=True)
+
+    # Groups (between-group) Sums of Squares for each term
+    SS_groups = []
+    for term in range(n_terms):
+        SS_groups.append( np.zeros(SS_shape) )
+
+        for group in groups[term]:
+            group_bool = labels[:,term] == group
+            # Number of observations for given group
+            n = group_bool.sum()
+            # Group mean for given group
+            group_mean = data.compress(group_bool,axis=axis).mean(axis=axis,keepdims=True)
+            # Groups Sums of Squares for given group
+            SS_groups[term] += n*(group_mean - grand_mean)**2
+
+        # For interaction term, calculations above give Cells Sum of Squares (Zar eqn. 12.18)
+        # Interaction term Sum of Squares = SScells - SS1 - SS2 (Zar eqn. 12.12)
+        if term == 2:
+            SS_groups[term] -= (SS_groups[0] + SS_groups[1])
+
+    SS_groups = np.concatenate(SS_groups,axis=axis)
+
+    # Error (within-cells) Sums of Squares
+    SS_error = SS_total - SS_groups.sum(axis=axis,keepdims=True)
+
+    # Groups degrees of freedom (Zar eqn. 12.9)
+    df_groups= n_groups - 1
+    dfCells = df_groups[-1]      # Cells degrees of freedom (Zar eqn. 12.4)
+    if doInteract:
+        # Interaction term degrees of freedom = dfCells - dfMain1 - dfMain2 (Zar eqn. 12.13)
+        df_groups[2] -= (df_groups[0] + df_groups[1])
+
+    # Error degrees of freedom = dfTotal - dfCells (Zar eqn. 12.7)
+    df_error = n - 1 - dfCells
+
+    if axis != -1:
+        df_groups = df_groups.reshape((*np.ones((axis,),dtype=int),
+                                     n_terms,
+                                     *np.ones((SS_groups.ndim-axis-1,),dtype=int)))
+
+    return  (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
 
 
 def correlation(data1, data2, axis=None, keepdims=True):
     """
-    Computes Pearson product-moment (standard) correlation between two variables,
+    Compute Pearson product-moment (standard) correlation between two variables,
     in mass-bivariate fashion
 
-    Pearson correlation only identifies linear relationships between variables.
-    If a nonlinear (monotonic) relationship is suspected, consider using rank_correlation instead.
+    `axis` is treated as observations (eg trials), which correlation is computed over.
+    Correlations are computed separately across all other array dims (eg, timepoints, freqs, etc).
+    If axis is None, correlations are computed across entire 1-d flattened (unrolled) arrays.
 
     Correlations range from -1 (perfect anti-correlation) to +1 (perfect positive correlation),
     with 0 indicating a lack of correlation.
 
-    Input <axis> is treated as observations (eg trials), which correlation is computed over.
-    Correlations are computed separately across all other array dims (eg, timepoints, freqs, etc).
-    If axis is None, correlations are computed across entire 1-d flattened (unrolled) arrays.
+    Pearson correlation only identifies linear relationships between variables.
+    If a nonlinear (monotonic) relationship is suspected, consider using rank_correlation instead.
 
-    r = correlation(data1,data2,axis=None,keepdims=True)
+    Parameters
+    ----------
+    data1,data2 : ndarray, shape=(n,) or (...,n,...)
+        Paired data to compute correlations between.
+        Can be 1d vectors or multi-dim arrays, but must have same shape.
 
-    ARGS
-    data1,2     (n,) | (...,n,...) ndarrays. Paired data to compute correlations between.
-                Can be 1d vectors or multi-dim arrays, but must have same shape.
+    axis : int or None, default: None (compute across entire flattened array)
+        Array axis to treat as observations and compute correlations over.
+        Correlations are computed in mass-bivariate fashion across all other array axes.
+        If axis=None, correlation is computed across entire 1d flattened arrays.
 
-    axis        Int | None. Array axis to treat as observations and compute correlations over;
-                correlations are computed in mass-bivariate fashion across all other array axes.
-                If None [default], correlation is computed across entire 1-d flattened arrays.
+    keepdims : bool, default: True
+        If False, correlation `axis` is removed (squeezed out) from output.
+        If True, `axis` is kept in output as singleton (length 1) axis.
 
-    keepdims    Bool. If False, correlation <axis> is removed (squeezed out) from output.
-                If True [default], <axis> is kept in output as singleton axis.
-
-    RETURNS
-    r           Float | (...,[1,]...) ndarray. Correlation between data1 & data2.
-                For 1-d data, r is a float. For multi-d data, r is same shape as data, but with
-                <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
+    Returns
+    -------
+    r : float or ndarray, shape=(...,[1,]...)
+        Correlation between data1 & data2.
+        For 1d data, r is a float. For multi-d data, r is same shape as data, but with
+        `axis` reduced to length 1 (if `keepdims` is True) or removed (if `keepdims` is False).
     """
     assert data1.shape == data2.shape, ValueError("data1 and data2 must have same shape")
 
@@ -320,6 +773,10 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
     """
     Computes Spearman rank correlation between two variables, in mass-bivariate fashion
 
+    Input `axis` is treated as observations (eg trials), which correlation is computed over.
+    Correlations are computed separately across all other array dims (eg, timepoints, freqs, etc).
+    If axis is None, correlations are computed across entire 1d flattened (unrolled) arrays.
+
     Each data is sorted into rank-order separately, and the resulting ranks are entered
     into a standard (Pearson) correlation. This identifies any monotonic relationship
     between variables, and thus should be favored when a nonlinear relationship is suspected.
@@ -327,27 +784,27 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
     Correlations range from -1 (perfect anti-correlation) to +1 (perfect positive correlation),
     with 0 indicating a lack of correlation.
 
-    Input <axis> is treated as observations (eg trials), which correlation is computed over.
-    Correlations are computed separately across all other array dims (eg, timepoints, freqs, etc).
-    If axis is None, correlations are computed across entire 1-d flattened (unrolled) arrays.
+    Parameters
+    ----------
+    data1,data2 : ndarray, shape=(n,) or (...,n,...)
+        Paired data to compute correlations between.
+        Can be 1d vectors or multi-dim arrays, but must have same shape.
 
-    rho = rank_correlation(data1,data2,axis=None,keepdims=True)
+    axis : int or None, default: None (compute across entire flattened array)
+        Array axis to treat as observations and compute correlations over.
+        Correlations are computed in mass-bivariate fashion across all other array axes.
+        If axis=None, correlation is computed across entire 1d flattened arrays.
 
-    ARGS
-    data1,2     (n,) | (...,n,...) ndarrays. Paired data to compute correlations between.
-                Can be 1d vectors or multi-dim arrays, but must have same shape.
+    keepdims : bool, default: True
+        If False, correlation `axis` is removed (squeezed out) from output.
+        If True, `axis` is kept in output as singleton (length 1) axis.
 
-    axis        Int | None. Array axis to treat as observations and compute correlations over;
-                correlations are computed in mass-bivariate fashion across all other array axes.
-                If None [default], correlation is computed across entire 1-d flattened arrays.
-
-    keepdims    Bool. If False, correlation <axis> is removed (squeezed out) from output.
-                If True [default], <axis> is kept in output as singleton axis.
-
-    RETURNS
-    rho         Float | (...,[1,]...) ndarray. Rank correlation between data1 & data2.
-                For 1-d data, rho is a float. For multi-d data, rho is same shape as data, but with
-                <axis> reduced to length 1 (if keepdims=True) or removed (if not keepdims=False).
+    Returns
+    -------
+    rho : float or ndarray, shape=(...,[1,]...)
+        Correlation between data1 & data2.
+        For 1d data, rho is a float. For multi-d data, rho is same shape as data, but with
+        `axis` reduced to length 1 (if `keepdims` is True) or removed (if `keepdims` is False).
     """
     # Rank data in each data array, either along entire flattened array or along axis
     if axis is None:
@@ -361,29 +818,93 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
     return correlation(data1_ranks, data2_ranks, axis=axis, keepdims=keepdims)
 
 
+# =============================================================================
+# Numerical utility functions
+# =============================================================================
+def set_random_seed(seed=None):
+    """
+    Seed built-in Python and Numpy random number generators with given value
+
+    Parameters
+    ----------
+    seed : int or str, default: (use current clock time)
+        Seed to use. If string given, converts each char to ascii and sums the
+        resulting values. If no seed given, seeds based on current clock time.
+
+    Returns
+    -------
+    seed : int
+        Actual integer seed used
+    """
+    if seed is None:            seed = int(time.time()*1000.0) % (2**32 - 1)
+    # Convert string seeds to int's (convert each char->ascii and sum them)
+    elif isinstance(seed,str):  seed = np.sum([ord(c) for c in seed])
+
+    # Set Numpy random number generator
+    np.random.seed(seed)
+    # Set built-in random number generator in Python random module
+    random.seed(seed)
+
+    return seed
+
+
+def interp1(x, y, xinterp, **kwargs):
+    """
+    Interpolate 1d data vector to new sampling vector
+
+    Convenience wrapper around scipy.interpolate.interp1d w/o weird call structure
+
+    Parameters
+    ----------
+    x : array-like, shape=(n_orig,)
+        Original 1d sampling vector
+
+    y : array-like, shape=(n_orig,)
+        Original 1d data sampled at values in `x`
+
+    xinterp : array-like, shape=(n_interp,)
+        Desired interpolated sampling vector
+
+    **kwargs
+        Any additional keyword args are passed as-is to scipy.interpolate.interp1d
+
+    Returns
+    -------
+    yinterp : ndarray, shape=(n_interp,)
+        Data in `y` interpolated to sampling in `xinterp`
+    """
+    return interp1d(x,y,**kwargs).__call__(xinterp)
+
+
 def gaussian(points, center=0, width=1, amplitude=1, baseline=0):
     """
-    Evaluates a 1D Gaussian function with given parameters at given datapoint(s)
+    Evaluate a 1D Gaussian function with given parameters at given datapoint(s)
 
     Parameter values can be set for Gaussian center (mean), width (SD), amplitude,
-    and additive baseline. Defaults are set to generate standard normal function
+    and additive baseline/offset. Defaults are set to generate standard normal function
     (mean=0, sd=1, amp=1, baseline-0).
 
-    f_x = gaussian(points, center=0, width=1, amplitude=1, baseline=0)
-    
-    ARGS
-    points      (n_datapoints,) ndarray. Datapoints to evaluate Gaussian function at.
+    Parameters
+    ----------
+    points : ndarray, shape=(n_datapoints,)
+        Datapoints to evaluate Gaussian function at
 
-    center      Scalar. Center (mean) of Gaussian function. Default: 0
+    center : scalar, default: 0
+        Center (mean) of Gaussian function
 
-    width       Scalar. Width (std dev) of Gaussian function. Default: 1
+    width : scalar, default: 1
+        Width (standard deviation) of Gaussian function
 
-    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+    amplitude : scalar, default: 1
+        Gaussian amplitude (multiplicative gain)
 
-    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
+    baseline : scalar, default: 0 (no offset)
+        Additive baseline value for Gaussian function
 
-    RETURNS
-    f_x         (n_datapoints,) ndarray. Gaussian function evaluated at each given datapoint.
+    Returns
+    -------
+    f_x : ndarray, shape=(n_datapoints,)
+        Gaussian function wiht given parameters evaluated at each given datapoint
     """
     points = np.asarray(points)
 
@@ -398,39 +919,47 @@ def gaussian(points, center=0, width=1, amplitude=1, baseline=0):
     return f_x
 
 
+# Alias gaussian() to gaussian_1d() to match format of other gaussian_*d() functions
 gaussian_1d = gaussian
-""" Alias gaussian() to gaussian_1d() to match format of other gaussian_*d() functions """
+""" Alias of :func:`gaussian`. See there for details """
 
 
 def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
                 amplitude=1, baseline=0, orientation=0):
     """
-    Evaluates an 2D Gaussian function with given parameters at given datapoint(s)
+    Evaluate an 2D Gaussian function with given parameters at given datapoint(s)
 
     Parameter values can be set for Gaussian centers (means), widths (SDs), amplitude,
     additive baseline, and rotation. Defaults are set to generate unrotated 2D standard normal
     function (mean=(0,0), sd=(1,1), amp=1, no baseline offset, no rotation).
 
-    f_x = gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
-                      amplitude=1, baseline=0, orientation=0)
-    ARGS
-    points      (n_datapoints,2=[x,y]) ndarray. Datapoints to evaluate 2D Gaussian function at.
-                Each row is a distinct datapoint x to evaluate f(x) at, and the 2 columns
-                correspond to the 2 dimensions (x and y) of the 2D Gaussian function.
+    Parameters
+    ----------
+    points : ndarray, shape=(n_datapoints,2=[x,y])
+        Datapoints to evaluate 2D Gaussian function at.
+        Each row is a distinct datapoint x to evaluate f(x) at, and the 2 columns
+        correspond to the 2 dimensions (x and y) of the 2D Gaussian function.
 
-    center_x/y  Scalar. Center (mean) of Gaussian function along x and y dims. Default: 0
+    center_x/y : scalar, default: 0
+        Center (mean) of Gaussian function along x and y dims
 
-    width_x/y   Scalar. Width (std dev) of Gaussian function along x and y dims. Default: 1
+    width_x/y : scalar, default: 1
+        Width (standard deviation) of Gaussian function along x and y dims
 
-    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+    amplitude : scalar, default: 1
+        Gaussian amplitude (multiplicative gain)
 
-    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
+    baseline : scalar, default: 0 (no offset)
+        Additive baseline value for Gaussian function
 
-    orientation Scalar. Orientation (radians CCW from + x-axis) of 2D Gaussian. 0=oriented along
-                standard x/y axes (non-rotated); 45=oriented along positive diagonal.  Default: 0
+    orientation : scalar, default: 0 (axis-aligned)
+        Orientation (radians CCW from + x-axis) of 2D Gaussian. 0=oriented along
+        standard x/y axes (non-rotated); 45=oriented along positive diagonal
 
-    RETURNS
-    f_x         (n_datapoints,) ndarray. 2D Gaussian function evaluated at each given datapoint.
+    Returns
+    -------
+    f_x : ndarray, shape=(n_datapoints,)
+        2D Gaussian function wiht given parameters evaluated at each given datapoint
     """
     # Expand datapoints to (n_datapoints,n_dimensions=2)
     if (points.ndim == 1) and (len(points) == 2): points = points[np.newaxis,:]
@@ -447,7 +976,7 @@ def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
     if orientation != 0:
         theta = -orientation
         # Create rotation matrix
-        rot_mx = np.asarray([[cos(theta), sin(theta)], 
+        rot_mx = np.asarray([[cos(theta), sin(theta)],
                              [-sin(theta), cos(theta)]])
         # Rotate mean-referenced data with rotation matrix
         d = np.matmul(d, rot_mx)
@@ -463,31 +992,37 @@ def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
 
 def gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0):
     """
-    Evaluates an N-D Gaussian function with given parameters at given datapoint(s).
+    Evaluate an N-D Gaussian function with given parameters at given datapoint(s).
 
     Parameter values can be set for Gaussian center (mean), width (SD), amplitude, and
     additive baseline. Defaults are set to generate N-D standard normal function (mean=0,
     sd=1, amp=1, no baseline offset).
 
-    f_x = gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0)
+    Parameters
+    ----------
+    points : ndarray, shape=(n_datapoints,n_dims)
+        Datapoints to evaluate N-D Gaussian function at.
+        Each row is a distinct datapoint x to evaluate f(x) at, and each column is
+        a distinct dimension of the N-dimensional Gaussian function.
 
-    ARGS
-    points      (n_datapoints,n_dims) ndarray. Datapoints to evaluate N-D Gaussian function at.
-                Each row is a distinct datapoint x to evaluate f(x) at, and each column is
-                a distinct dimension of the N-dimensional Gaussian function.
+    center : ndarray, shape=(n_dims,) or scalar, default: (0,...,0) (0 for all dims)
+        Center (mean) of Gaussian function along each dim.
+        Scalar value expanded to n_dims.
 
-    center      (n_dims,) ndarray | scalar. Center (mean) of Gaussian function along each dim.
-                Scalar value expanded to n_dims. Default: (0,...,0) (0 for all dims)
+    width : ndarray, shape=(n_dims,) or scalar, default: (1,...,1) (1 for all dims)
+        Width (standard deviation) of Gaussian function along each dim.
+        Scalar value expanded to n_dims.
 
-    width       (n_dims,) ndarray | scalar. Width (std dev) of Gaussian function along each dim.
-                Scalar value expanded to n_dims. Default: (1,...,1) (1 for all dims)
+    amplitude : scalar, default: 1
+        Gaussian amplitude (multiplicative gain)
 
-    amplitude   Scalar. Gaussian amplitude (multiplicative gain). Default: 1
+    baseline : scalar, default: 0
+        Additive baseline value for Gaussian function
 
-    baseline    Scalar. Additive baseline value for Gaussian function. Default: 0
-
-    RETURNS
-    f_x         (n_datapoints,) ndarray. N-D Gaussian function evaluated at each given datapoint.
+    Returns
+    -------
+    f_x : ndarray, shape=(n_datapoints,)
+        N-D Gaussian function evaluated at each given datapoint
     """
     # Expand datapoints to (n_datapoints,n_dimensions)
     if points.ndim == 1: points = points[np.newaxis,:]
@@ -519,92 +1054,6 @@ def gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0):
 
 
 # =============================================================================
-# Pre/post-processing utility functions
-# =============================================================================
-def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-           ddof=0, zerotol=1e-6, return_stats=False):
-    """
-    Z-scores data along given axis (or whole array)
-
-    Optionally also returns mean,SD (eg, to compute on training set, apply to test set)
-
-    data = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-                  ddof=0, zerotol=1e-6, return_stats=False)
-
-    data, mu, sd = zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
-                          ddof=0, zerotol=1e-6, return_stats=True)
-
-    ARGS
-    data        Array-like (arbitrary dimensionality). Data to z-score.
-
-    axis        Int. Array axis to compute mean/SD along for z-scoring (usually corresponding to
-                distict trials/observations). If None [default], computes mean/SD across entire
-                array (analogous to np.mean/std).
-
-    time_range  (2,) array-like. Optionally allows for computing mean/SD within a given time
-                window, then using these z-score ALL timepoints (eg compute mean/SD within
-                a "baseline" window, then use to z-score all timepoints). Set=[start,end]
-                of time window. If set, MUST also provide values for time_axis and timepts.
-                Default: None (compute mean/SD over all time points)
-
-    time_axis   Int. Axis corresponding to timepoints. Only necessary if time_range is set.
-
-    timepts     (n_timepts,) array-like. Time sampling vector for data. Only necessary if
-                time_range is set, unused otherwise.
-
-    ddof        Int. Sets divisor for computing SD = N - ddof. Set=0 for max likelihood estimate,
-                set=1 for unbiased (N-1 denominator) estimate. Default: 0
-
-    zerotol     Float. Any SD values < zerotol are treated as 0, and corresponding z-scores
-                set = nan. Default: 1e-6
-
-    return_stats Bool. If True, also returns computed mean, SD. If False [default], only returns
-                z-scored data.
-
-    RETURNS
-    data        Z-scored data. Same shape as input data.
-
-    - optional outputs only returned if return_stats=True
-    mean        Computed means for z-score
-    sd          Computed standard deviations for z-score
-                Mean and sd both have same shape as data, but with <axis> reduced to length 1.
-    """
-    # Compute mean/SD separately for each timepoint (axis not None) or across all array (axis=None)
-    if time_range is None:
-        # Compute mean and standard deviation of data along <axis> (or entire array)
-        mu = data.mean(axis=axis, keepdims=True)
-        sd = data.std(axis=axis, ddof=ddof, keepdims=True)
-
-    # Compute mean/SD within given time range, then apply to all timepoints
-    else:
-        assert (len(time_range) == 2) and (time_range[1] > time_range[0]), \
-            "time_range must be given as [start,end] time of desired time window"
-        assert timepts is not None, "If time_range is set, must also input value for timepts"
-        assert time_axis is not None, "If time_range is set, must also input value for time_axis"
-
-        # Compute mean data value across all timepoints within window = "baseline" for z-score
-        win_bool = (timepts >= time_range[0]) & (timepts <= time_range[1])
-        win_data = index_axis(data, time_axis, win_bool).mean(axis=time_axis, keepdims=True)
-
-        # Compute mean and standard deviation of data along <axis>
-        mu = win_data.mean(axis=axis, keepdims=True)
-        sd = win_data.std(axis=axis, ddof=ddof, keepdims=True)
-
-    # Compute z-score -- Subtract mean and normalize by SD
-    data = (data - mu) / sd
-
-    # Find any data values w/ sd ~ 0 and set data = NaN for those points
-    zero_points = np.isclose(sd,0,rtol=zerotol)
-    tiling = [1]*data.ndim
-    tiling[axis] = data.shape[axis]
-    if time_range is not None: tiling[time_axis] = data.shape[time_axis]
-    data[np.tile(zero_points,tiling)] = np.nan
-
-    if return_stats:    return data, mu, sd
-    else:               return data
-
-
-# =============================================================================
 # Data indexing and reshaping functions
 # =============================================================================
 def index_axis(data, axis, idxs):
@@ -616,17 +1065,22 @@ def index_axis(data, axis, idxs):
 
     data = index_axis(data, axis, idxs)
 
-    ARGS
-    data    ndarray. Array of arbitrary shape, to index into given axis of.
+    Parameters
+    ----------
+    data : ndarray, shape=Any
+        Array of arbitrary shape, to index into given axis of.
 
-    axis    Int. Axis of ndarray to index into.
+    axis : int
+        Axis of ndarray to index into
 
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
+    idxs :  array-like, shape=(n_selected,), dtype=int or array-like, shape=(axis_len,), dtype=bool or Slice object
+        Indexing into given axis of array to perform, given as list of integer indexes,
+        as boolean vector, or as Slice object
 
-    RETURNS
-    data    ndarray. Input array with indexed values selected from given axis.
+    Returns
+    -------
+    data : ndarray
+        Input array with indexed values selected from given axis.
     """
     # Generate list of slices, with ':' for all axes except <idxs> for <axis>
     slices = axis_index_slices(axis, idxs, data.ndim)
@@ -637,23 +1091,26 @@ def index_axis(data, axis, idxs):
 
 def axis_index_slices(axis, idxs, ndim):
     """
-    Generate list of slices, with ':' for all axes except <idxs> for <axis>,
+    Generate list of slices, with ':' for all axes except `idxs` for `axis`,
     to use for dynamic indexing into an arbitary axis of an ndarray
 
-    slices = axis_index_slices(axis, idxs, ndim)
+    Parameters
+    ----------
+    axis : int
+        Axis of ndarray to index into
 
-    ARGS
-    axis    Int. Axis of ndarray to index into.
+    idxs : array_like, shape=(n_selected,), dtype=int or array-like, shape=(axis_len,), dtrype=bool or Slice object
+        Indexing into given axis of array to perform, given as list of integer indexes,
+        as boolean vector, or as Slice object
 
-    idxs    (n_selected,) array-like of int | (axis_len,) array-like of bool | slice object
-            Indexing into given axis of array, given either as list of
-            integer indexes or as boolean vector.
+    ndim : int
+        Number of dimensions in ndarray to index into
 
-    ndim    Int. Number of dimensions in ndarray to index into
-
-    RETURNS
-    slices  Tuple of slices. Index tuple to use to index into given
-            axis of ndarray as: selected_values = array[slices]
+    Returns
+    -------
+    slices : tuple of slices
+        Indexing tuple to use to index into given axis of ndarray as:
+        selected_values = array[slices]
     """
     # Initialize list of null slices, equivalent to [:,:,:,...]
     slices = [slice(None)] * ndim
@@ -667,29 +1124,32 @@ def axis_index_slices(axis, idxs, ndim):
 
 def standardize_array(data, axis=0, target_axis=0):
     """
-    Reshapes multi-dimensional data array to standardized 2D array (matrix-like) form,
-    with "business" axis shifted to axis = <target_axis> for analysis
+    Reshape multi-dimensional data array to standardized 2D array (matrix-like) form,
+    with `axis` shifted to `target_axis` for analysis
 
-    data, data_shape = standardize_array(data,axis=0,target_axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...)
+        Data array of arbitrary shape.
 
-    ARGS
-    data        (...,n,...) ndarray. Data array of arbitrary shape.
+    axis : int, default: 0
+        Axis of data to move to `target_axis` for subsequent analysis
 
-    axis        Int. Axis of data to move to <target_axis> for subsequent analysis
-                Default: 0
+    target_axis : int, default: 0
+        Array axis to move `axis` to for subsequent analysis.
+        MUST be 0 (first axis) or -1 (last axis).
 
-    target_axis Int. Array axis to move <axis> to for subsequent analysis
-                MUST be 0 (first axis) or -1 (last axis). Default: 0
+    Returns
+    -------
+    data  : ndarray, shape=(n,m) or (m,n)
+        Data array w/ `axis` moved to `target_axis`, and all other axes unwrapped
+        into single dimension, where m = prod(shape[axes != axis])
 
-    RETURNS
-    data    (n,m) | (m,n) ndarray. Data array w/ <axis> moved to <target_axis>,
-            and all other axes unwrapped into single dimension,
-            where m = prod(shape[axes != axis])
+        NOTE: Even 1d (vector) data is expanded into 2d (n,1) | (1,n) array to
+        standardize for calling code.
 
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    Note:   Even 1d (vector) data is expanded into 2d (n,1) | (1,n) array to
-            standardize for calling code.
+    data_shape : tuple, shape=(data.ndim,)
+        Original shape of input data array
     """
     assert target_axis in [0,-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
@@ -700,28 +1160,32 @@ def standardize_array(data, axis=0, target_axis=0):
 
 def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
     """
-    Undoes effect of standardize_array() -- reshapes data array from unwrapped
-    2D (matrix-like) form back to ~ original multi-dimensional form, with <axis>
-    shifted back to original location (but allowing that data.shape[axis] may have changed)
+    Undo effect of standardize_array() -- reshapes data array from unwrapped
+    2D (matrix-like) form back to ~ original multi-dimensional form, with `axis`
+    shifted back to original location (but allowing that `data.shape[axis]` may have changed)
 
-    data = undo_standardize_array(data,data_shape,axis=0,target_axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(axis_len,m) or (m,axis_len)
+        Standardized data array -- with `axis` moved to `target_axis`, and all
+        axes != `target_axis` unwrapped into single dimension, where
+        m = prod(shape[axes != axis])
 
-    ARGS
-    data        (axis_len,m) | (m,axis_len) ndarray. Data array w/ <axis> moved to <target_axis>,
-                and all axes != <target_axis> unwrapped into single dimension, where
-                m = prod(shape[axes != axis])
+    data_shape : tuple, shape=(data.ndim,)
+        Original shape of data array. Second output of standardize_array.
 
-    data_shape  (data.ndim,) tuple. Original shape of data array.
-                Second output of standardize_array.
+    axis : int, default: 0
+        Axis of original data moved to `target_axis`, which will be shifted
+        back to original axis
 
-    axis        Int. Axis of original data moved to <target_axis>, which will be shifted
-                back to original axis. Default: 0
+    target_axis : int, default: 0
+        Array axis `axis` was moved to for subsequent analysis
+        MUST be 0 (first axis) or -1 (last axis)
 
-    target_axis Int. Array axis <axis> was moved to for subsequent analysis
-                MUST be 0 (first axis) or -1 (last axis). Default: 0
-
-    RETURNS
-    data        (...,axis_len,...) ndarray. Data array reshaped back to original shape
+    Returns
+    -------
+    data : ndarray,. shape=(...,axis_len,...)
+        Data array reshaped back to original shape
     """
     assert target_axis in [0,-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
@@ -732,29 +1196,36 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
 
 def data_labels_to_data_groups(data, labels, axis=0, groups=None, max_groups=None):
     """
-    Converts (data,labels) pair to tuple of (data_1,data_2,...,data_n) where each data_j
+    Convert (data,labels) pair to tuple of (data_1,data_2,...,data_k) where each `data_j`
     corresponds to all datapoints in input data associated with a given label value
     (eg group/condition/etc.).
 
-    ARGS
-    data    (...,N,...) array. Array of multi-class data. Arbitrary shape, but <axis>
-            must correspond to observations/trials and have same length as labels.
+    Parameters
+    ----------
+    data : ndarray, shape=(...,N,...)
+        Array of multi-class data. Arbitrary shape, but `axis` must correspond to
+        observations/trials and have same length as `labels`.
 
-    labels  (N,) array-like. List of labels corresponding to each observation in data.
+    labels : array-like, shape=(N,)
+        List of labels corresponding to each observation in data.
 
-    axis    Int. Axis of data array corresponding to observations/trials in labels. Default: 0
+    axis : int, default: 0
+        Axis of data array corresponding to observations/trials in labels
 
-    groups  (n_groups,) array-like. Which group labels from <labels> to include. Useful to ensure
-            a specific group order in outputs or to retain only subset of groups in labels.
-            Default: np.unique(labels) (all distinct values in <labels>)
+    groups : array-like, shape=(n_groups,), default: np.unique(labels) (all unique values)
+        Which group labels from `labels` to include. Useful to ensure a specific group order
+        in outputs or to retain only subset of groups in labels.
 
-    max_groups  Int. Maximum number of allowed groups in data. Raises an error if
-            len(groups) > max_groups. Set=None [default] to allow any number of groups.
+    max_groups : int, default: None
+        Maximum number of allowed groups in data. Raises an error if len(groups) > max_groups.
+        Set=None to allow any number of groups.
 
-    RETURNS
-    data_1, (...,n_j,...) arrays. n_groups arrays of data corresponding to each group in groups,
-    ...,    each returned in a separate variable. Shape is same as input data on all axes
-    data_k  except <axis>, which is reduced to the n for each group.
+    Returns
+    -------
+    data_1,...,data_k : ndarray (...,n_j,...)
+        `n_groups` arrays of data corresponding to each group in groups,
+        each returned in a separate variable. Shape is same as input data on all axes
+        except `axis`, which is reduced to the n for each group.
     """
     labels = np.asarray(labels).squeeze()
 
@@ -776,26 +1247,30 @@ def data_labels_to_data_groups(data, labels, axis=0, groups=None, max_groups=Non
 
 def data_groups_to_data_labels(*data, axis=0, groups=None):
     """
-    Converts (data,labels) pair to tuple of (data1,data2,...) where each data_n
-    corresponds to all datapoints in data associated with a given label value
-    (eg group/condition/etc.).
+    Convert tuple of (data_1,data_2,...,data_k) to (data,labels) pair, where a unique label
+    is associated with all datapoints in each data group `data_j` (eg group/condition/etc.).
 
-    ARGS
-    data_1, (...,n_j,...) arrays. n_groups arrays of data corresponding to each group in groups,
-    ...,    each input in a separate variable. Shape is arbitrary, but <axis> must correspond
-    data_k  to observations/trials and all axes but <axis> must have same length across
-            all data arrays.
+    Parameters
+    ----------
+    data_1,...,data_k : ndarray (...,n_j,...)
+        n_groups arrays of data corresponding to each group in groups, each input in a
+        separate variable. Shape is arbitrary, but `axis` must correspond to observations/trials
+        and all axes but `axis` must have same length across all data arrays.
 
-    axis    Int. Axis of data arrays corresponding to observations/trials in labels. Default: 0
+    axis : int, default: 0
+        Axis of data arrays corresponding to observations/trials in labels
 
-    groups  (n_groups,) array-like. List of names of each group in input data to use in labels.
-            Default: Integers from 0 - n_groups-1
+    groups : array_like, shape=(n_groups,), default: integers from 0 - n_groups-1
+        List of names of each group in input data to use in labels.
 
-    RETURNS
-    data    (...,N,...) array. Array of multi-class data. Shape is same as input data on all axes
-            except <axis>, which expands to the sum of all group n's.
+    Returns
+    -------
+    data : ndarray, shape=(...,N,...)
+        Array of multi-class data. Shape is same as input data on all axes
+        except `axis`, which expands to the sum of all group n's.
 
-    labels  (N,) array-like. List of labels corresponding to each observation in data.
+    labels : array-like, shape=(N,)
+        List of labels corresponding to each observation in data.
     """
     n_groups = len(data)
     if groups is None: groups = np.arange(n_groups)
@@ -810,12 +1285,26 @@ def data_groups_to_data_labels(*data, axis=0, groups=None):
 # =============================================================================
 def iarange(start=0, stop=0, step=1):
     """
-    Implements Numpy arange() with an inclusive endpoint. Same inputs as arange(), same
-    output, except ends at stop, not stop - 1 (or more generally stop - step)
+    Implements :func:`np.arange` with an inclusive endpoint. Same inputs as np.arange(),
+    same output, except ends at stop, not stop - 1 (or more generally stop - step)
 
-    r = iarange(start=0,stop=0,step=1)
+    NOTE: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)
 
-    Note: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)
+    Parameters
+    ----------
+    start : int, default: 0
+        Starting index for range
+
+    stop : int, default: 0
+        *Inclusive* ending index for range
+
+    step : int, default: 1
+        Stepping value for range
+
+    Returns
+    -------
+    range : ndarray
+        Range from `start` to `stop` (*inclusive*) in steps of length `step`
     """
     # Offset to get final value in sequence is 1 for int-valued step, small float otherwise
     offset = 1 if isinstance(step,int) else 1e-12
@@ -827,15 +1316,28 @@ def iarange(start=0, stop=0, step=1):
 
 def unsorted_unique(x, axis=None, **kwargs):
     """
-    Implements np.unique(x) without sorting, ie maintains original order of unique
-    elements as they are found in x.
+    Implements :func:`np.unique` without sorting, ie maintaining original order of unique
+    elements as they are found in `x`.
 
-    axis        Int. Axis of array to find unique values on; if None [default],
-                finds unique values in entire array
+    Parameters
+    ----------
+    x : ndarray, shape:Any
+        Array to find unique values in
 
-    **kwargs    All other keyword passed directly to np.unique
+    axis : int, default: None (unique values over entire array)
+        Axis of array to find unique values on. If None, finds unique values in entire array.
 
-    SOURCE  stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
+    **kwargs
+        All other keyword passed directly to np.unique
+
+    Returns
+    -------
+    unique: ndarray
+        Unique values in `x`, in order in which they appear in `x`
+
+    References
+    ----------
+    https://stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
     """
     x    = np.asarray(x)
     if axis is not None:
@@ -849,7 +1351,8 @@ def unsorted_unique(x, axis=None, **kwargs):
 
 def isarraylike(x):
     """
-    Tests if variable <x> is "array-like": np.ndarray, list, or tuple
+    Test if variable `x` is "array-like": np.ndarray, list, or tuple
+
     Returns True if x is array-like, False otherwise
     """
     return isinstance(x, (list, tuple, np.ndarray))
@@ -857,7 +1360,8 @@ def isarraylike(x):
 
 def isnumeric(x):
     """
-    Tests if dtype of ndarray <x> is numeric (some subtype of int,float,complex)
+    Test if dtype of ndarray `x` is numeric (some subtype of int,float,complex)
+
     Returns True if x.dtype is numeric, False otherwise
     """
     return np.issubdtype(np.asarray(x).dtype, np.number)
@@ -866,36 +1370,37 @@ def isnumeric(x):
 def setup_sliding_windows(width, lims, step=None, reference=None,
                           force_int=False, exclude_end=None):
     """
-    Generates set of sliding windows using given parameters
+    Generate set of sliding windows using given parameters
 
-    windows = setup_sliding_windows(width,lims,step=None,
-                                  reference=None,force_int=False,exclude_end=None)
+    Parameters
+    ----------
+    width : scalar
+        Full width of each window
 
-    ARGS
-    width       Scalar. Full width of each window. Required arg.
+    lims : array-like, shape=(2,)
+        [start end] of full range of domain you want windows to sample
 
-    lims        (2,) array-like. [start end] of full range of domain you want
-                windows to sample. Required.
+    step : scalar, default: step = `width` (ie, perfectly non-overlapping windows)
+        Spacing between start of adjacent windows
 
-    step        Scalar. Spacing between start of adjacent windows
-                Default: step = width (ie, perfectly non-overlapping windows)
+    reference : bool, dfault: None (just start at lim[0])
+        Optionally sets a reference value at which one window starts and the
+        rest of windows will be determined from there.
+        eg, set = 0 to have a window start at x=0, or set = -width/2 to have a
+        window centered at x=0
 
-    reference   Bool. Optionally sets a reference value at which one window
-                starts and the rest of windows will be determined from there.
-                eg, set = 0 to have a window start at x=0, or
-                    set = -width/2 to have a window centered at x=0
-                Default: None = just start at lim[0]
+    force_int : bool, default: False (don't round)
+        If True, rounds window starts,ends to integer values.
 
-    force_int   Bool. If True, rounds window starts,ends to integer values.
-                Default: False (don't round)
+    exclude_end : bool, default: True if force_int==True, otherwise False
+        If True, excludes the endpoint of each (integer-valued) sliding win from
+        the definition of that win, to prevent double-sampling
+        (eg, the range for a 100 ms window is [1 99], not [1 100])
 
-    exclude_end Bool. If True, excludes the endpoint of each (integer-valued)
-                sliding win from the definition of that win, to prevent double-sampling
-                (eg, the range for a 100 ms window is [1 99], not [1 100])
-                Default: True if force_int==True, otherwise default=False
-
-    OUTPUT
-    windows     (n_wins,2) ndarray. Sequence of sliding window [start end]
+    Returns
+    -------
+    windows : ndarray, shape=(n_wins,2)
+        Sequence of sliding window [start end]'s
     """
     # Default: step is same as window width (ie windows perfectly disjoint)
     if step is None: step = width
@@ -943,31 +1448,33 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
 
 def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all):
     """
-    Determines if each object element within two object arrays is equal
+    Determine if each object element within two object arrays is equal
 
-    equal = object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all)
+    Parameters
+    ----------
+    data1,data2 : ndarray, shape= Any
+        Two arrays to determine elementwise equality of. Must have same shape if using
+        anything other than defaults for `comp_func`, `reduce_func` (bc we have no way of
+        knowing how to deal with this).
 
-    ARGS
-    data1,2     ndarray. Arbitrary shape. Two arrays to determine elementwise equality of.
-                Must have same shape if using anything other than defaults for comp_func,
-                reduce_func (bc we have no way of knowing how to deal with this).
+    comp_func : callable, default: np.array_equal (True iff elements have same shape and values)
+        Comparison function used to determine equality of each element
+        If None, no reduction of the comparison results is performed.
 
-    comp_func   Callable. Comparison function used to determine equality of each element.
-                Default: np.array_equal (True iff elements have same shape and values)
+    reduce_func : callable, default: np.all (True iff ALL objects in array are elementwise True)
+        Optional function to reduce equality results for each element across entire array
 
-    reduce_func Callable. Optional function to reduce equality results for each element
-                across entire array.
-                Default: np.all (True iff ALL objects in array are elementwise True)
+    Returns
+    -------
+    equal : bool or ndarray, shape=data.shape, dtype=bool
+        Reflects equality of each object element in data1,data2.
+        If `reduce_func` is None, this is the elementwise equality of each object,
+        and has same shape as data1,2.
+        Otherwise, elementwise equality is reduced across the array using `reduce_func`,
+        and this returns as a single scalar bool.
 
-    RETURNS
-    equal       ndarray | bool. Reflects equality of each object element in data1,2.
-                If reduce_func is None, this is the elementwise equality of each object,
-                and has same shape as data1,2.
-                Otherwise, elementwise equality is reduced across the array using reduce_func,
-                and this returns as a single scalar bool.
-
-                If data1,2 have different shapes: we return False if comp_func is array_equal
-                and reduce_func is np.all; otherwise an error is raised (don't know how to compare).
+        If data1,2 have different shapes: we return False if `comp_func` is array_equal
+        and `reduce_func` is np.all; otherwise an error is raised (don't know how to compare).
     """
     if data1.shape != data2.shape:
         # For vanilla array_equal comparison, different shapes imply equality is False
@@ -1002,25 +1509,26 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
     """
     Compares object elements within two object arrays using given comparison function
 
-    comp = object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None)
+    Parameters
+    ----------
+    data1,data2 : ndarray, shape=Any (but data1.shape = data2.shape)
+        Two arrays to determine elementwise equality of
 
-    ARGS
-    data1,2     ndarray. Two arrays to determine elementwise equality of.
-                Must have same shape
+    comp_func : callable, default: np.equal (True/False for each value w/in each object element)
+        Comparison function used to compare each object element.
 
-    comp_func   Callable. Comparison function used to compare each objecxt element.
-                Default: np.equal (returns True/False for each value w/in each object element)
+    reduce_func : callable, Default: None (don't perform any reduction on result)
+        Optional function to reduce comparison results for each element across entire array
+        If None, no reduction of the comparison results is performed.
 
-    reduce_func Callable. Optional function to reduce comparison results for each element
-                across entire array.
-                Default: None (don't perform any reduction on result)
-
-    RETURNS
-    equal       ndarray | bool. Reflects comparison of each object element in data1,2.
-                If reduce_func is None, this is the elementwise comparison of each object,
-                and has same shape as data1,2.
-                Otherwise, elementwise comparison is reduced across the array using reduce_func,
-                and this returns as a single scalar bool.
+    Returns
+    -------
+    equal : ndarray | bool
+        Reflects comparison of each object element in data1,data2.
+        If `reduce_func` is None, this is the elementwise comparison of each object,
+        and has same shape as data1,2.
+        Otherwise, elementwise comparison is reduced across the array using `reduce_func`,
+        and this returns as a single scalar bool.
     """
     assert data1.shape == data2.shape, \
         ValueError("data1 and data2 must have same shape for comparison")
@@ -1047,33 +1555,39 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
 
 def concatenate_object_array(data, axis=None, sort=False):
     """
-    Concatenates objects across one or more axes of an object array.
+    Concatenate objects across one or more axes of an object array.
     Useful for concatenating spike timestamps across trials, units, etc.
 
-    data = concatenate_object_array(data,axis=None,sort=False)
+    Parameters
+    ----------
+    data : ndarray, shape=Any, dtype=object (containing 1d lists/arrays)
 
-    EXAMPLE
+    axis : int or list of int or None, default: None
+        Axis(s) to concatenate object array across.
+        Set = list of ints to concatenate across multiple axes.
+        Set = None to concatenate across *all* axes in data.
+
+    sort : bool, default: False
+        If True, sorts items in concatenated list objects
+
+    Returns
+    -------
+    data : list or ndarray, dtype=object
+        Concatenated object(s).
+        If axis is None, returns as single list extracted from object array.
+        Otherwise, returns as object ndarray with all concatenated axes
+        reduced to singletons.
+
+    Examples
+    --------
     data = [[[1, 2],    [3, 4, 5]],
             [[6, 7, 8], [9, 10]  ]]
+
     concatenate_object_array(data,axis=0)
     >> [[1,2,6,7,8], [3,4,5,9,10]]
+
     concatenate_object_array(data,axis=1)
     >> [[1,2,3,4,5], [6,7,8,9,10]]
-
-    ARGS
-    data    Object ndarray of arbitary shape containing 1d lists/arrays
-
-    axis    Int | list of int | None. Axis(s) to concatenate object array across.
-            Set = list of ints to concatenate across multiple axes.
-            Set = None [default] to concatenate across *all* axes in data.
-
-    sort    Bool. If True, sorts items in concatenated list objects. Default: False
-
-    RETURNS
-    data    Concatenated object(s).
-            If axis is None, returns as single list extracted from object array.
-            Otherwise, returns as object ndarray with all concatenated axes
-            reduced to singletons.
     """
     assert data.dtype == object, \
         ValueError("data is not an object array. Use np.concatenate() instead.")
