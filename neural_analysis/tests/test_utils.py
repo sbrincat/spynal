@@ -27,13 +27,13 @@ def test_zscore(one_sample_data):
     assert np.isclose(z.std(), 1, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with multi-dim array inputs and keepdims
-    z = zscore(data, axis=0)  # TODO , keepdims=True)
+    z = zscore(data, axis=0)
     assert z.shape == (n_trials,n_chnls)
     assert np.allclose(z.mean(axis=0), np.zeros((1,n_chnls)), rtol=1e-2, atol=1e-2)
     assert np.allclose(z.std(axis=0), np.ones((1,n_chnls)), rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed inputs
-    z = zscore(data.T, axis=1)  # TODO , keepdims=True)
+    z = zscore(data.T, axis=1)
     assert z.shape == (n_chnls,n_trials)
     assert np.allclose(z.mean(axis=1), np.zeros((n_chnls,1)), rtol=1e-2, atol=1e-2)
     assert np.allclose(z.std(axis=1), np.ones((n_chnls,1)), rtol=1e-2, atol=1e-2)
@@ -47,6 +47,7 @@ def test_zscore(one_sample_data):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         z = zscore(data, foo=None)
+
 
 @pytest.mark.parametrize('stat_func,    result',
                          [(fano,        1.95),

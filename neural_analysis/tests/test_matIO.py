@@ -1,5 +1,6 @@
 """ Unit tests for matIO.py module """
 import pytest
+import os
 import numpy as np
 import pandas as pd
 
@@ -14,9 +15,13 @@ from neural_analysis.matIO import loadmat
 @pytest.mark.parametrize('version', [('v7'), ('v73')])
 def test_loadmat(version):
     """ Unit tests for loadmat function in matIO module """
-    # TODO This works when run in terminal, but in VS Code can't find file bc runs in my ~/Code/Python. Fix.
-    filename = r'./testing_datafile_' + version + '.mat'
+    # HACK Make this work when run from top-level Python dir in VS Code or from tests dir in terminal
+    cwd = os.getcwd()
+    if cwd.endswith('tests'):   load_dir = r'./'
+    else:                       load_dir = r'./neural_analysis/neural_analysis/tests'
+    filename = os.path.join(load_dir, 'testing_datafile_' + version + '.mat')
 
+    print("PWD", os.getcwd())
     variables = ['integer','floating','boolean','string', 'num_array','cell_array',
                  'gen_struct','table_struct']
     # scipy.io returns v7 Matlab logicals as ints (not bools) and not much we can do about it
@@ -55,6 +60,7 @@ def test_loadmat(version):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         data = loadmat(filename, asdict=True, verbose=False, foo=None)
+
 
 def _variable_tests(data, table_type=dict, bool_type=bool):
     """ Set of tests to run on loadmat-loaded variables """

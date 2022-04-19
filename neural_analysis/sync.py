@@ -31,7 +31,6 @@ Function reference
 # @author: sbrincat
 # TODO  Reformat jackknife functions to match randstats functions and move there?
 
-# TODO Insert links for refrernces in docstrings
 from warnings import warn
 import numpy as np
 
@@ -140,8 +139,8 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, single_tri
 
     References
     ----------
-    Single-trial method:    Womelsdorf et al (2006) Science
-    Single-trial method:    Richter et al (2015) NeuroImage
+    - Single-trial method:    Womelsdorf et al (2006) https://doi.org/10.1038/nature04258
+    - Single-trial method:    Richter et al (2015) https://doi.org/10.1016/j.neuroimage.2015.04.040
     """
     method = method.lower()
     if method in ['ppc','pairwise_phase_consistency']:  sync_func = ppc
@@ -301,8 +300,8 @@ def ztransform_coherence(coh, df, beta=23/20):
 
     References
     ----------
-    Jarvis & Mitra (2001) Neural Computation
-    Hipp, Engel, Siegel (2011) Neuron
+    - Jarvis & Mitra (2001) Neural Computation https://doi.org/10.1162/089976601300014312
+    - Hipp, Engel, Siegel (2011) Neuron https://doi.org/10.1016/j.neuron.2010.12.027
     """
     return beta*(np.sqrt(-(df-2)*np.log(1-coh**2)) - beta)
 
@@ -335,7 +334,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
 
     References
     ----------
-    Lachaux et al. (1999) Human Brain Mapping
+    Lachaux (1999) https://doi.org/10.1002/(SICI)1097-0193(1999)8:4%3C194::AID-HBM4%3E3.0.CO;2-C
     """
     assert data1.shape[axis] == data2.shape[axis], \
         ValueError("data1,data2 must have same number of observations (trials)")
@@ -459,8 +458,8 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
 
     References
     ----------
-    Original concept:   Vinck et al. (2010) NeuroImage
-    Relation to PLV:    Kornblith, Buschman, Miller (2015) Cerebral Cortex
+    - Original concept:   Vinck et al. (2010) https://doi.org/10.1016/j.neuroimage.2010.01.073
+    - Relation to PLV:    Kornblith, Buschman, Miller (2015) https://doi.org/10.1093/cercor/bhv182
     """
     # Simply call plv() with a 'PPC' transform
     return plv(data1, data2, axis=axis, return_phase=return_phase, transform='PPC',
@@ -600,7 +599,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
     elif method in ['plv','phase_locking_value']:       sfc_func = spike_field_plv
     elif method in ['coh','coherence']:                 sfc_func = spike_field_coherence
     else:
-        raise ValueError("Unsuuported value '%s' given for <method>. \
+        raise ValueError("Unsupported value '%s' given for <method>. \
                          Should be 'PPC'|'PLV'|'coherence'" % method)
 
     return sfc_func(spkdata, lfpdata, axis=axis, time_axis=time_axis, taper_axis=taper_axis,
@@ -687,7 +686,7 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
 
     References
     ----------
-    Lachaux et al. (1999) Human Brain Mapping
+    Lachaux (1999) https://doi.org/10.1002/(SICI)1097-0193(1999)8:4%3C194::AID-HBM4%3E3.0.CO;2-C
     """
     max_axis_mismatch = 2 if spec_method == 'multitaper' else 1
     assert (spkdata.ndim == lfpdata.ndim) and \
@@ -902,8 +901,8 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
 
     References
     ----------
-    Original concept:   Vinck et al. (2010) NeuroImage
-    Relation to PLV:    Kornblith, Buschman, Miller (2015) Cerebral Cortex
+    - Original concept:   Vinck et al. (2010) https://doi.org/10.1016/j.neuroimage.2010.01.073
+    - Relation to PLV:    Kornblith, Buschman, Miller (2015) https://doi.org/10.1093/cercor/bhv182
     """
     extra_args = dict(axis=axis, time_axis=time_axis, taper_axis=taper_axis, timepts=timepts,
                       width=width, spacing=spacing, lims=lims, timewins=timewins,

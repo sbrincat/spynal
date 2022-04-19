@@ -2,7 +2,7 @@
 General API reference
 =====================
 
-This section gives a high-level summary of the Spynal API -- how users interact with it,
+This section gives a high-level summary of the Spynal API -- how users interface with it,
 and how developers should write new code for it. *Specific* reference for each Spynal module
 and function can be found in the :doc:`Function reference by module <modules>` section.
 

@@ -627,7 +627,7 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None,
 
     References
     ----------
-    - Dayan & Abbott, "Theoretical neuroscience" ch. 4.1
+    - Dayan & Abbott (2001), "Theoretical neuroscience" ch. 4.1
     - https://stats.stackexchange.com/questions/179674/number-of-bins-when-computing-mutual-information/181195
     - https://en.wikipedia.org/wiki/Freedman-Diaconis_rule
     """
@@ -937,7 +937,7 @@ def dprime(labels, data, axis=0, signed=True, groups=None, keepdims=True):
 
     References
     ----------
-    Dayan & Abbott "Theoretical Neuroscience" eqn. 3.4 (p.91)
+    Dayan & Abbott (2001) "Theoretical Neuroscience" eqn. 3.4 (p.91)
     """
     labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1047,12 +1047,13 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
     exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels
         Shape is usually same as data, with observation axis reduced to length = n_terms.
+        
         For single-term 'anova1' model:
-            If data is 1d, `exp_var` is just returned as single scalar.
-            If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
-            with `axis` reduced to length-1.
-            If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
-            with `axis` removed.
+        If data is 1d, `exp_var` is just returned as single scalar.
+        If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
+        with `axis` reduced to length-1.
+        If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
+        with `axis` removed.
 
     stats : dict, optional
         If `return_stats` set, statistics on each fit also returned.
@@ -1565,12 +1566,13 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
     exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels.
         Shape is usually same as data, with observation axis reduced to length = n_terms.
+        
         For single-term 'anova1' model:
-            If data is 1d, `exp_var` is just returned as single scalar.
-            If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
-            with `axis` reduced to length-1.
-            If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
-            with `axis` removed.
+        If data is 1d, `exp_var` is just returned as single scalar.
+        If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
+        with `axis` reduced to length-1.
+        If data is n-d and `keepdims` is False, it's returned as same shape as `data`,
+        with `axis` removed.
 
     stats : dict, optional
         If `return_stats` is True, statistics on each fit also returned:
