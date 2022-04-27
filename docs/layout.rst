@@ -24,6 +24,7 @@ This chart shows the layout of all public directories, modules, and submodules i
     ├── info.py                         # Measures of neural information
     ├── randstats/                      # Nonparametric randomization statistics
         ├── randstats.py                    # General interface to randomization statistics
+        ├── sampling.py                     # Random-sample generators
         ├── permutation.py                  # Permutation-based statistics
         ├── bootstrap.py                    # Bootstrap-based statistics
     ├── plots.py                        # Plotting functions & utilities

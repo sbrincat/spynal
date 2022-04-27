@@ -44,7 +44,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
             extra_args['decoder'] = LinearDiscriminantAnalysis(priors=(1/2)*np.ones((2,)))
 
     # Basic test of shape, value of output
-    info = neural_info(labels, data, axis=0, method=method, **extra_args)
+    info = neural_info(data, labels, axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':
         print(round(info,2))
@@ -55,7 +55,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for expected output with keepdims = False
-    info = neural_info(labels, data, axis=0, method=method, keepdims=False, **extra_args)
+    info = neural_info(data, labels, axis=0, method=method, keepdims=False, **extra_args)
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == (n_chnls,)
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
@@ -77,7 +77,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (3rd axis)
-    info = neural_info(labels, data.reshape((n*2,int(n_chnls/2),int(n_chnls/2))), axis=0,
+    info = neural_info(data.reshape((n*2,int(n_chnls/2),int(n_chnls/2))), labels, axis=0,
                        method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert info.shape == (1,1,n_chnls/2)
@@ -87,7 +87,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
         assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed data dimensionality
-    info = neural_info(labels, data.T, axis=-1, method=method, **extra_args)
+    info = neural_info(data.T, labels, axis=-1, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == info_shape[::-1]
@@ -95,14 +95,14 @@ def test_two_sample_info(two_sample_data, method, params, result):
 
     # Test for consistent output with string-valued labels
     groups = np.asarray(['cond1','cond2'])
-    info = neural_info(groups[labels], data, axis=0, method=method, **extra_args)
+    info = neural_info(data, groups[labels], axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == info_shape
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output using groups argument to subset data
-    info = neural_info(np.hstack((labels,labels+2)), np.concatenate((data,data),axis=0),
+    info = neural_info(np.concatenate((data,data),axis=0), np.hstack((labels,labels+2)),
                        axis=0, method=method, groups=[2,3], **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
@@ -116,7 +116,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
         bins = np.histogram_bin_edges(data, bins='fd')
         bins = np.stack((bins[:-1],bins[1:]),axis=1)
         extra_args['bins'] = bins
-    info = neural_info(labels, data[:,0], axis=0, method=method, **extra_args)
+    info = neural_info(data[:,0], labels, axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert isinstance(info,float)
     # Skip decoding bc results are different when using only single channel/feature
@@ -129,7 +129,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
         df = pd.DataFrame(labels,columns=['cond1'])
         model_formula= '1 + C(cond1, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
@@ -138,13 +138,13 @@ def test_two_sample_info(two_sample_data, method, params, result):
         df = pd.DataFrame(labels,columns=['cond1'])
         model_formula= 'C(cond1, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
 
         # Test for consistent output with returning linear model stats (and check those)
-        info, stats = neural_info(labels, data, axis=0, method=method, model='anova1',
+        info, stats = neural_info(data, labels, axis=0, method=method, model='anova1',
                                   return_stats=True, **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
@@ -160,7 +160,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
+        info = neural_info(data, labels, axis=0, method=method, foo=None, **extra_args)
 
 
 @pytest.mark.parametrize('method, params, result',
@@ -187,7 +187,7 @@ def test_one_way_info(one_way_data, method, params, result):
             extra_args['decoder'] = LinearDiscriminantAnalysis(priors=(1/3)*np.ones((3,)))
 
     # Basic test of shape, value of output
-    info = neural_info(labels, data, axis=0, method=method, **extra_args)
+    info = neural_info(data, labels, axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':
         print(round(info,2))
@@ -198,7 +198,7 @@ def test_one_way_info(one_way_data, method, params, result):
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for expected output with keepdims = False
-    info = neural_info(labels, data, axis=0, method=method, keepdims=False, **extra_args)
+    info = neural_info(data, labels, axis=0, method=method, keepdims=False, **extra_args)
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == (n_chnls,)
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
@@ -212,7 +212,7 @@ def test_one_way_info(one_way_data, method, params, result):
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (3rd axis)
-    info = neural_info(labels, data.reshape((n*3,int(n_chnls/2),int(n_chnls/2))), axis=0,
+    info = neural_info(data.reshape((n*3,int(n_chnls/2),int(n_chnls/2))), labels, axis=0,
                        method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     new_shape = (1,1,n_chnls/2) if method == 'decode' else (1,n_chnls/2,n_chnls/2)
@@ -222,7 +222,7 @@ def test_one_way_info(one_way_data, method, params, result):
         assert np.allclose(info.flatten().squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed data dimensionality
-    info = neural_info(labels, data.T, axis=-1, method=method, **extra_args)
+    info = neural_info(data.T, labels, axis=-1, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == info_shape[::-1]
@@ -230,14 +230,14 @@ def test_one_way_info(one_way_data, method, params, result):
 
     # Test for consistent output with string-valued labels
     groups = np.asarray(['cond1','cond2','cond3'])
-    info = neural_info(groups[labels], data, axis=0, method=method, **extra_args)
+    info = neural_info(data, groups[labels], axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == info_shape
     assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output using groups argument to subset data
-    info = neural_info(np.hstack((labels,labels+3)), np.concatenate((data,data),axis=0),
+    info = neural_info(np.concatenate((data,data),axis=0), np.hstack((labels,labels+3)),
                        axis=0, method=method, groups=[3,4,5], **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     if method == 'decode':  assert isinstance(info,float)
@@ -251,7 +251,7 @@ def test_one_way_info(one_way_data, method, params, result):
         bins = np.histogram_bin_edges(data, bins='fd')
         bins = np.stack((bins[:-1],bins[1:]),axis=1)
         extra_args ['bins'] = bins
-    info = neural_info(labels, data[:,0], axis=0, method=method, **extra_args)
+    info = neural_info(data[:,0], labels, axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert isinstance(info,float)
     # Skip decoding bc results are different when using only single channel/feature
@@ -264,7 +264,7 @@ def test_one_way_info(one_way_data, method, params, result):
         df = pd.DataFrame(labels,columns=['cond1'])
         model_formula= '1 + C(cond1, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
@@ -273,13 +273,13 @@ def test_one_way_info(one_way_data, method, params, result):
         df = pd.DataFrame(labels,columns=['cond1'])
         model_formula= 'C(cond1, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
 
         # Test for consistent output with returning linear model stats (and check those)
-        info, stats = neural_info(labels, data, axis=0, method=method, model='anova1',
+        info, stats = neural_info(data, labels, axis=0, method=method, model='anova1',
                                   return_stats=True, **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == info_shape
@@ -295,7 +295,7 @@ def test_one_way_info(one_way_data, method, params, result):
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        info = neural_info(labels, data, axis=0, method=method, foo=None, **extra_args)
+        info = neural_info(data, labels, axis=0, method=method, foo=None, **extra_args)
 
 
 @pytest.mark.parametrize('method, interact, params, result',
@@ -323,7 +323,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
     n_terms = 2 + interact
 
     # Basic test of shape, value of output
-    info = neural_info(labels, data, axis=0, method=method, model='anova2',
+    info = neural_info(data, labels, axis=0, method=method, model='anova2',
                        interact=interact, **extra_args)
     print(np.round(info,2))
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
@@ -331,21 +331,21 @@ def test_two_way_info(two_way_data, method, interact, params, result):
     assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with different data array shape (3rd axis)
-    info = neural_info(labels, data.reshape((n*4,int(n_chnls/2),int(n_chnls/2))), axis=0,
+    info = neural_info(data.reshape((n*4,int(n_chnls/2),int(n_chnls/2))), labels, axis=0,
                        method=method, model='anova2', interact=interact, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert info.shape == (n_terms,n_chnls/2,n_chnls/2)
     assert np.allclose(info.flatten().squeeze(), result.flatten().squeeze(), rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with transposed data dimensionality
-    info = neural_info(labels, data.T, axis=-1, method=method, model='anova2',
+    info = neural_info(data.T, labels, axis=-1, method=method, model='anova2',
                        interact=interact, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert info.shape == (n_chnls,n_terms)
     assert np.allclose(info.squeeze(), result.T, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with vector-valued data
-    info = neural_info(labels, data[:,0], axis=0, method=method, model='anova2',
+    info = neural_info(data[:,0], labels, axis=0, method=method, model='anova2',
                        interact=interact, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert info.shape == (n_terms,)
@@ -355,7 +355,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
     groups1 = np.asarray(['cond1.1','cond1.2'])
     groups2 = np.asarray(['cond2.1','cond2.2'])
     string_labels = np.stack((groups1[labels[:,0]],groups2[labels[:,1]]), axis=1)
-    info = neural_info(string_labels, data, axis=0, method=method, model='anova2',
+    info = neural_info(data, string_labels, axis=0, method=method, model='anova2',
                        interact=interact, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert info.shape == (n_terms,n_chnls)
@@ -368,7 +368,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
         if interact:    model_formula = '1 + C(cond1, Sum)*C(cond2, Sum)'
         else:           model_formula = '1 + C(cond1, Sum) + C(cond2, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == (n_terms,n_chnls)
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
@@ -378,13 +378,13 @@ def test_two_way_info(two_way_data, method, interact, params, result):
         if interact:    model_formula = 'C(cond1, Sum)*C(cond2, Sum)'
         else:           model_formula = 'C(cond1, Sum) + C(cond2, Sum)'
         design = dmatrix(model_formula,df)
-        info = neural_info(design, data, axis=0, method=method, model='regress', **extra_args)
+        info = neural_info(data, design, axis=0, method=method, model='regress', **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == (n_terms,n_chnls)
         assert np.allclose(info.squeeze(), result, rtol=1e-2, atol=1e-2)
 
         # Test for consistent output with returning linear model stats (and check those)
-        info, stats = neural_info(labels, data, axis=0, method=method, model='anova2',
+        info, stats = neural_info(data, labels, axis=0, method=method, model='anova2',
                                   interact=interact, return_stats=True, **extra_args)
         assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
         assert info.shape == (n_terms,n_chnls)
@@ -413,6 +413,6 @@ def test_two_way_info(two_way_data, method, interact, params, result):
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        info = neural_info(labels, data, axis=0, method=method, model='anova2', interact=interact,
+        info = neural_info(data, labels, axis=0, method=method, model='anova2', interact=interact,
                            foo=None)
-        info = neural_info(design, data, axis=0, method=method, model='regress', foo=None)
+        info = neural_info(data, design, axis=0, method=method, model='regress', foo=None)

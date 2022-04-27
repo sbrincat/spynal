@@ -71,7 +71,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
             Set=None [default] for unseeded random numbers.
 
     arg_type String. Which input-argument version of info computing function to use:
-            'label'     : Standard version with labels,data arguments [default]
+            'label'     : Standard version with data,labels arguments [default]
             '2groups'   : Binary contrast version with data1,data2 arguments
 
     do_tests Bool. Set=True to evaluate test results against expected values and
@@ -175,7 +175,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
                                                           data[labels==groups[1]],
                                                           method=method_, **kwargs)
             else:
-                info[i_value,i_rep] = neural_info(labels, data, method=method_, **kwargs)
+                info[i_value,i_rep] = neural_info(data, labels, method=method_, **kwargs)
 
     # Compute mean and std dev across different reps of simulation
     sd      = info.std(axis=1,ddof=0)

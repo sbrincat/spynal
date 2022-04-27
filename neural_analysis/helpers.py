@@ -9,6 +9,7 @@ Created on Fri Apr  9 14:08:15 2021
 
 @author: sbrincat
 """
+from copy import deepcopy
 import numpy as np
 
 from scipy.stats import mode
@@ -82,7 +83,7 @@ def _has_method(obj, method):
 
 def _merge_dicts(dict1, dict2):
     """ Merges two dictionaries, with values in dict2 overriding (default) values in dict1 """
-    dict_out = dict1.copy()
+    dict_out = deepcopy(dict1)
     dict_out.update(dict2)
     return dict_out
 

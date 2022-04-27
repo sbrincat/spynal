@@ -7,7 +7,8 @@ from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data
                                                 MISSING_ARG_ERRS
 from neural_analysis.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                                   one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
-                                  correlation, rank_correlation, set_random_seed
+                                  correlation, rank_correlation, set_random_seed, \
+                                  gaussian, gaussian_2d, gaussian_nd
 
 
 # =============================================================================
@@ -54,7 +55,7 @@ def test_zscore(one_sample_data):
                           (cv,          0.43),
                           (cv2,         0.57),
                           (lv,          0.31)])
-def test_SNR_stats(one_sample_data, stat_func, result):
+def test_snr_stats(one_sample_data, stat_func, result):
     """ Unit tests for signal-to-noise-type stats (Fano, CV, etc.) """
     data = one_sample_data
     data_orig = data.copy()
@@ -241,3 +242,31 @@ def test_set_random_seed(rand_func):
     assert seeded == seeded2
     assert seeded != unseeded
 
+
+def test_gaussian(one_sample_data):
+    """ Unit tests for gaussian function """
+    data = (one_sample_data[:,0] - 10)/5
+    data_orig = data.copy()
+    n = data.shape[0]
+    result = 0.98
+
+    # Basic test of shape, value of output    
+    f_x = gaussian(data)
+    print(np.round(f_x[0],2))
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert f_x.shape == (n,)
+    assert np.isclose(f_x[0], result, rtol=1e-2, atol=1e-2)
+    
+    # Test for consistent results with scalar input
+    f_x = gaussian(data[0])
+    assert np.isscalar(f_x)  
+    assert np.isclose(f_x, result, rtol=1e-2, atol=1e-2)
+        
+    # Test for consistent results with hand-set parameters 
+    f_x = gaussian(data, center=0, width=1, amplitude=1, baseline=0)
+    assert np.isclose(f_x[0], result, rtol=1e-2, atol=1e-2)
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        f_x = gaussian(data, foo=None)
+    

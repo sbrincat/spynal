@@ -17,6 +17,7 @@ spike_field_test_battery Runs standard battery of tests of spike-field sync esti
 import os
 import time
 from warnings import warn
+from copy import deepcopy
 from math import pi, ceil, floor, log2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -534,8 +535,8 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
 
     def simulate_synchrony_information(test_param, base_value, test_value, freq, **sim_args):
         """ Generates synthetic multichannel oscillatory data with diff params across conds """
-        base_args = sim_args.copy()
-        test_args = sim_args.copy()
+        base_args = deepcopy(sim_args)
+        test_args = deepcopy(sim_args)
 
         # Set value for manipulated parameter in 'baseline' and 'test' condition trials
         base_args[test_param] = base_value

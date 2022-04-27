@@ -876,7 +876,7 @@ def interp1(x, y, xinterp, **kwargs):
     return interp1d(x,y,**kwargs).__call__(xinterp)
 
 
-def gaussian(points, center=0, width=1, amplitude=1, baseline=0):
+def gaussian(points, center=0.0, width=1.0, amplitude=1.0, baseline=0.0):
     """
     Evaluate a 1D Gaussian function with given parameters at given datapoint(s)
 
@@ -886,29 +886,30 @@ def gaussian(points, center=0, width=1, amplitude=1, baseline=0):
 
     Parameters
     ----------
-    points : ndarray, shape=(n_datapoints,)
+    points : float or ndarray, shape=(n_datapoints,)
         Datapoints to evaluate Gaussian function at
 
-    center : scalar, default: 0
+    center : float, default: 0.0
         Center (mean) of Gaussian function
 
-    width : scalar, default: 1
+    width : float, default: 1.0
         Width (standard deviation) of Gaussian function
 
-    amplitude : scalar, default: 1
+    amplitude : float, default: 1.0
         Gaussian amplitude (multiplicative gain)
 
-    baseline : scalar, default: 0 (no offset)
+    baseline : float, default: 0.0 (no offset)
         Additive baseline value for Gaussian function
 
     Returns
     -------
-    f_x : ndarray, shape=(n_datapoints,)
+    f_x : float or ndarray, shape=(n_datapoints,)
         Gaussian function wiht given parameters evaluated at each given datapoint
     """
-    points = np.asarray(points)
+    if not np.isscalar(points): points = np.asarray(points)
 
-    assert points.ndim == 1, ValueError("points must be 1d array with shape (n_datapoints,)")
+    assert np.isscalar(points) or (points.ndim == 1), \
+        ValueError("points must be 1d array with shape (n_datapoints,)")
 
     # Compute Gaussian function = exp(-(z**2)/2), where z = (x-mu)/sd
     f_x = np.exp(-0.5*((points - center)/width)**2)

@@ -6,9 +6,7 @@ Functions for loading from and saving to Matlab MAT files
 Function list
 -------------
 - loadmat : Loads variables from any Matlab MAT file. Also aliased as 'load'.
-
 - savemat : Saves given variables into a MAT file. Also aliased as 'save'.
-
 - whomat :  Lists all variables in any MAT file. Also aliased as 'who'.
 
 Dependencies

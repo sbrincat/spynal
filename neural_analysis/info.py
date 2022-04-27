@@ -98,22 +98,22 @@ from neural_analysis.helpers import _has_method
 # =============================================================================
 # High-level neural information wrapper functions
 # =============================================================================
-def neural_info(labels, data, axis=0, method='pev', keepdims=True, **kwargs):
+def neural_info(data, labels, axis=0, method='pev', keepdims=True, **kwargs):
     """
-    Wrapper function to compute mass-univariate neural information about
+    High-level interface for computing mass-univariate neural information about
     some task/behavioral variable(s)
 
     Parameters
     ----------
-    labels : array-like, shape=(n_obs,) or (n_obs,n_terms)
-        List of labels or design matrix to measure information about.
-        Must be same length as data.shape along dimension `axis`
-
     data : ndarray, shape=(...,n_obs,...)
         Neural data to measure information in
         Axis `axis` should correspond to observations (trials), while rest of
         axis(s) can be any independent data series (channels, time points,
         frequencies, etc.) that will be analyzed separately using the same labels.
+
+    labels : array-like, shape=(n_obs,) or (n_obs,n_terms)
+        List of labels or design matrix to measure information about.
+        Must be same length as data.shape along dimension `axis`
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -147,7 +147,7 @@ def neural_info(labels, data, axis=0, method='pev', keepdims=True, **kwargs):
     """
     method = method.lower()
     info_func = _string_to_info_func(method)
-    return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
+    return info_func(data, labels, axis=axis, keepdims=keepdims, **kwargs)
 
 
 def neural_info_2groups(data1, data2, axis=0, method='pev', keepdims=True, **kwargs):
@@ -202,7 +202,7 @@ def neural_info_2groups(data1, data2, axis=0, method='pev', keepdims=True, **kwa
     else:
         info_func = _string_to_info_func(method)
         data, labels = data_groups_to_data_labels(data1, data2, axis=axis)
-        return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
+        return info_func(data, labels, axis=axis, keepdims=keepdims, **kwargs)
 
 
 def neural_info_ngroups(*args, axis=0, method='pev', keepdims=True, **kwargs):
@@ -242,7 +242,7 @@ def neural_info_ngroups(*args, axis=0, method='pev', keepdims=True, **kwargs):
 
     info_func = _string_to_info_func(method)
     data, labels = data_groups_to_data_labels(*args, axis=axis)
-    return info_func(labels, data, axis=axis, keepdims=keepdims, **kwargs)
+    return info_func(data, labels, axis=axis, keepdims=keepdims, **kwargs)
 
 
 def _string_to_info_func(method):
@@ -259,7 +259,7 @@ def _string_to_info_func(method):
 # =============================================================================
 # Population decoding (classification) analysis
 # =============================================================================
-def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=None,
+def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=None,
            groups=None, as_pct=False, return_stats=False, stats=None, keepdims=True, **kwargs):
     """
     Mass-multivariate population decoding analysis using given classifier method
@@ -273,9 +273,6 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     Parameters
     ----------
-    labels : array-like, shape=(n_obs,)
-        Labels/target values for each observation (trial) to predict
-
     data : ndarray, shape=(...,n_obs,...,n_features,...)
         Neural data to decode labels from.
         Arbitrary shape, but `axis` should correspond to observations (trials) and
@@ -283,6 +280,9 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
         while rest of axis(s) can be any independent data series (time points,
         frequencies, etc.) that are analyzed separately (ie separate decoder fit
         and evaluated at each time point, frequency, etc.).
+
+    labels : array-like, shape=(n_obs,)
+        Labels/target values for each observation (trial) to predict
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -365,9 +365,9 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     Examples
     --------
-    accuracy = decode(labels,data,return_stats=False)
+    accuracy = decode(data,labels,return_stats=False)
 
-    accuracy,stats = decode(labels,data,return_stats=True)
+    accuracy,stats = decode(data,labels,return_stats=True)
 
     References
     ----------
@@ -559,7 +559,7 @@ def decode(labels, data, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 # =============================================================================
 # Mutual information analysis
 # =============================================================================
-def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None, keepdims=True):
+def mutual_info(data, labels, axis=0, bins=None, resp_entropy=None, groups=None, keepdims=True):
     """
     Mass-univariate mutual information between set of discrete-valued (or discretized)
     neural responses and categorical experimental conditions (often referred to as "stimuli"
@@ -576,14 +576,14 @@ def mutual_info(labels, data, axis=0, bins=None, resp_entropy=None, groups=None,
 
     Parameters
     ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data values to compute mutual information with labels.
+        If it is not discrete-valued (eg spike counts), it will be discretized using `bins`
+
     labels : array-like, shape=(n_obs,)
         List of categorical group labels labelling observations from each group.
         NOTE: Should be only two groups represented, unless sub-selecting two groups
         using `groups` argument.
-
-    data : ndarray, shape=(...,n_obs,...)
-        Data values to compute mutual information with labels.
-        If it is not discrete-valued (eg spike counts), it will be discretized using `bins`
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -744,7 +744,7 @@ mutual_information = mutual_info
 # =============================================================================
 # Note: This is actually a wrapper around _auroc_2groups(), which accepts
 # two data distributions as arguments, and is faster.
-def auroc(labels, data, axis=0, signed=True, groups=None, keepdims=True):
+def auroc(data, labels, axis=0, signed=True, groups=None, keepdims=True):
     """
     Mass-univariate area-under-ROC-curve metric of discriminability
     between two data distributions
@@ -761,12 +761,12 @@ def auroc(labels, data, axis=0, signed=True, groups=None, keepdims=True):
 
     Parameters
     ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data values for both distributions to be compared.
+
     labels : array-like, shape=(n_obs,)
         List of group labels labelling observations from each group. Should be only two groups
         represented, unless sub-selecting two groups using `groups` argument.
-
-    data : ndarray, shape=(...,n_obs,...)
-        Data values for both distributions to be compared.
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -878,7 +878,7 @@ def _auroc_2groups(data1, data2, axis=0, signed=True, keepdims=True):
 # =============================================================================
 # d-prime (Cohen's d) analysis
 # =============================================================================
-def dprime(labels, data, axis=0, signed=True, groups=None, keepdims=True):
+def dprime(data, labels, axis=0, signed=True, groups=None, keepdims=True):
     """
     Mass-univariate d' metric of difference between two data distributions
 
@@ -895,12 +895,12 @@ def dprime(labels, data, axis=0, signed=True, groups=None, keepdims=True):
 
     Parameters
     ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data values for both distributions to be compared.
+
     labels : array-like, shape=(n_obs,)
         List of group labels labelling observations from each group. Should be only two groups
         represented, unless sub-selecting two groups using `groups` argument.
-
-    data : ndarray, shape=(...,n_obs,...)
-        Data values for both distributions to be compared.
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -992,7 +992,7 @@ def _dprime_2groups(data1, data2, axis=0, signed=True, keepdims=True):
 # =============================================================================
 # Percent explained variance (PEV) analysis
 # =============================================================================
-def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=False,
+def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=False,
         keepdims=True, **kwargs):
     """
     Mass-univariate percent explained variance (PEV) analysis.
@@ -1002,14 +1002,14 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
 
     Parameters
     ----------
-    labels : array-like, shape=(n_obs,n_terms) or patsy DesignMatrix object
-        Design matrix (group labels for ANOVA models, or regressors for regression model) for
-        each observation (trial). labels.shape[0] must be same length as data.shape[axis].
-
     data  : ndarray, shape=(...,n_obs,...)
         Data to fit with linear model. `axis` should correspond to observations (trials),
         while any other axes can be any independent data series (channels, time points,
         frequencies, etc.) that will be fit separately using the same list of group labels.
+
+    labels : array-like, shape=(n_obs,n_terms) or patsy DesignMatrix object
+        Design matrix (group labels for ANOVA models, or regressors for regression model) for
+        each observation (trial). labels.shape[0] must be same length as data.shape[axis].
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -1061,9 +1061,9 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
 
     Examples
     --------
-    exp_var = pev(labels,data,return_stats=False)
+    exp_var = pev(data,labels,return_stats=False)
 
-    exp_var,stats = pev(labels,data,return_stats=True)
+    exp_var,stats = pev(data,labels,return_stats=True)
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1087,15 +1087,15 @@ def pev(labels, data, axis=0, model=None, omega=True, as_pct=True, return_stats=
 
     # Compute PEV based on 1-way ANOVA model
     if model == 'anova1':
-        return anova1(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+        return anova1(data, labels, axis=axis, omega=omega, as_pct=as_pct,
                       return_stats=return_stats, keepdims=keepdims, **kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'anova2':
-        return anova2(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+        return anova2(data, labels, axis=axis, omega=omega, as_pct=as_pct,
                       return_stats=return_stats, keepdims=keepdims, **kwargs)
     # Compute PEV based on 2-way ANOVA model
     elif model == 'regress':
-        return regress(labels, data, axis=axis, omega=omega, as_pct=as_pct,
+        return regress(data, labels, axis=axis, omega=omega, as_pct=as_pct,
                        return_stats=return_stats, keepdims=keepdims, **kwargs)
     else:
         raise ValueError("'%s' model is not supported for computing PEV" % model)
@@ -1104,7 +1104,7 @@ percent_explained_variance = pev
 """ Alias of :func:`pev`. See there for details. """
 
 
-def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs',
+def anova1(data, labels, axis=0, omega=True, groups=None, gm_method='mean_of_obs',
            as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate 1-way ANOVA analyses of one or more data vector(s)
@@ -1112,14 +1112,14 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
 
     Parameters
     ----------
-    labels : array-like, shape=(n_obs,)
-        Group labels for each observation (trial), identifying which group/factor level
-        each observation belongs to. Must be same length as data.shape[axis].
-
     data : ndarray, shape=(...,n_obs,...)
         Data to fit with ANOVA model. `axis` should correspond to observations (trials),
         while any other axes can be any independent data series (channels, time points,
         frequencies, etc.) that will be fit separately using the same list of group labels.
+
+    labels : array-like, shape=(n_obs,)
+        Group labels for each observation (trial), identifying which group/factor level
+        each observation belongs to. Must be same length as data.shape[axis].
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -1173,9 +1173,9 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
 
     Examples
     --------
-    exp_var = anova1(labels,data,return_stats=False)
+    exp_var = anova1(data,labels,return_stats=False)
 
-    exp_var,stats = anova1(labels,data,return_stats=True)
+    exp_var,stats = anova1(data,labels,return_stats=True)
 
     References
     ----------
@@ -1285,7 +1285,7 @@ def anova1(labels, data, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     else:                   return exp_var, stats
 
 
-def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total=False,
+def anova2(data, labels, axis=0, interact=None, omega=True, partial=False, total=False,
            gm_method='mean_of_obs', as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate 2-way ANOVA analyses of one or more data vector(s)
@@ -1293,16 +1293,16 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
     Parameters
     ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data to fit with ANOVA model. `axis` should correspond to observations (trials),
+        while rest of axis(s) are any independent data series (channels, time points,
+        frequencies, etc.) that will be fit separately using the same list of group labels.
+
     labels : array-like, shape=(n_obs,n_terms=2 or 3)
         Group labels for each observation (trial), identifying which group (factor level)
         each observation belongs to. Can either set interaction term labels for column 3,
         or set `interact` = True and we will auto-generate interaction term.
         labels.shape[0] must be same length as data.shape[axis].
-
-    data : ndarray, shape=(...,n_obs,...)
-        Data to fit with ANOVA model. `axis` should correspond to observations (trials),
-        while rest of axis(s) are any independent data series (channels, time points,
-        frequencies, etc.) that will be fit separately using the same list of group labels.
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -1369,9 +1369,9 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
 
     Examples
     --------
-    exp_var = anova2(labels,data,return_stats=False)
+    exp_var = anova2(data,labels,return_stats=False)
 
-    exp_var,stats = anova2(labels,data,return_stats=True)
+    exp_var,stats = anova2(data,labels,return_stats=True)
 
     References
     ----------
@@ -1501,7 +1501,7 @@ def anova2(labels, data, axis=0, interact=None, omega=True, partial=False, total
         return exp_var, stats
 
 
-def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
+def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
             partial=False, total=False, as_pct=True, return_stats=False, keepdims=True):
     """
     Mass-univariate ordinary least squares regression analyses of one or more
@@ -1509,16 +1509,16 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     Parameters
     ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data to fit with regression model. `axis` should correspond to observations (trials),
+        while rest of axis(s) are any independent data series (channels, time points, frequencies,
+        etc.) that will be fit separately using the same list of group labels.
+
     labels : array-like, shape=(n_obs,n_params) or patsy DesignMatrix object
         Regression design matrix. Each row corresponds to a distinct observation (trial),
         and each column to a distinct predictor (coefficient to fit). If `constant` is True,
         a constant (intercept) column will be appended to end of labels, if not already present.
         labels.shape[0] (number of rows) be same length as data.shape[axis].
-
-    data : ndarray, shape=(...,n_obs,...)
-        Data to fit with regression model. `axis` should correspond to observations (trials),
-        while rest of axis(s) are any independent data series (channels, time points, frequencies,
-        etc.) that will be fit separately using the same list of group labels.
 
     axis : int, default: 0 (first axis)
         Axis of data array to perform analysis on, corresponding to trials/observations
@@ -1587,9 +1587,9 @@ def regress(labels, data, axis=0, col_terms=None, omega=True, constant=True,
 
     Examples
     --------
-    exp_var = regress(labels,data,return_stats=False)
+    exp_var = regress(data,labels,return_stats=False)
 
-    exp_var,stats = regress(labels,data,return_stats=True)
+    exp_var,stats = regress(data,labels,return_stats=True)
 
     References
     ----------
