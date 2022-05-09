@@ -1,6 +1,7 @@
 """ Unit tests for utils.py module """
 import pytest
 import random
+from math import pi
 import numpy as np
 
 from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data, two_way_data, \
@@ -8,7 +9,8 @@ from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data
 from neural_analysis.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                                   one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                                   correlation, rank_correlation, set_random_seed, \
-                                  gaussian, gaussian_2d, gaussian_nd
+                                  gaussian, gaussian_2d, gaussian_nd, \
+                                  object_array_equal, object_array_compare, concatenate_object_array
 
 
 # =============================================================================
@@ -243,30 +245,111 @@ def test_set_random_seed(rand_func):
     assert seeded != unseeded
 
 
-def test_gaussian(one_sample_data):
-    """ Unit tests for gaussian function """
-    data = (one_sample_data[:,0] - 10)/5
+@pytest.mark.parametrize('func, result, result2',
+                         [(gaussian,    0.9783, 2.3780),
+                          (gaussian_2d, 0.8250, 1.3873),
+                          (gaussian_nd, 0.0009, 0.6169)])
+def test_gaussian(one_sample_data, func, result, result2):
+    """ Unit tests for gaussian/gaussian_2d/gausssian_nd functions """
+    data = (one_sample_data - 10)/5
+    if func is gaussian:        data = data[:,0]
+    elif func is gaussian_2d:   data = data[:,:2]
+    elif func is gaussian_nd:   data = data[:,:3]
     data_orig = data.copy()
     n = data.shape[0]
-    result = 0.98
 
-    # Basic test of shape, value of output    
-    f_x = gaussian(data)
-    print(np.round(f_x[0],2))
+    # Basic test of shape, value of output
+    f_x = func(data)
+    print(np.round(f_x[0],4))
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert f_x.shape == (n,)
-    assert np.isclose(f_x[0], result, rtol=1e-2, atol=1e-2)
-    
+    assert np.isclose(f_x[0], result, rtol=1e-4, atol=1e-4)
+
     # Test for consistent results with scalar input
-    f_x = gaussian(data[0])
-    assert np.isscalar(f_x)  
-    assert np.isclose(f_x, result, rtol=1e-2, atol=1e-2)
-        
-    # Test for consistent results with hand-set parameters 
-    f_x = gaussian(data, center=0, width=1, amplitude=1, baseline=0)
-    assert np.isclose(f_x[0], result, rtol=1e-2, atol=1e-2)
-    
+    if func is gaussian:    f_x = func(data[0])
+    else:                   f_x = func(data[0,:])
+    assert np.isscalar(f_x)
+    assert np.isclose(f_x, result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent results with hand-set parameters
+    params = dict(amplitude=1, baseline=0)
+    if func is gaussian:
+        params.update(dict(center=0, width=1))
+    elif func is gaussian_2d:
+        params.update(dict(center_x=0, center_y=0, width_x=1, width_y=1, orientation=0))
+    elif func is gaussian_nd:
+        params.update(dict(center=np.zeros((3,)), width=np.ones((3,))))
+    f_x = func(data, **params)
+    assert np.isclose(f_x[0], result, rtol=1e-4, atol=1e-4)
+
+    # Test for expected results with another set of hand-set parameters
+    params = dict(amplitude=2, baseline=0.5)
+    if func is gaussian:
+        params.update(dict(center=0.5, width=2))
+    elif func is gaussian_2d:
+        params.update(dict(center_x=0.5, center_y=-0.5, width_x=2, width_y=1, orientation=pi/4))
+    elif func is gaussian_nd:
+        params.update(dict(center=[0.5,-0.5,0.5], width=[2,1,2]))
+    f_x = func(data, **params)
+    print(np.round(f_x[0],4))
+    assert np.isclose(f_x[0], result2, rtol=1e-4, atol=1e-4)
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        f_x = gaussian(data, foo=None)
-    
+        f_x = func(data, foo=None)
+
+
+# =============================================================================
+# Other utility functions
+# =============================================================================
+@pytest.mark.parametrize('axis', [0, 1])
+def test_object_array_functions(axis):
+    """ Unit tests for concatenate_object_array, object_array_equal, object_array_compare """
+    data = [[[1, 2],    [3, 4, 5]],
+            [[6, 7, 8], [9, 10]  ]]
+    data_orig = data.copy()
+
+    # HACK To get Numpy to make object arrays w/o being too smart and making them (2,5) arrays
+    shape = (1,2) if axis == 0 else (2,1)
+    result = np.empty(shape, dtype=object)
+    result_true = np.empty(shape, dtype=object)
+    result_false = np.empty(shape, dtype=object)
+    result_true[0,0] = [True]*5
+    result_false[0,0] = [False]*5
+    if axis == 0:
+        result[0,0] = [1,2,6,7,8]
+        result[0,1] = [3,4,5,9,10]        
+        result_true[0,1] = [True]*5        
+        result_false[0,1] = [False]*5
+    elif axis == 1:
+        result = np.empty((2,1), dtype=object)
+        result[0,0] = [1,2,3,4,5]
+        result[1,0] = [6,7,8,9,10]
+        result_true[1,0] = [True]*5
+        result_false[1,0] = [False]*5
+
+    data_cat = concatenate_object_array(data, axis=axis)
+    print(data_cat)
+    print(result)
+    assert np.array_equal(data, data_orig)  # Ensure input data isn't altered by function
+    assert data_cat.shape == shape
+
+    # Test basic `object_array_equal` call (comp_func=np.array_equal, reduce_func=np.all)
+    assert object_array_equal(data_cat, result)
+    # Test `object_array_equal` with alternative `comp_func`
+    assert object_array_equal(data_cat, result, comp_func=np.allclose)
+    # Test `object_array_equal` with alternative `reduce_func`
+    assert object_array_equal(data_cat, result, reduce_func=np.sum) == 2
+    # Test `object_array_equal` with `reduce_func` = None
+    assert np.all(object_array_equal(data_cat, result, reduce_func=None) == [True,True])
+
+    # Test basic `object_array_compare` call (comp_func=np.equal, reduce_func=None)
+    print(object_array_compare(data_cat, result), object_array_compare(data_cat, result).shape)
+    print(result_true, result_true.shape)
+    assert object_array_equal(object_array_compare(data_cat, result), result_true)
+    # Test `object_array_compare` with alternative `comp_func`
+    assert object_array_equal(object_array_compare(data_cat, result, comp_func=np.less), result_false)
+    # Test `object_array_compare` with alternative `reduce_func`
+    assert np.all(object_array_compare(data_cat, result, reduce_func=np.all) == [True, True])
+    assert np.all(object_array_compare(data_cat, result, reduce_func=np.sum) == [5, 5])
+

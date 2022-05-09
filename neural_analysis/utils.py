@@ -36,6 +36,7 @@ Numerical utility functions
 - gaussian :          Evaluate parameterized 1D Gaussian function at given datapoint(s)
 - gaussian_2d :       Evaluate parameterized 2D Gaussian function at given datapoint(s)
 - gaussian_nd :       Evaluate parameterized N-D Gaussian function at given datapoint(s)
+- is_positive_definite : Test if matrix is symmetric positive (semi)definite
 
 Data indexing and reshaping functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -606,7 +607,7 @@ def one_way_fstat(data, labels, axis=0, groups=None, keepdims=True):
     df_error    = n-1 - df_groups   # Error degrees of freedom
 
     F = (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
-    
+
     if F.size == 1:     F = F.item()
     elif not keepdims:  F = F.squeeze(axis=axis)
     return F
@@ -904,7 +905,8 @@ def gaussian(points, center=0.0, width=1.0, amplitude=1.0, baseline=0.0):
     Returns
     -------
     f_x : float or ndarray, shape=(n_datapoints,)
-        Gaussian function wiht given parameters evaluated at each given datapoint
+        Gaussian function with given parameters evaluated at each given datapoint.
+        Returned as float for single datapoint input, as array for multiple datapoints.
     """
     if not np.isscalar(points): points = np.asarray(points)
 
@@ -917,6 +919,7 @@ def gaussian(points, center=0.0, width=1.0, amplitude=1.0, baseline=0.0):
     # Scale by amplitude and add in any baseline
     f_x = amplitude*f_x + baseline
 
+    if f_x.size == 1: f_x = f_x.item()
     return f_x
 
 
@@ -925,8 +928,8 @@ gaussian_1d = gaussian
 """ Alias of :func:`gaussian`. See there for details """
 
 
-def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
-                amplitude=1, baseline=0, orientation=0):
+def gaussian_2d(points, center_x=0.0, center_y=0.0, width_x=1.0, width_y=1.0,
+                amplitude=1.0, baseline=0.0, orientation=0.0):
     """
     Evaluate an 2D Gaussian function with given parameters at given datapoint(s)
 
@@ -941,26 +944,27 @@ def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
         Each row is a distinct datapoint x to evaluate f(x) at, and the 2 columns
         correspond to the 2 dimensions (x and y) of the 2D Gaussian function.
 
-    center_x/y : scalar, default: 0
+    center_x/y : float, default: 0.0
         Center (mean) of Gaussian function along x and y dims
 
-    width_x/y : scalar, default: 1
+    width_x/y : float, default: 1.0
         Width (standard deviation) of Gaussian function along x and y dims
 
-    amplitude : scalar, default: 1
+    amplitude : float, default: 1.0
         Gaussian amplitude (multiplicative gain)
 
-    baseline : scalar, default: 0 (no offset)
+    baseline : float, default: 0.0 (no offset)
         Additive baseline value for Gaussian function
 
-    orientation : scalar, default: 0 (axis-aligned)
+    orientation : float, default: 0.0 (axis-aligned)
         Orientation (radians CCW from + x-axis) of 2D Gaussian. 0=oriented along
         standard x/y axes (non-rotated); 45=oriented along positive diagonal
 
     Returns
     -------
-    f_x : ndarray, shape=(n_datapoints,)
-        2D Gaussian function wiht given parameters evaluated at each given datapoint
+    f_x : float or ndarray, shape=(n_datapoints,)
+        2D Gaussian function with given parameters evaluated at each given datapoint.
+        Returned as float for single datapoint input, as array for multiple datapoints.
     """
     # Expand datapoints to (n_datapoints,n_dimensions=2)
     if (points.ndim == 1) and (len(points) == 2): points = points[np.newaxis,:]
@@ -988,16 +992,25 @@ def gaussian_2d(points, center_x=0, center_y=0, width_x=1, width_y=1,
     # Scale by amplitude and add in any baseline
     f_x = amplitude*f_x + baseline
 
+    if f_x.size == 1: f_x = f_x.item()
     return f_x
 
 
-def gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0):
+def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0, baseline=0.0,
+                check=True):
     """
     Evaluate an N-D Gaussian function with given parameters at given datapoint(s).
 
-    Parameter values can be set for Gaussian center (mean), width (SD), amplitude, and
-    additive baseline. Defaults are set to generate N-D standard normal function (mean=0,
-    sd=1, amp=1, no baseline offset).
+    Parameter values can be set for Gaussian center (mean), width (SD) or covariance,
+    amplitude, and additive baseline.
+
+    Gaussian shape can be set in one of two ways (but NOT using both):
+
+    - `width` : computes an axis-aligned (0 off-diagonal covariance) Gaussian with SD's = `width`
+    - 'covariance' : computes an N-D Gaussian with full variance/covariance matrix = `covariance`
+
+    Defaults are set to generate N-D standard normal function (mean=0's, sd=1's,
+    no off-diagonal covariance, amp=1, no baseline offset).
 
     Parameters
     ----------
@@ -1006,52 +1019,140 @@ def gaussian_nd(points, center=None, width=None, amplitude=1, baseline=0):
         Each row is a distinct datapoint x to evaluate f(x) at, and each column is
         a distinct dimension of the N-dimensional Gaussian function.
 
-    center : ndarray, shape=(n_dims,) or scalar, default: (0,...,0) (0 for all dims)
+    center : ndarray, shape=(n_dims,) or scalar, default: (0.0,...,0.0) (0 for all dims)
         Center (mean) of Gaussian function along each dim.
-        Scalar value expanded to n_dims.
+        Scalar value expanded to `n_dims`.
 
-    width : ndarray, shape=(n_dims,) or scalar, default: (1,...,1) (1 for all dims)
+    width : ndarray, shape=(n_dims,) or scalar, default: (1.0,...,1.0) (1 for all dims)
         Width (standard deviation) of Gaussian function along each dim.
-        Scalar value expanded to n_dims.
+        Scalar value expanded to `n_dims`.
+        NOTE: Can input values for either `width` OR `covariance`. Setting both raises an error.
 
-    amplitude : scalar, default: 1
+    covariance : ndarray, shape=(n_dims,n_dims), default: (identity matrix: var's=1, covar's=0)
+        Variance/covariance matrix for N-D Gaussian. Diagonals are variances for each dim, off-
+        diagonals are covariances btwn corrresponding dims.
+        Must be TODO
+        Alternative method for setting Gaussian width/shape, allowing non-axis-aligned function.
+        NOTE: Can input values for either `width` OR `covariance`. Setting both raises an error.
+
+    amplitude : scalar, default: 1.0
         Gaussian amplitude (multiplicative gain)
 
-    baseline : scalar, default: 0
+    baseline : scalar, default: 0.0
         Additive baseline value for Gaussian function
+
+    check : bool, default: True
+        If True, checks if covariance is symmetric positive semidefinite; else skips slow check
 
     Returns
     -------
-    f_x : ndarray, shape=(n_datapoints,)
-        N-D Gaussian function evaluated at each given datapoint
+    f_x : float or ndarray, shape=(n_datapoints,)
+        N-D Gaussian function evaluated at each given datapoint.
+        Returned as float for single datapoint input, as array for multiple datapoints.
     """
-    # Expand datapoints to (n_datapoints,n_dimensions)
+    if (width is not None) and (covariance is not None):
+        assert np.allclose(width, np.sqrt(np.diag(covariance))), \
+            ValueError("Inconsistent values for `width` and `covariance`. \
+                        Set one or the other, but not both")
+
+    # Expand datapoints to (n_datapoints,n_dimensions) even if n_dims = 1
     if points.ndim == 1: points = points[np.newaxis,:]
     n_datapoints,n_dims = points.shape
 
-    # Set defaults for center and width, expand scalars to n_dims
-    if center is None:                          center = np.zeros((n_dims,))
-    elif np.isscalar(center) and (n_dims > 1):  center = np.tile(center, (n_dims,))
+    # Set defaults for center and width/covariance, expand scalars to n_dims
+    if center is None:
+        center = np.zeros((n_dims,))
+    elif np.isscalar(center) and (n_dims > 1):
+        center = np.tile(center, (n_dims,))
     else:
+        center = np.asarray(center).squeeze()
         assert len(center) == n_dims, \
             ValueError("points is %d-dimensional, but center is %d-dim" % (n_dims,len(center)))
 
-    if width is None:                           width = np.ones((n_dims,))
-    elif np.isscalar(width) and (n_dims > 1):   width = np.tile(width, (n_dims,))
-    else:
-        assert len(width) == n_dims, \
-            ValueError("points is %d-dimensional, but width is %d-dim" % (n_dims,len(width)))
+    # If `covariance` is input, use that (with some checks)
+    if covariance is not None:
+        assert covariance.shape == (n_dims,n_dims), \
+            ValueError("`covariance` must have shape (n_dims,n_dims): (%d,%d) not (%d,%d)" % \
+                        (n_dims,n_dims,*covariance.shape))
+        if check:
+            assert is_positive_definite(covariance), \
+                ValueError("`covariance` must be symmetric, positive semi-definite matrix")
 
-    f_x = np.zeros((n_datapoints,))
-    # Step thru each dimension in N-D Gaussian
-    for dim in range(n_dims):
-        # Compute and cumulate z**2 = ((x-mu)/sd)**2 for current dimension
-        f_x += ((points[:,dim] - center[dim]) / width[dim])**2
+    # If `width` is input, use to generate covariance (with var = width**2)
+    elif width is not None:
+        if np.isscalar(width) and (n_dims > 1):
+            width = np.tile(width, (n_dims,))
+        else:
+            width = np.asarray(width).squeeze()
+            assert len(width) == n_dims, \
+                ValueError("points is %d-dimensional, but width is %d-dim" % (n_dims,len(width)))
+
+    # If neither is input, default covariance = identity matrix (variances=1, covariances=0)
+    else:
+        width = np.ones((n_dims,))
+
+    if covariance is None:
+        f_x = np.zeros((n_datapoints,))
+        # Step thru each dimension in N-D Gaussian
+        for dim in range(n_dims):
+            # Compute and cumulate z**2 = ((x-mu)/sd)**2 for current dimension
+            f_x += ((points[:,dim] - center[dim]) / width[dim])**2
+
+    else:
+        d = points - center[np.newaxis,:]
+
+        # Note: empirically, this algorithm is faster for small n, other is faster for large n
+        # todo Must be more efficient way to do this???        
+        if n_datapoints < 10000:
+            f_x = np.diagonal(d @ np.linalg.pinv(covariance) @ d.T)
+        else:
+            f_x = np.empty((n_datapoints,))
+            for j in range(n_datapoints):
+                d_j = d[j,:]
+                f_x[j] = d_j @ np.linalg.pinv(covariance) @ d_j.T
 
     # Compute exp(-1/2*z**2), scale by amplitude and add in any baseline
     f_x = amplitude*np.exp(-f_x/2) + baseline
 
+    if f_x.size == 1: f_x = f_x.item()
     return f_x
+
+
+def is_positive_definite(X, semi=False):
+    """
+    Test if matrix is symmetric positive (semi)definite
+
+    Parameters
+    ----------
+    X : ndarray or Numpy matrix, shape=Any
+        Matrix to test
+
+    semi : bool, default: False
+        If True, tests if positive *semi*-definite. If False, tests if positive definite.
+
+    Returns
+    -------
+    pos_def : bool
+        True only if `X` is square and symmetric positive (semi)definite
+
+    References
+    ----------
+    https://stackoverflow.com/questions/16266720/find-out-if-matrix-is-positive-definite-with-numpy
+    """
+    if (X.ndim != 2) or (X.shape[0] != X.shape[1]): # Test for square matrix
+        return False
+
+    # todo should this be array_equal or all_close?
+    if not np.array_equal(X, X.T): # Test if symmetric
+        return False
+
+    try:
+        if semi:    np.linalg.cholesky(X + np.eye(X.shape[0]) * 1e-14)
+        else:       np.linalg.cholesky(X)
+        return True
+
+    except np.linalg.LinAlgError:
+        return False
 
 
 # =============================================================================
@@ -1494,7 +1595,7 @@ def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.al
         # Multidim coordinates into data array
         coords = data_flat.coords
 
-        # Count spikes within each bin
+        # Run `comp_func` on current array element
         equal[coords] = comp_func(data1[coords], data2[coords])
 
         # Iterate to next element (list of spike times for trial/unit/etc.) in data
@@ -1542,14 +1643,14 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
         # Multidim coordinates into data array
         coords = data_flat.coords
 
-        # Count spikes within each bin
+        # Run `comp_func` on current array element
         out[coords] = comp_func(data1[coords], data2[coords])
+
+        # Perform any reduction operation across values in current element
+        if reduce_func is not None: out[coords] = reduce_func(out[coords])
 
         # Iterate to next element (list of spike times for trial/unit/etc.) in data
         next(data_flat)
-
-    # Perform any reduction operation across output array
-    if reduce_func is not None: out = reduce_func(out)
 
     return out
 
@@ -1590,6 +1691,7 @@ def concatenate_object_array(data, axis=None, sort=False):
     concatenate_object_array(data,axis=1)
     >> [[1,2,3,4,5], [6,7,8,9,10]]
     """
+    if ~isinstance(data,np.ndarray): data = np.asarray(data, dtype=object)
     assert data.dtype == object, \
         ValueError("data is not an object array. Use np.concatenate() instead.")
 
