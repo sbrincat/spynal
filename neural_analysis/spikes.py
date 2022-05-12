@@ -1709,8 +1709,7 @@ def _pool_electrode_units_spike_times(data_sua, electrodes, axis, elec_set, sort
             # Concatenate spike_times across all units for current data series
             # -> (n_spikes_total,) ndarray
             data_mua[i_series,i_elec] = \
-                np.concatenate([ts.reshape((-1,))
-                                for ts in data_sua[i_series,elec_idxs]])
+                np.concatenate([np.reshape(ts, (-1,)) for ts in data_sua[i_series,elec_idxs]])
             # Sort timestamps so they remain in sequential order after concatenation
             if sort: data_mua[i_series,i_elec].sort()
 

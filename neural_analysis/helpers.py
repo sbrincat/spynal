@@ -110,9 +110,6 @@ def _standardize_to_axis_0(data, axis=0):
     Note:   Even 1d (vector) data is expanded into 2d (n,1) array to
             standardize for calling code.
     """
-    if axis < 0: axis = data.ndim + axis
-    data = np.asarray(data)
-
     # Save original shape/dimensionality of <data>
     data_ndim  = data.ndim
     data_shape = data.shape
@@ -154,7 +151,7 @@ def _undo_standardize_to_axis_0(data, data_shape, axis=0):
             and all axes != 0 unwrapped into single dimension, where
             m = prod(shape[1:])
 
-    data_shape (data.ndim,) tuple. Original shape of data array.
+    data_shape (data_orig.ndim,) tuple. Original shape of data array.
             Second output of _standardize_to_axis_0.
 
     axis    Int. Axis of original data moved to axis 0, which will be shifted
@@ -163,9 +160,6 @@ def _undo_standardize_to_axis_0(data, data_shape, axis=0):
     RETURNS
     data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
     """
-    if axis < 0: axis = data.ndim + axis
-
-    data_shape  = np.asarray(data_shape)
     data_ndim = len(data_shape) # Number of dimensions in original data
     axis_len  = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
 
@@ -255,7 +249,7 @@ def _undo_standardize_to_axis_end(data, data_shape, axis=-1):
             and all axes != -1 unwrapped into single dimension, where
             m = prod(shape[:-1])
 
-    data_shape (data.ndim,) tuple. Original shape of data array
+    data_shape (data_orig.ndim,) tuple. Original shape of data array
             Second output of _standardize_to_axis_end.
 
     axis    Int. Axis of original data moved to axis -1, which will be shifted

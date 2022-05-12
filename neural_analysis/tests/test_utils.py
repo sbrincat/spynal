@@ -10,6 +10,7 @@ from neural_analysis.utils import zscore, one_sample_tstat, paired_tstat, two_sa
                                   one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                                   correlation, rank_correlation, set_random_seed, \
                                   gaussian, gaussian_2d, gaussian_nd, \
+                                  standardize_array, undo_standardize_array, \
                                   object_array_equal, object_array_compare, concatenate_object_array
 
 
@@ -50,7 +51,7 @@ def test_zscore(one_sample_data):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         z = zscore(data, foo=None)
-
+    
 
 @pytest.mark.parametrize('stat_func,    result',
                          [(fano,        1.95),
@@ -302,6 +303,38 @@ def test_gaussian(one_sample_data, func, result, result2):
 # =============================================================================
 # Other utility functions
 # =============================================================================
+@pytest.mark.parametrize('axis, target_axis', [(0,0), (1,0), (2,0), (-1,0), 
+                                               (0,2), (1,2), (2,2), (-1,2),
+                                               (0,-1), (1,-1), (2,-1), (-1,-1)])
+
+def test_standardize_array(axis, target_axis):
+    """ Unit tests for standardize_array/undo_standardize_array """    
+    # Test whether standardize->unstandardize returns original array
+    data = np.random.rand(3,4,5)
+    data_orig = data.copy()
+    
+    data2, data_shape = standardize_array(data, axis=axis, target_axis=target_axis)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    
+    data2 = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(data,data2)
+    
+    # Same test w/ 2D data array
+    axis = min(axis,1)  # Reset axes from 2 -> 1
+    target_axis = min(target_axis,1)
+    
+    data = np.random.rand(3,4)
+    data_orig = data.copy()
+    
+    data2, data_shape = standardize_array(data, axis=axis, target_axis=target_axis)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    
+    data2 = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(data,data2)
+
+
 @pytest.mark.parametrize('axis', [0, 1])
 def test_object_array_functions(axis):
     """ Unit tests for concatenate_object_array, object_array_equal, object_array_compare """

@@ -1253,7 +1253,11 @@ def standardize_array(data, axis=0, target_axis=0):
     data_shape : tuple, shape=(data.ndim,)
         Original shape of input data array
     """
-    assert target_axis in [0,-1], \
+    data = np.asarray(data)
+    if axis < 0: axis = data.ndim + axis
+    if target_axis < 0: target_axis = data.ndim + target_axis
+    
+    assert target_axis in [0,data.ndim-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
 
     if target_axis == 0:    return _standardize_to_axis_0(data, axis=axis)
@@ -1273,7 +1277,7 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
         axes != `target_axis` unwrapped into single dimension, where
         m = prod(shape[axes != axis])
 
-    data_shape : tuple, shape=(data.ndim,)
+    data_shape : tuple, shape=(data_orig.ndim,)
         Original shape of data array. Second output of standardize_array.
 
     axis : int, default: 0
@@ -1289,7 +1293,12 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
     data : ndarray,. shape=(...,axis_len,...)
         Data array reshaped back to original shape
     """
-    assert target_axis in [0,-1], \
+    data = np.asarray(data)
+    data_shape  = np.asarray(data_shape)
+    if axis < 0: axis = len(data_shape) + axis
+    if target_axis < 0: target_axis = len(data_shape) + target_axis
+    
+    assert target_axis in [0,len(data_shape)-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
 
     if target_axis == 0:    return _undo_standardize_to_axis_0(data, data_shape, axis=axis)
