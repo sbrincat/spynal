@@ -4,14 +4,14 @@ import random
 from math import pi
 import numpy as np
 
-from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data, two_way_data, \
-                                                MISSING_ARG_ERRS
-from neural_analysis.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
-                                  one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
-                                  correlation, rank_correlation, set_random_seed, \
-                                  gaussian, gaussian_2d, gaussian_nd, \
-                                  standardize_array, undo_standardize_array, \
-                                  object_array_equal, object_array_compare, concatenate_object_array
+from spynal.tests.data_fixtures import one_sample_data, two_sample_data, two_way_data, \
+                                       MISSING_ARG_ERRS
+from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
+                         one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
+                         correlation, rank_correlation, set_random_seed, \
+                         gaussian, gaussian_2d, gaussian_nd, \
+                         standardize_array, undo_standardize_array, \
+                         object_array_equal, object_array_compare, concatenate_object_array
 
 
 # =============================================================================

@@ -70,8 +70,8 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.stats import rankdata
 
-from neural_analysis.helpers import _standardize_to_axis_0, _undo_standardize_to_axis_0, \
-                                    _standardize_to_axis_end, _undo_standardize_to_axis_end
+from spynal.helpers import _standardize_to_axis_0, _undo_standardize_to_axis_0, \
+                           _standardize_to_axis_end, _undo_standardize_to_axis_end
 
 # =============================================================================
 # Basic statistics

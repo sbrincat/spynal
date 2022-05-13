@@ -31,8 +31,8 @@ from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.patches import Polygon
 
-from neural_analysis.utils import isnumeric
-from neural_analysis.helpers import _merge_dicts
+from spynal.utils import isnumeric
+from spynal.helpers import _merge_dicts
 
 # Lambda returns list of all settable attributes of given plotting object
 # Find all methods starting with 'set_***', strip out the 'set_', and place in a list

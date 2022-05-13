@@ -19,4 +19,4 @@ doing time-frequency analysis, and plotting
     plot_spectrogram(timepts, freqs, spec, cmap='viridis')
 
 A more extensive tutorial covering all the basic Spynal functionality can be found
-in this `notebook <https://github.com/sbrincat/neural_analysis/blob/master/neural_analysis_tutorial.ipynb>`_
+in this `notebook <https://github.com/sbrincat/spynal/blob/master/spynal_tutorial.ipynb>`_

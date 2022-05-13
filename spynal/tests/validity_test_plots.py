@@ -14,8 +14,8 @@ import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
-from neural_analysis.spectra import compute_tapers, simulate_oscillation
-from neural_analysis.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
+from spynal.spectra import compute_tapers, simulate_oscillation
+from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
 
 
 def laminar_oscillation():

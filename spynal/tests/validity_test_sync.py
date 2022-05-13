@@ -24,8 +24,8 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from neural_analysis.sync import simulate_multichannel_oscillation, synchrony
-from neural_analysis.info import neural_info
+from spynal.sync import simulate_multichannel_oscillation, synchrony
+from spynal.info import neural_info
 
 
 # =============================================================================

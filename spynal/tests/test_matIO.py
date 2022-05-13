@@ -4,8 +4,8 @@ import os
 import numpy as np
 import pandas as pd
 
-from neural_analysis.tests.data_fixtures import MISSING_ARG_ERRS
-from neural_analysis.matIO import loadmat
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+from spynal.matIO import loadmat
 
 # todo Should we embed mat file generation in a fixture? Would require matlab engine for Python.
 
@@ -18,7 +18,7 @@ def test_loadmat(version):
     # HACK Make this work when run from top-level Python dir in VS Code or from tests dir in terminal
     cwd = os.getcwd()
     if cwd.endswith('tests'):   load_dir = r'./'
-    else:                       load_dir = r'./neural_analysis/neural_analysis/tests'
+    else:                       load_dir = r'./spynal/spynal/tests'
     filename = os.path.join(load_dir, 'testing_datafile_' + version + '.mat')
 
     print("PWD", os.getcwd())

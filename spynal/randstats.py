@@ -87,10 +87,9 @@ from math import sqrt
 from warnings import warn
 import numpy as np
 
-from neural_analysis.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
-                                  one_sample_tstat, paired_tstat, two_sample_tstat, \
-                                  one_way_fstat, two_way_fstat, correlation, rank_correlation, \
-                                  isarraylike
+from spynal.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
+                         one_sample_tstat, paired_tstat, two_sample_tstat, \
+                         one_way_fstat, two_way_fstat, correlation, rank_correlation, isarraylike
 
 
 # =============================================================================

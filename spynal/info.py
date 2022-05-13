@@ -90,9 +90,9 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from patsy import DesignMatrix
 
-from neural_analysis.utils import unsorted_unique, data_groups_to_data_labels, \
-                                  standardize_array, undo_standardize_array
-from neural_analysis.helpers import _has_method
+from spynal.utils import unsorted_unique, data_groups_to_data_labels, \
+                         standardize_array, undo_standardize_array
+from spynal.helpers import _has_method
 
 
 # =============================================================================

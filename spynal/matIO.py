@@ -37,7 +37,7 @@ except ImportError:
     _HAS_XARRAY = False
     # print("xarray module is not installed. No support for loading/saving xarray format")
 
-from neural_analysis.helpers import _isbinary, _enclose_in_object_array
+from spynal.helpers import _isbinary, _enclose_in_object_array
 
 # Uncomment to print out detailed debugging statements in loading functions
 DEBUG = False

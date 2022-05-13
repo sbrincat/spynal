@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import norm, poisson, bernoulli
 from scipy.stats.mstats import gmean
 
-from neural_analysis.spectra import simulate_oscillation
+from spynal.spectra import simulate_oscillation
 
 # Possible errors to expect when inputting a missing/misspelled argument
 # Used for unit tests against silently ignoring incorrect arguments

@@ -4,11 +4,11 @@ import pytest
 import numpy as np
 import xarray as xr
 
-from neural_analysis.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
-                                                oscillatory_data, MISSING_ARG_ERRS
-from neural_analysis.spectra import spectrum, spectrogram, itpc, \
-                                    cut_trials, realign_data, pool_freq_bands, pool_time_epochs, \
-                                    plot_spectrum, plot_spectrogram
+from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
+                                       oscillatory_data, MISSING_ARG_ERRS
+from spynal.spectra import spectrum, spectrogram, itpc, \
+                           cut_trials, realign_data, pool_freq_bands, pool_time_epochs, \
+                           plot_spectrum, plot_spectrogram
 
 
 # =============================================================================

@@ -2,14 +2,14 @@
 import pytest
 import numpy as np
 
-from neural_analysis.tests.data_fixtures import MISSING_ARG_ERRS
-from neural_analysis.utils import setup_sliding_windows, unsorted_unique, \
-                                  object_array_equal, concatenate_object_array
-from neural_analysis.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
-                                   cut_trials, realign_data, pool_electrode_units, \
-                                   rate, rate_stats, isi, isi_stats, \
-                                   plot_mean_waveforms, plot_waveform_heatmap
-from neural_analysis.spectra import compute_tapers
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+from spynal.utils import setup_sliding_windows, unsorted_unique, \
+                         object_array_equal, concatenate_object_array
+from spynal.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
+                          cut_trials, realign_data, pool_electrode_units, \
+                          rate, rate_stats, isi, isi_stats, \
+                          plot_mean_waveforms, plot_waveform_heatmap
+from spynal.spectra import compute_tapers
 
 
 # =============================================================================

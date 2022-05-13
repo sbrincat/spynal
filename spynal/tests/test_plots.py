@@ -2,8 +2,8 @@
 import pytest
 import numpy as np
 
-from neural_analysis.tests.data_fixtures import oscillation, MISSING_ARG_ERRS
-from neural_analysis.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
+from spynal.tests.data_fixtures import oscillation, MISSING_ARG_ERRS
+from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
 
 def test_plot_line_with_error_fill(oscillation):
     """ Unit tests for plot_lineseries function """

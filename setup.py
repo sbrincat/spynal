@@ -8,12 +8,12 @@ with open(path.join(here, 'README.md'), 'r') as f:
     long_description = f.read()
 
 setuptools.setup(
-      name='neural_analysis', 
+      name='spynal', 
       version='0.0.1', 
       description='Miller Lab Neural Analysis Resources', 
       long_description=long_description,
       long_description_content_type='text/markdown',
-      url='https://github.com/sbrincat/neural_analysis.git', 
+      url='https://github.com/sbrincat/spynal.git', 
       author= ['Scott Brincat', 'John Tauber'],
       author_email= ['sbrincat@mit.edu', 'jtauber@mit.edu'],
       license='LICENSE', 

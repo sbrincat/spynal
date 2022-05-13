@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-helpers   Private helper functions for neural_analysis code
+helpers   Private helper functions for spynal code
 
 These are functions used internally in one or more analysis modules,
 but not intended to be public-facing.

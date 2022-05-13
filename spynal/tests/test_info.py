@@ -7,9 +7,9 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from patsy import dmatrix
 
 
-from neural_analysis.tests.data_fixtures import two_sample_data, one_way_data, two_way_data, \
-                                                MISSING_ARG_ERRS
-from neural_analysis.info import neural_info, neural_info_2groups, neural_info_ngroups
+from spynal.tests.data_fixtures import two_sample_data, one_way_data, two_way_data, \
+                                       MISSING_ARG_ERRS
+from spynal.info import neural_info, neural_info_2groups, neural_info_ngroups
 
 
 # =============================================================================

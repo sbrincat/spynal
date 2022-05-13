@@ -83,13 +83,13 @@ from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
 from scipy.stats import poisson, expon
 
-from neural_analysis.utils import set_random_seed, unsorted_unique, index_axis, \
-                                  standardize_array, undo_standardize_array, \
-                                  setup_sliding_windows, concatenate_object_array, \
-                                  fano, cv, cv2, lv
-from neural_analysis.helpers import _isbinary, _merge_dicts, _check_window_lengths, \
-                                    _enclose_in_object_array
-from neural_analysis.plots import plot_line_with_error_fill, plot_heatmap
+from spynal.utils import set_random_seed, unsorted_unique, index_axis, \
+                         standardize_array, undo_standardize_array, \
+                         setup_sliding_windows, concatenate_object_array, \
+                         fano, cv, cv2, lv
+from spynal.helpers import _isbinary, _merge_dicts, _check_window_lengths, \
+                           _enclose_in_object_array
+from spynal.plots import plot_line_with_error_fill, plot_heatmap
 
 
 # =============================================================================

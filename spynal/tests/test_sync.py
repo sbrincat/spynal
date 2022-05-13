@@ -5,10 +5,10 @@ import numpy as np
 
 from scipy.stats import bernoulli
 
-from neural_analysis.tests.data_fixtures import MISSING_ARG_ERRS
-from neural_analysis.utils import index_axis
-from neural_analysis.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
-from neural_analysis.spectra import spectrogram
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+from spynal.utils import index_axis
+from spynal.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
+from spynal.spectra import spectrogram
 
 # =============================================================================
 # Fixtures for generating simulated data

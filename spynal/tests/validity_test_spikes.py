@@ -27,11 +27,11 @@ from math import sqrt
 import numpy as np
 import matplotlib.pyplot as plt
 
-from neural_analysis.tests.data_fixtures import simulate_dataset
-from neural_analysis.spikes import simulate_spike_trains, times_to_bool, \
+from spynal.tests.data_fixtures import simulate_dataset
+from spynal.spikes import simulate_spike_trains, times_to_bool, \
                                    rate_stats, isi, isi_stats, \
                                    plot_mean_waveforms, plot_waveform_heatmap
-from neural_analysis.spectra import compute_tapers
+from spynal.spectra import compute_tapers
 
 
 # =============================================================================

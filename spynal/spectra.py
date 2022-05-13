@@ -126,11 +126,11 @@ try:
 except ImportError:
     HAS_XARRAY = False
 
-from neural_analysis.utils import set_random_seed, iarange, index_axis, axis_index_slices, \
-                                  standardize_array, undo_standardize_array, interp1
-from neural_analysis.helpers import _check_window_lengths
-from neural_analysis.spikes import _spike_data_type, times_to_bool
-from neural_analysis.plots import plot_line_with_error_fill, plot_heatmap
+from spynal.utils import set_random_seed, iarange, index_axis, axis_index_slices, \
+                         standardize_array, undo_standardize_array, interp1
+from spynal.helpers import _check_window_lengths
+from spynal.spikes import _spike_data_type, times_to_bool
+from spynal.plots import plot_line_with_error_fill, plot_heatmap
 
 
 # Set default arguments for pyfftw functions: Fast planning, use all available threads

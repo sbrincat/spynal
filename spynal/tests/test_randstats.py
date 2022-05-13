@@ -2,16 +2,16 @@
 import pytest
 import numpy as np
 
-from neural_analysis.utils import data_labels_to_data_groups
+from spynal.utils import data_labels_to_data_groups
 
-from neural_analysis.tests.data_fixtures import one_sample_data, two_sample_data, \
-                                                one_way_data, two_way_data, MISSING_ARG_ERRS
-from neural_analysis.randstats import one_sample_tstat, one_sample_test, \
-                                      paired_tstat, paired_sample_test, paired_sample_test_labels, \
-                                      paired_sample_association_test, paired_sample_association_test_labels, \
-                                      two_sample_tstat, two_sample_test, two_sample_test_labels, \
-                                      one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
-                                      one_sample_confints, paired_sample_confints, two_sample_confints
+from spynal.tests.data_fixtures import one_sample_data, two_sample_data, \
+                                       one_way_data, two_way_data, MISSING_ARG_ERRS
+from spynal.randstats import one_sample_tstat, one_sample_test, \
+                             paired_tstat, paired_sample_test, paired_sample_test_labels, \
+                             paired_sample_association_test, paired_sample_association_test_labels, \
+                             two_sample_tstat, two_sample_test, two_sample_test_labels, \
+                             one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
+                             one_sample_confints, paired_sample_confints, two_sample_confints
 
 
 # =============================================================================

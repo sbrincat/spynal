@@ -34,10 +34,10 @@ Function reference
 from warnings import warn
 import numpy as np
 
-from neural_analysis.utils import set_random_seed, setup_sliding_windows, index_axis, \
-                                  axis_index_slices
-from neural_analysis.spectra import spectrogram, simulate_oscillation
-from neural_analysis.randstats import jackknifes
+from spynal.utils import set_random_seed, setup_sliding_windows, index_axis, \
+                         axis_index_slices
+from spynal.spectra import spectrogram, simulate_oscillation
+from spynal.randstats import jackknifes
 
 
 # =============================================================================
