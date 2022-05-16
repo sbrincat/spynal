@@ -35,7 +35,7 @@ The library is based on several underlying design principles:
     input arguments and returned outputs
 - **Foolproof** -- Function parameters default to values typical for neural analysis.
     Functions have extensive checks for proper inputs.
-- **Flexible** -- Detailed parameterization allows customization of analysis to users' needs
+- **Flexibility** -- Detailed parameterization allows customization of analysis to users' needs
 
 Table of contents
 -----------------

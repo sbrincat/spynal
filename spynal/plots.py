@@ -145,8 +145,8 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
     else:
         ylim = (data.min(), data.max())
 
-    # Default ylim to data range +/- 2.5%
-    ylim = (ylim[0]-0.025*np.diff(ylim), ylim[1]+0.025*np.diff(ylim))
+    # Default ylim to data range +/- 5%
+    ylim = (ylim[0]-0.05*np.diff(ylim), ylim[1]+0.05*np.diff(ylim))
     xlim = (x.min(),x.max())
 
     # Set axis to plot into (default to current axis)

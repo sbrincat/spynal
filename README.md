@@ -1,11 +1,16 @@
 # spynal
-Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python
+Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python  
+
+Covers typical preprocessing and basic analysis steps in neural analysis workflows.
+Intended users are anyone doing analysis of neurophysiology data, but we particularly aim to be
+accessible and easy-to-use for people migrating to Python from Matlab or other similar
+programming languages
 
 ### Features include:
-Covers typical preprocessing and basic analysis steps in neural analysis workflows  
-Simple interface: no object-oriented programming or complicated data/params structures  
-Consistent Matlab-like function calls: analysis(data, axis, extra_param=default)  
-Modular: can use specific functionality w/o requiring an entire processing chain  
+Simplicity: easy-to-use interface; no OOP or complicated data/params structures  
+Consistency: consistent function signature ~ analysis(data, axis, extra_param=default)  
+Modularity: can use specific functionality w/o requiring an entire processing chain  
+Flexibility: detailed parameterization allows customized analysis  
 Well-documented: function docstrings explain usage and input/output format  
 Vectorized mass-univariate analysis: runs in parallel across all channels, no for loops needed  
 
@@ -30,7 +35,8 @@ plots -- Generation of common plot types; plotting utilities
     - For developers: at command line, run: python setup.py develop
         (this will allow you to edit the library without reinstalling)
 
-You should now be able to directly import spynal modules in your Python code/notebooks like so:  
-    import spynal.sync  
-    import spynal.spikes as spk  
-    from spynal.randstats import two_sample_test  
+You should now be able to directly import spynal and its modules/functions in your code/notebooks like so:  
+    import spynal
+    import spynal as spy  
+    import spynal.spectra as spectra  
+    from spynal.spectra import spectrogram  
