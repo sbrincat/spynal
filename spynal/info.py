@@ -704,7 +704,7 @@ def mutual_info(data, labels, axis=0, bins=None, resp_entropy=None, groups=None,
             Pr          = counts / N            # P(response==r)
 
             # Response entropy (Dayan & Abbott, eqn. 4.3)
-            H   = entropy(Pr)
+            H   = _entropy(Pr)
 
         else:
             H   = resp_entropy[i_series]
@@ -717,8 +717,8 @@ def mutual_info(data, labels, axis=0, bins=None, resp_entropy=None, groups=None,
         Prs2        = counts / counts.sum()                 # P(response==r | stimulus2)
 
         # Conditional entropies for stimuli 1 & 2 (Dayan & Abbott, eqn. 4.5)
-        Hs1     = entropy(Prs1)
-        Hs2     = entropy(Prs2)
+        Hs1     = _entropy(Prs1)
+        Hs2     = _entropy(Prs2)
 
         # Noise entropy (Dayan & Abbott, eqn. 4.6)
         Hnoise  = Ps1*Hs1 + Ps2*Hs2
@@ -1244,7 +1244,7 @@ def anova1(data, labels, axis=0, omega=True, groups=None, gm_method='mean_of_obs
     SS_total[undefined] = 1     # Set=1 to avoid annoying divide-by-0 warnings
 
     # Omega-squared stat = bias-corrected explained variance
-    if omega:   exp_var = omega_squared(SS_groups,SS_total,MS_error,df_groups)
+    if omega:   exp_var = _omega_squared(SS_groups,SS_total,MS_error,df_groups)
     # Standard eta-squared formula
     else:       exp_var = eta_squared(SS_groups,SS_total)
 
@@ -1466,12 +1466,12 @@ def anova2(data, labels, axis=0, interact=None, omega=True, partial=False, total
 
     # Calculate explained variance
     if not partial:     # Standard (full-model) PEV
-        if omega: exp_var = omega_squared(SS_groups,SS_total,MS_error,df_groups)
+        if omega: exp_var = _omega_squared(SS_groups,SS_total,MS_error,df_groups)
         else:     exp_var = eta_squared(SS_groups,SS_total)
 
     else:               # Partial factor PEV
-        if omega: exp_var = omega_squared_partial(SS_groups,SS_total,MS_error,df_groups,n_obs)
-        else:     exp_var = eta_squared_partial(SS_groups,SS_error)
+        if omega: exp_var = _omega_squared_partial(SS_groups,SS_total,MS_error,df_groups,n_obs)
+        else:     exp_var = _eta_squared_partial(SS_groups,SS_error)
 
     exp_var[:,undefined] = 0
 
@@ -1672,12 +1672,12 @@ def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
 
     # Calculate explained variance
     if not partial:     # Standard (full-model) PEV
-        if omega:   exp_var = omega_squared(SS_extra,SS_total,MS_error,df_extra)
-        else:       exp_var = R_squared(SS_extra,SS_total)
+        if omega:   exp_var = _omega_squared(SS_extra,SS_total,MS_error,df_extra)
+        else:       exp_var = _R_squared(SS_extra,SS_total)
 
     else:               # Partial factor PEV
-        if omega:   exp_var = omega_squared_partial(SS_extra,SS_total,MS_error,df_extra,n_obs)
-        else:       exp_var = R_squared_partial(SS_extra,SS_error_full)
+        if omega:   exp_var = _omega_squared_partial(SS_extra,SS_total,MS_error,df_extra,n_obs)
+        else:       exp_var = _R_squared_partial(SS_extra,SS_error_full)
 
     exp_var[:,undefined] = 0
 
@@ -1764,42 +1764,42 @@ def patsy_terms_to_columns(labels):
 # =============================================================================
 # Low-level information metric computation functions
 # =============================================================================
-def entropy(P):
+def _entropy(P):
     """ Compute entropy from probabilty density P """
     return -(P * np.log2(P)).sum()
 
 
-def R_squared(SS_model, SS_total):
+def _R_squared(SS_model, SS_total):
     """
-    Compute full-model R-squared/eta-squared statistic of explained variance.
+    Compute full-model R-squared/eta-squared statistic of explained variance from Sums of Squares
 
     Note: Statistic is positively biased, especially for small N.
     Formula : exp_var = SS_model / SS_total
     """
     return SS_model / SS_total
 
-# Alias R_squared as eta_squared -- same formula
-eta_squared = R_squared
-""" Alias of :func:`R_squared`. See there for details. """
+# Alias _R_squared as eta_squared -- same formula
+eta_squared = _R_squared
+""" Alias of :func:`_R_squared`. See there for details. """
 
 
-def R_squared_partial(SS_model, SS_error):
+def _R_squared_partial(SS_model, SS_error):
     """
-    Compute partial R-squared/eta-squared statistic of explained variance.
+    Compute partial R-squared/eta-squared statistic of explained variance from Sums of Squares
 
     Note: Statistic is positively biased, especially for small N.
     Formula :   pev = SS_model / (SS_model + SS_error)
     """
     return SS_model / (SS_model + SS_error)
 
-# Alias R_squared_partial as eta_squared_partial -- same formula
-eta_squared_partial = R_squared_partial
-""" Alias of :func:`R_squared_partial`. See there for details. """
+# Alias _R_squared_partial as _eta_squared_partial -- same formula
+_eta_squared_partial = _R_squared_partial
+""" Alias of :func:`_R_squared_partial`. See there for details. """
 
 
-def omega_squared(SS_model, SS_total, MS_error, df_model):
+def _omega_squared(SS_model, SS_total, MS_error, df_model):
     """
-    Compute full-model omega-squared statistic of explained variance.
+    Compute full-model omega-squared statistic of explained variance from Sums of Squares
 
     Statistic is bias-corrected, unlike R-squared/eta-squared.
     Formula :   pev = (SS_model - df_model*MS_error) / (SS_total + MS_error)
@@ -1812,9 +1812,9 @@ def omega_squared(SS_model, SS_total, MS_error, df_model):
     return (SS_model - np.outer(df_model,MS_error)) / (SS_total + MS_error)
 
 
-def omega_squared_partial(SS_model, SS_total, MS_error, df_model, n_obs):
+def _omega_squared_partial(SS_model, SS_total, MS_error, df_model, n_obs):
     """
-    Compute partial omega-squared statistic of explained variance.
+    Compute partial omega-squared statistic of explained variance from Sums of Squares
 
     Statistic is bias-corrected, unlike R-squared/eta-squared.
     Formula :   pev = (SS_model - df_model*MS_error) / (SS_total + (n_obs-df_model)*MS_error)
