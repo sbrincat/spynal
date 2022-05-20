@@ -24,9 +24,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from spynal.tests.data_fixtures import simulate_dataset
-from spynal.randstats import one_sample_test, paired_sample_test, paired_sample_association_test, \
-                                      two_sample_test, one_way_test, two_way_test, \
-                                      one_sample_confints, paired_sample_confints, two_sample_confints
+from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_association_test, \
+                                       two_sample_test, one_way_test, two_way_test, \
+                                       one_sample_confints, paired_sample_confints, two_sample_confints
 
 
 # =============================================================================

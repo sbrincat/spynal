@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-""" Nonparametric permutation/shuffle/randomization statistics """
+""" Nonparametric bootstrap statistics """
 import numpy as np
 
 from spynal.utils import axis_index_slices, isarraylike, set_random_seed
 from spynal.randstats.sampling import bootstraps
-from spynal.randstats.randstats import resamples_to_pvalue, _tail_to_compare, \
-                                       _paired_sample_data_checks, _two_sample_data_checks, \
-                                       _str_to_one_sample_stat, _str_to_assoc_stat, \
-                                       _str_to_two_sample_stat, _str_to_one_way_stat, \
-                                       _str_to_two_way_stat
-                                       
+from spynal.randstats.utils import resamples_to_pvalue
+from spynal.randstats.helpers import _str_to_one_sample_stat, _str_to_assoc_stat, \
+                                     _str_to_two_sample_stat, _tail_to_compare, \
+                                     _paired_sample_data_checks, _two_sample_data_checks
+
 
 def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both', n_resamples=10000,
                               seed=None, return_stats=False, keepdims=True, **kwargs):
@@ -298,5 +297,4 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     if return_stats:    return p, stat_obs, stat_resmp
     else:               return p
-
 

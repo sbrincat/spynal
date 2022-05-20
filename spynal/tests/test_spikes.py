@@ -9,7 +9,7 @@ from spynal.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
                           cut_trials, realign_data, pool_electrode_units, \
                           rate, rate_stats, isi, isi_stats, \
                           plot_mean_waveforms, plot_waveform_heatmap
-from spynal.spectra import compute_tapers
+from spynal.spectra.multitaper import compute_tapers
 
 
 # =============================================================================
@@ -556,23 +556,23 @@ def test_plot_mean_waveforms():
     assert object_array_equal(waveforms, waveforms_orig)
     for unit in range(n_units):
         assert np.allclose(lines[unit][0].get_ydata(), waveforms[unit].mean(axis=1))
-        
+
     # Test w/o SD plot (mean only)
     lines, _, _ = plot_mean_waveforms(waveforms, plot_sd=False)
     assert object_array_equal(waveforms, waveforms_orig)
     for unit in range(n_units):
-        assert np.allclose(lines[unit][0].get_ydata(), waveforms[unit].mean(axis=1))        
-        
+        assert np.allclose(lines[unit][0].get_ydata(), waveforms[unit].mean(axis=1))
+
     # Test with data from only one unit
     lines, _, _ = plot_mean_waveforms(waveforms[0], plot_sd=True)
     assert object_array_equal(waveforms, waveforms_orig)
-    assert np.allclose(lines[0][0].get_ydata(), waveforms[0].mean(axis=1))        
+    assert np.allclose(lines[0][0].get_ydata(), waveforms[0].mean(axis=1))
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         lines, _, _ = plot_mean_waveforms(waveforms, foo=None)
-        
-        
+
+
 def test_plot_waveform_heatmap():
     """ Unit tests for plot_waveform_heatmap function """
     n_units = 1
@@ -592,4 +592,17 @@ def test_plot_waveform_heatmap():
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        patch, _ = plot_waveform_heatmap(waveforms, foo=None)        
+        patch, _ = plot_waveform_heatmap(waveforms, foo=None)
+
+
+def test_imports():
+    """ Test different import methods for spikes module """
+    # Import entire package
+    import spynal
+    spynal.spikes.density
+    # Import subpackage
+    import spynal.spikes as spk
+    spk.density
+    # Import specific function from subpackage
+    from spynal.spikes import density
+    density

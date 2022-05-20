@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from spynal.sync import simulate_multichannel_oscillation, synchrony
+from spynal.sync.sync import simulate_multichannel_oscillation, synchrony
 from spynal.info import neural_info
 
 
@@ -514,7 +514,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
     RETURNS
     infos   (n_freqs,n_timepts,n_values) ndarray. Estimated neural information in synchrony.
 
-    syncs   (n_freqs,n_timepts,n_trials,n_values) ndarray. 
+    syncs   (n_freqs,n_timepts,n_trials,n_values) ndarray.
             Estimated single-trial synchrony for each tested value.
 
     passed  Bool. True if all tests produce expected values; otherwise False.
@@ -524,7 +524,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
     is too far from expected value
 
     If do_plots is True, also generates a plot summarizing expected vs estimated synchrony
-    """    
+    """
     test = test.lower()
     sync_method = sync_method.lower()
 
@@ -573,7 +573,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
 
     else:
         raise ValueError("Unsupported value '%s' set for <test>" % test)
-    
+
     labels = np.hstack((np.zeros((n,)),np.ones((n,))))
 
     # Ensure hand-set values are sorted (ascending), as many tests assume it
@@ -653,13 +653,13 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
         freq_tick_labels= freq_ticks
 
     freqs_transformed   = np.asarray([freq_transform(f) for f in freqs])
-    
+
     # Find frequency in spectrogram closest to simulated frequency
     test_freq_idx   = np.argmin(np.abs(freq_transform(freq) - freqs_transformed))
     # Extract synchrony and phase at simulated frequency
     test_freq_infos = marginal_infos[test_freq_idx,:]
-    
-    
+
+
     if do_plots:
         dt      = np.diff(timepts).mean()
         tlim    = [timepts[0]-dt/2, timepts[-1]+dt/2]
@@ -678,7 +678,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
         plt.xlim((1,n*2))
         plt.xlabel('Trials')
         plt.ylabel(single_trial_method + ' ' + sync_method)
-            
+
         # Plot neural information spectrum for each test value
         plt.subplot(1,2,2)
         ylim = (marginal_infos.min(), marginal_infos.max())
@@ -724,7 +724,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
         if do_tests:    assert cond, AssertionError(message)
         # Just issue a warning for test fails if do_tests is False
         elif not cond:  warn(message)
-        
+
     return infos, syncs, passed
 
 
@@ -919,7 +919,7 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
                     print("Running %s test on %s %s" % (test,spec_method,method))
 
                     _,_,passed = test_sync_info(method, pair_type='lfp-lfp', test=test,
-                                                spec_method=spec_method, 
+                                                spec_method=spec_method,
                                                 single_trial_method=trial_method,
                                                 do_tests=do_tests, **kwargs)
 
@@ -929,7 +929,7 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
                     # If saving plots to file, let's not leave them all open
                     if 'plot_dir' in kwargs: plt.close('all')
 
-    
+
 # =============================================================================
 # Helper functions
 # =============================================================================

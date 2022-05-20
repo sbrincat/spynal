@@ -23,7 +23,8 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from spynal.spectra import simulate_oscillation, power_spectrogram, itpc
+from spynal.spectra.spectra import power_spectrogram, itpc
+from spynal.spectra.utils import simulate_oscillation
 
 
 def test_power(method, test='frequency', test_values=None, spec_type='power',

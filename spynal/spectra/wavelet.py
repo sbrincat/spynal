@@ -5,9 +5,11 @@ import numpy as np
 
 from spynal.utils import standardize_array
 from spynal.spikes import _spike_data_type, times_to_bool
-from spynal.spectra.spectra import _next_power_of_2, remove_dc, complex_to_spec_type, \
-                           fft, ifft, _FFTW_KWARGS_DEFAULT, _undo_standardize_array_newaxis
-                           
+from spynal.spectra.preprocess import remove_dc
+from spynal.spectra.utils import complex_to_spec_type
+from spynal.spectra.helpers import fft, ifft, _FFTW_KWARGS_DEFAULT, _next_power_of_2, \
+                                   _extract_triggered_data, _undo_standardize_array_newaxis
+
 
 def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                      freqs=2**np.arange(1,7.5,0.25), removeDC=True,

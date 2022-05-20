@@ -114,3 +114,15 @@ def test_plot_heatmap(oscillation):
     with pytest.raises(MISSING_ARG_ERRS):
         img, _ = plot_heatmap(timepts, channels, data, foo=None)
 
+
+def test_imports():
+    """ Test different import methods for plots module """
+    # Import entire package
+    import spynal
+    spynal.plots.full_figure
+    # Import subpackage
+    import spynal.plots as plots
+    plots.full_figure
+    # Import specific function from subpackage
+    from spynal.plots import full_figure
+    full_figure

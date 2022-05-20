@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Nonparametric randomization, permutation, and bootstrap statistics
+Nonparametric randomization, permutation (shuffle), and bootstrap statistics
 
 Overview
 --------
@@ -50,12 +50,15 @@ Function list
 Hypothesis tests
 ^^^^^^^^^^^^^^^^
 - one_sample_test :             Random-sign/bootstrap 1-sample tests (~ 1-sample t-test)
+
 - paired_sample_test :          Permutation/bstrap paired-sample difference tests (~ paired t-test)
 - paired_sample_test_labels :   Same, but with (data,labels) arg format instead of (data1,data2)
 - paired_sample_association_test : Perm/bstrap paired-sample association tests (~ correlation)
 - paired_sample_association_test_labels : Same, but with (data,labels) arg format
+
 - two_sample_test :             Permutation/bootstrap for all 2-sample tests (~ 2-sample t-test)
 - two_sample_test_labels :      Same, but with (data,labels) arg format instead of (data1,data2)
+
 - one_way_test :                Permutation 1-way multi-level test (~ 1-way ANOVA/F-test)
 - two_way_test :                Perm 2-way multi-level/multi-factor test (~ 2-way ANOVA/F-test)
 
@@ -64,13 +67,6 @@ Confidence intervals
 - one_sample_confints :         Bootstrap confidence intervals for any one-sample stat
 - paired_sample_confints :      Bootstrap confidence intervals for any paired-sample stat
 - two_sample_confints :         Bootstrap confidence intervals for any two-sample stat
-
-Random-sample generators
-^^^^^^^^^^^^^^^^^^^^^^^^
-- permutations :                Generate random permutations (resampling w/o replacement)
-- bootstraps :                  Generate random bootstrap samples (resampling w/ replacement)
-- signs :                       Generate random binary variables (eg for sign tests)
-- jackknifes :                  Generate jackknife samples (exclude each observation in turn)
 
 Function reference
 ------------------
@@ -87,9 +83,8 @@ from math import sqrt
 import numpy as np
 
 from spynal.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
-                         one_sample_tstat, paired_tstat, two_sample_tstat, \
-                         one_way_fstat, two_way_fstat, correlation, rank_correlation, isarraylike
-from spynal.randstats.sampling import bootstraps                         
+                         correlation
+from spynal.randstats.sampling import bootstraps
 from spynal.randstats.permutation import one_sample_randomization_test, \
                                          paired_sample_permutation_test, \
                                          paired_sample_association_permutation_test, \
@@ -98,6 +93,10 @@ from spynal.randstats.permutation import one_sample_randomization_test, \
 from spynal.randstats.bootstrap import one_sample_bootstrap_test, paired_sample_bootstrap_test, \
                                        paired_sample_association_bootstrap_test, \
                                        two_sample_bootstrap_test
+from spynal.randstats.utils import confint_to_indexes
+from spynal.randstats.helpers import _tail_to_compare, _two_sample_data_checks, \
+                                     _str_to_one_sample_stat, _str_to_two_sample_stat
+
 
 # =============================================================================
 # One-sample randomization tests
@@ -261,7 +260,7 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t'
         p values from test. For 1d data, returned as scalar value.
         For n-d data, it has same shape as data, with `axis` reduced to length 1
         if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
-        
+
     stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
@@ -373,7 +372,7 @@ def paired_sample_association_test(data1, data2, axis=0, method='permutation', s
         p values from test. For 1d data, returned as scalar value.
         For n-d data, it has same shape as data, with `axis` reduced to length 1
         if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
-        
+
     stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
@@ -493,7 +492,7 @@ def two_sample_test(data1, data2, axis=0, method='permutation', stat='t', tail='
         p values from test. For 1d data, returned as scalar value.
         For n-d data, it has same shape as data, with `axis` reduced to length 1
         if `keepdims` is True, or with `axis` removed  if `keepdims` is False.
-        
+
     stat_obs : float or ndarray, shape=(...,[1,]...), optional
         Statistic values for actual observed data. Same shape as `p`.
 
@@ -686,7 +685,7 @@ def two_way_test(data, labels, axis=0, method='permutation', stat='F', tail='rig
 
     keepdims : True
         NOTE: This arg not used here; only here to maintain same API with other stat func's.
-        
+
     **kwargs
         All other kwargs passed directly to callable `stat` function
 
@@ -825,7 +824,7 @@ def one_sample_confints(data, axis=0, stat='mean', confint=0.95, n_resamples=100
     # For vector-valued data, extract value from scalar array -> float for output
     if return_stats and (stat_obs.size == 1): stat_obs = stat_obs.item()
     elif not keepdims: stat_obs = stat_obs.squeeze(axis=axis)
-        
+
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
 
@@ -1024,180 +1023,3 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
 
-
-#==============================================================================
-# Utility functions
-#==============================================================================
-def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
-    """
-    Compute p value from observed and resampled values of a statistic
-
-    Parameters
-    ----------
-    stat_obs : ndarray, shape=(...,1,...)
-        Statistic values for actual observed data
-
-    stat_resmp : ndarray, shape=(...,n_resamples,...)
-        Statistic values for randomly resampled data
-
-    axis : int, default: 0
-        Axis in `stat_resmp` corresponding to distinct resamples
-        (should correspond to a length=1 axis in `stat_obs`)
-
-    tail : {'both','right','left'}, default: 'both' (2-tailed test)
-        Specifies tail of test to perform:
-
-        - 'both'  : 2-tail test -- test for abs(stat_obs) > abs(stat_resmp)
-        - 'right' : right-sided 1-tail test -- tests for stat_obs > stat_resmp
-        - 'left'  : left-sided 1-tail test -- tests for stat_obs < stat_resmp
-
-    Returns
-    -------
-    p : ndarray, shape=(...,1,...)
-        p values from resampling test. Same size as `stat_obs`.
-    """
-    if callable(tail):  compare_func = tail
-    else:               compare_func = _tail_to_compare(tail)
-
-    n_resamples = stat_resmp.shape[axis]
-
-    # Count number of resampled stat values more extreme than observed value
-    p = np.sum(compare_func(stat_obs,stat_resmp), axis=axis, keepdims=True)
-
-    # p value is proportion of samples failing criterion (+1 for observed stat)
-    return (p + 1) / (n_resamples + 1)
-
-
-def confint_to_indexes(confint, n_resamples):
-    """
-    Return indexes into set of bootstrap resamples corresponding
-    to given confidence interval
-
-    Parameters
-    ----------
-    confint : float
-        Desired confidence interval, in range 0-1. eg, for 99% confidence interval, input 0.99
-
-    n_resamples : int
-        Number of bootstrap resamples
-
-    Returns
-    -------
-    conf_indexes : list[int], shape=(2,)
-        Indexes into sorted bootstrap resamples corresponding to [lower,upper] confidence interval
-    """
-    max_interval = 1 - 2.0/n_resamples
-    assert (confint <= max_interval) or np.isclose(confint,max_interval), \
-        ValueError("Requested confint too large for given number of resamples (max = %.3f)" \
-                    % max_interval)
-
-    return [round(n_resamples * (1-confint)/2) - 1,
-            round(n_resamples - (n_resamples * (1-confint)/2)) - 1]
-
-
-#==============================================================================
-# Helper functions
-#==============================================================================
-def _tail_to_compare(tail):
-    """ Convert string specifier to callable function implementing it """
-
-    assert isinstance(tail,str), \
-        TypeError("Unsupported type '%s' for <tail>. Use string or function" % type(tail))
-    assert tail in ['both','right','left'], \
-        ValueError("Unsupported value '%s' for <tail>. Use 'both', 'right', or 'left'" % tail)
-
-    # 2-tailed test: hypothesis ~ stat_obs ~= statShuf
-    if tail == 'both':
-        return lambda stat_obs,stat_resmp: np.abs(stat_resmp) >= np.abs(stat_obs)
-
-    # 1-tailed rightward test: hypothesis ~ stat_obs > statShuf
-    elif tail == 'right':
-        return lambda stat_obs,stat_resmp: stat_resmp >= stat_obs
-
-    # 1-tailed leftward test: hypothesis ~ stat_obs < statShuf
-    else: # tail == 'left':
-        return lambda stat_obs,stat_resmp: stat_resmp <= stat_obs
-
-
-def _str_to_one_sample_stat(stat,axis):
-    """ Convert string specifier to function to compute 1-sample statistic """
-    if isinstance(stat,str):  stat = stat.lower()
-
-    if callable(stat):                  return stat
-    elif stat in ['t','tstat','t1']:    return lambda data: one_sample_tstat(data,axis=axis)
-    elif stat == 'mean':                return lambda data: data.mean(axis=axis,keepdims=True)
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
-
-
-def _str_to_assoc_stat(stat,axis):
-    """ Convert string specifier to function to compute paired-sample association statistic """
-    if isinstance(stat,str):  stat = stat.lower()
-
-    if callable(stat):
-        return stat
-    elif stat in ['r','pearson','pearsonr']:
-        return lambda data1,data2: correlation(data1, data2, axis=axis)
-    elif stat in ['r','pearson','pearsonr']:
-        return lambda data1,data2: rank_correlation(data1, data2, axis=axis)
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
-
-
-def _str_to_two_sample_stat(stat,axis):
-    """ Convert string specifier to function to compute 2-sample statistic """
-    if isinstance(stat,str):  stat = stat.lower()
-
-    if callable(stat):
-        return stat
-    elif stat in ['t','tstat','t1']:
-        return lambda data1,data2: two_sample_tstat(data1, data2, axis=axis)
-    elif stat in ['meandiff','mean']:
-        return lambda data1,data2: (data1.mean(axis=axis,keepdims=True) -
-                                    data2.mean(axis=axis,keepdims=True))
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
-
-
-def _str_to_one_way_stat(stat,axis):
-    """ Convert string specifier to function to compute 1-way multi-sample statistic """
-    if isinstance(stat,str):  stat = stat.lower()
-
-    if callable(stat):
-        return stat
-    elif stat in ['f','fstat','f1']:
-        return lambda data, labels: one_way_fstat(data, labels, axis=axis)
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
-
-
-def _str_to_two_way_stat(stat,axis):
-    """ Convert string specifier to function to compute 2-way multi-sample statistic """
-    if isinstance(stat,str):  stat = stat.lower()
-
-    if callable(stat):
-        return stat
-    elif stat in ['f','fstat','f2']:
-        return lambda data, labels: two_way_fstat(data, labels, axis=axis)
-    else:
-        raise ValueError('Unsupported option ''%s'' given for <stat>' % stat)
-
-
-def _paired_sample_data_checks(data1, data2):
-    """ Check data format requirements for paired-sample data """
-
-    assert np.array_equal(data1.shape, data2.shape), \
-        ValueError("data1 and data2 must have same shape for paired-sample tests. \
-                    Use two-sample tests to compare non-paired data with different n's.")
-
-
-def _two_sample_data_checks(data1, data2, axis):
-    """ Check data format requirements for two-sample data """
-
-    assert (data1.ndim == data2.ndim), \
-        "data1 and data2 must have same shape except for observation/trial axis (<axis>)"
-
-    if data1.ndim > 1:
-        assert np.array_equal([data1.shape[ax] for ax in range(data1.ndim) if ax != axis],
-                              [data2.shape[ax] for ax in range(data2.ndim) if ax != axis]), \
-            "data1 and data2 must have same shape except for observation/trial axis (<axis>)"

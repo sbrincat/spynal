@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
+""" Band-pass filtering & Hilbert transform-based spectral analysis """
 from math import ceil
 from collections import OrderedDict
 import numpy as np
 
-from scipy.signal import filtfilt,hilbert,zpk2tf,butter,ellip,cheby1,cheby2
+from scipy.signal import filtfilt, hilbert, zpk2tf, butter, ellip, cheby1, cheby2
 
 from spynal.utils import standardize_array
 from spynal.spikes import _spike_data_type, times_to_bool
-from spynal.spectra.spectra import remove_dc, complex_to_spec_type, phase, \
-                                   _undo_standardize_array_newaxis
+from spynal.spectra.preprocess import remove_dc
+from spynal.spectra.utils import complex_to_spec_type, phase
+from spynal.spectra.helpers import _undo_standardize_array_newaxis
 
 
 def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',

@@ -416,3 +416,16 @@ def test_two_way_info(two_way_data, method, interact, params, result):
         info = neural_info(data, labels, axis=0, method=method, model='anova2', interact=interact,
                            foo=None)
         info = neural_info(data, design, axis=0, method=method, model='regress', foo=None)
+
+
+def test_imports():
+    """ Test different import methods for info module """
+    # Import entire package
+    import spynal
+    spynal.info.dprime
+    # Import subpackage
+    import spynal.info as info
+    info.dprime
+    # Import specific function from subpackage
+    from spynal.info import dprime
+    dprime

@@ -7,8 +7,8 @@ from scipy.stats import bernoulli
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.utils import index_axis
-from spynal.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
-from spynal.spectra import spectrogram
+from spynal.sync.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
+from spynal.spectra.spectra import spectrogram
 
 # =============================================================================
 # Fixtures for generating simulated data
@@ -268,7 +268,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     timepts     = np.arange(lfpdata.shape[-1]) / smp_rate
     sync_shape  = (1, n_freqs, n_timepts)
     if spec_method == 'multitaper': sync_shape = (*sync_shape[:2], 1, sync_shape[-1])
-    
+
     extra_args  = {'timepts':timepts, 'width':0.2} if method != 'coherence' else {}
     if spec_method == 'multitaper':
         extra_args.update(time_width=0.2, spacing=0.2, freq_width=10)
@@ -288,7 +288,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert isinstance(phi, np.ndarray)
     assert freqs.shape == freqs_shape
     assert timepts.shape == (n_timepts,)
-    assert sync.shape == sync_shape    
+    assert sync.shape == sync_shape
     assert phi.shape == sync_shape
     assert np.issubdtype(sync.dtype,float)
     assert np.issubdtype(phi.dtype,float)
@@ -355,7 +355,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         if method != 'coherence': assert np.round(n.mean()) == result[2]
 
     # Test for consistent output with transposed data dimensionality -> (time,trials)
-    transposed_shape = (*sync_shape[1:],sync_shape[0])    
+    transposed_shape = (*sync_shape[1:],sync_shape[0])
     sync, freqs, timepts, n, phi = spike_field_coupling(spkdata.T, lfpdata.T,
                                                         axis=-1, time_axis=0, method=method,
                                                         spec_method=spec_method, smp_rate=smp_rate,
@@ -405,7 +405,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     sync, _, _, n, phi = spike_field_coupling(spkspec, lfpspec, axis=0, time_axis=time_axis,
                                               method=method, spec_method=spec_method,
                                               return_phase=True, **extra_args_lcl)
-    
+
     assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert sync.shape == sync_shape
@@ -421,7 +421,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     sync, freqs, timepts, n, phi = spike_field_coupling(spkdata, lfpdata, axis=0, time_axis=-1,
                                                         method=method, spec_method=spec_method,
                                                         smp_rate=smp_rate, return_phase=True,
-                                                        keepdims=False, **extra_args)    
+                                                        keepdims=False, **extra_args)
     assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert sync.shape == reduced_shape
@@ -433,10 +433,28 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     if method != 'coherence':
         assert n.shape == (n_timepts,)
         assert np.round(n.mean()) == result[2]
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         sync, freqs, timepts, n, phi = spike_field_coupling(spkdata, lfpdata, axis=0, time_axis=-1,
                                                             method=method, spec_method=spec_method,
                                                             smp_rate=smp_rate, return_phase=True,
                                                             foo=None, **extra_args)
+
+
+def test_imports():
+    """ Test different import methods for sync subpackage """
+    # Import entire package
+    import spynal
+    spynal.sync.phasesync.ppc
+    spynal.sync.ppc
+    # Import subpackage
+    import spynal.sync as sync
+    sync.phasesync.ppc
+    sync.ppc
+    # Import specific function from subpackage
+    from spynal.sync import ppc
+    ppc
+    # Import specific function from module
+    from spynal.sync.phasesync import ppc
+    ppc

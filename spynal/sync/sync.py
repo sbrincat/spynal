@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Analysis of oscillatory neural synchrony
@@ -30,13 +29,12 @@ Function reference
 # Created on Thu Oct  4 15:28:15 2018
 #
 # @author: sbrincat
-# TODO  Reformat jackknife functions to match randstats functions and move there?
 
 import numpy as np
 
-from spynal.utils import set_random_seed, index_axis, axis_index_slices
-from spynal.spectra import spectrogram, simulate_oscillation
-from spynal.randstats import jackknifes
+from spynal.utils import set_random_seed
+from spynal.spectra.utils import simulate_oscillation
+from spynal.randstats.sampling import jackknifes
 from spynal.sync.coherence import coherence, spike_field_coherence
 from spynal.sync.phasesync import plv, ppc, spike_field_plv, spike_field_ppc
 
@@ -288,77 +286,6 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
 # =============================================================================
 # Utility functions for generating single-trial jackknife pseudovalues
 # =============================================================================
-def two_sample_jackknife(func, data1, data2, *args, axis=0, shape=None, dtype=None, **kwargs):
-    """
-    Jackknife resampling of arbitrary statistic computed by `func` on `data1` and `data2`
-
-    Parameters
-    ----------
-    func : callable
-        Takes data1,data2 (and any other args) as input, returns statistic to be jackknifed
-
-    data1,data2 : ndarray, shape:Any
-        Data to compute jackknife resamples of. Shape is arbitrary but must be same.
-
-    axis : int, default: 0
-        Observation (trial) axis of `data1` and `data2`
-
-    shape : tuple, shape=(ndims,), dtype=int, default: data1.shape
-        Shape for output array `stat`. Default to same as input.
-
-    dtype : str, default: data1.dtype
-        dtype for output array `stat`. Default to same as input.
-
-    *args, **kwargs :
-        Any additional arguments passed directly to `func`
-
-    Returns
-    -------
-    stat : ndarray, shape=Any
-        Jackknife resamples of statistic. Same size as data1,data2.
-    """
-    if shape is None: shape = data1.shape
-    if dtype is None: dtype = data1.dtype
-
-    n = data1.shape[axis]
-    ndim = data1.ndim
-
-    # Create generator with n length-n vectors, each of which excludes 1 trial
-    resamples = jackknifes(n)
-
-    stat = np.empty(shape, dtype=dtype)
-
-    # Do jackknife resampling -- estimate statistic w/ each observation left out
-    for trial,sel in enumerate(resamples):
-        # Index into <axis> of data and stat, with ':' for all other axes
-        slices_in   = axis_index_slices(axis, sel, ndim)
-        slices_out  = axis_index_slices(axis, [trial], ndim)
-        stat[slices_out] = func(data1[slices_in], data2[slices_in], *args, **kwargs)
-
-    return stat
-
-
-def jackknife_to_pseudoval(x, xjack, n):
-    """
-    Calculate single-trial pseudovalues from leave-one-out jackknife estimates
-
-    Parameters
-    ----------
-    x : ndarray, shape=Any
-        Statistic computed on full observed data. Any arbitrary shape.
-
-    xjack : ndarray, shape=Any
-        Statistic computed on jackknife resampled data
-
-    n : int
-        Number of observations (trials) used to compute x
-
-    Returns
-    -------
-    pseudo : ndarray, shape=Any
-        Single-trial jackknifed pseudovalues. Same shape as xjack.
-    """
-    return n*x - (n-1)*xjack
 
 
 # =============================================================================
@@ -441,133 +368,3 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
     return data
 
 
-# =============================================================================
-# Other helper functions
-# =============================================================================
-def _infer_data_type(data):
-    """ Infer type of data signal given -- 'raw' (real) | 'spectral' (complex) """
-    if np.isrealobj(data):  return 'raw'
-    else:                   return 'spectral'
-
-
-def _sync_raw_to_spectral(data1, data2, smp_rate, axis, time_axis, taper_axis,
-                          spec_method, data_type, **kwargs):
-    """
-    Check data input to lfp-lfp synchrony methods.
-    Determine if input data is raw or spectral, compute spectral transform if raw.
-    """
-    if data_type is None: data_type = _infer_data_type(data1)
-
-    assert _infer_data_type(data2) == data_type, \
-        ValueError("data1 and data2 must have same data_type (raw or spectral)")
-
-    # If raw data is input, compute spectral transform first
-    if data_type == 'raw':
-        assert smp_rate is not None, \
-            "For raw/time-series data, need to input value for <smp_rate>"
-        assert time_axis is not None, \
-            "For raw/time-series data, need to input value for <time_axis>"
-        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
-        data1,freqs,timepts = spectrogram(data1, smp_rate, axis=time_axis, method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-        data2,freqs,timepts = spectrogram(data2, smp_rate, axis=time_axis, method=spec_method,
-                                          data_type='lfp', spec_type='complex', **kwargs)
-        # Account for new frequency (and/or taper) axis prepended before time_axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-        if spec_method == 'multitaper': taper_axis = time_axis-1
-
-    else:
-        freqs = []
-        timepts = []
-        if spec_method == 'multitaper':
-            assert taper_axis is not None, \
-                ValueError("Must set value for taper_axis for multitaper spectral inputs")
-
-    return data1, data2, freqs, timepts, axis, time_axis, taper_axis
-
-
-def _sfc_raw_to_spectral(spkdata, lfpdata, smp_rate, axis, time_axis, taper_axis, timepts,
-                         method, spec_method, data_type, **kwargs):
-    """
-    Check data input to spike-field coupling methods.
-    Determine if input data is raw or spectral, compute spectral transform if raw.
-    """
-    if data_type is None:
-        spk_data_type = _infer_data_type(spkdata)
-        lfp_data_type = _infer_data_type(lfpdata)
-        # Spike and field data required to have same type (both raw or spectral) for coherence
-        if method == 'coherence':
-            assert spk_data_type == lfp_data_type, \
-                ValueError("Spiking (%s) and LFP (%s) data must have same data type" % \
-                            (spk_data_type,lfp_data_type))
-        # Spike data must be raw (not spectral) for phase-based methods
-        else:
-            assert _infer_data_type(spkdata) == 'raw', \
-                ValueError("Spiking data must be given as raw, not spectral, data")
-
-        data_type = lfp_data_type
-
-    # If raw data is input, compute spectral transform first
-    if data_type == 'raw':
-        assert (timepts is not None) or (smp_rate is not None), \
-            ValueError("If no value is input for <timepts>, must input value for <smp_rate>")
-
-        # Ensure spkdata is boolean array with 1's for spiking times (ie not timestamps)
-        assert spkdata.dtype != object, \
-            TypeError("Spiking data must be converted from timestamps to boolean format")
-        spkdata = spkdata.astype(bool)
-
-        # Default timepts to range from 0 - n_timepts/smp_rate
-        if timepts is None:     timepts = np.arange(lfpdata.shape[time_axis]) / smp_rate
-        elif smp_rate is None:  smp_rate = 1 / np.diff(timepts).mean()
-
-        # For multitaper, keep tapers, to be averaged across like trials below
-        if spec_method == 'multitaper': kwargs.update(keep_tapers=True)
-        # For multitaper phase sync, spectrogram window spacing must = sampling interval (eg 1 ms)
-        if (spec_method == 'multitaper') and (method != 'coherence'):
-            kwargs.update(spacing=1/smp_rate)
-
-        # All spike-field coupling methods require spectral data for LFPs
-        lfpdata,freqs,times = spectrogram(lfpdata, smp_rate, axis=time_axis, method=spec_method,
-                                          data_type='lfp', **kwargs)
-
-        # Coherence requires spectral data for both spikes and LFPs
-        if method == 'coherence':
-            spkdata,_,_ = spectrogram(spkdata, smp_rate, axis=time_axis, method=spec_method,
-                                      data_type='spike', **kwargs)
-
-        timepts_raw = timepts
-        timepts = times + timepts[0]
-
-        # Multitaper spectrogram loses window width/2 timepoints at either end of data
-        # due to windowing. For phase-based SFC methods, must remove these timepoints
-        # from spkdata to match. (Note: not issue for coherence, which operates in spectral domain)
-        if (spec_method == 'multitaper') and (method != 'coherence'):
-            retained_times = (timepts_raw >= timepts[0]) & (timepts_raw <= timepts[-1])
-            spkdata = index_axis(spkdata, time_axis, retained_times)
-
-        # Frequency axis always inserted just before time axis, so if
-        # observation/trial axis is later, must increment it
-        # Account for new frequency (and/or taper) axis
-        n_new_axes = 2 if spec_method == 'multitaper' else 1
-
-        if method != 'coherence':
-            # Set up indexing to preserve axes before/after time axis,
-            # but insert n_new_axis just before it
-            slicer = [slice(None)]*time_axis + \
-                    [np.newaxis]*n_new_axes + \
-                    [slice(None)]*(spkdata.ndim-time_axis)
-            # Insert singleton dimension(s) into spkdata to match freq/taper dim(s) in lfpdata
-            spkdata = spkdata[tuple(slicer)]
-
-        if axis >= time_axis: axis += n_new_axes
-        time_axis += n_new_axes
-        if spec_method == 'multitaper': taper_axis = time_axis - 1
-
-    else:
-        freqs = []
-        # timepts = []
-
-    return spkdata, lfpdata, freqs, timepts, smp_rate, axis, time_axis, taper_axis

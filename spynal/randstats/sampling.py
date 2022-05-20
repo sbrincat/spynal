@@ -1,10 +1,22 @@
 # -*- coding: utf-8 -*-
-""" Random sample generators for randomization statistics """
+"""
+Random sample generators for randomization, permutation (shuffle), and bootstrap statistics
+
+Function reference
+------------------
+- permutations :                Generate random permutations (resampling w/o replacement)
+- bootstraps :                  Generate random bootstrap samples (resampling w/ replacement)
+- signs :                       Generate random binary variables (eg for sign tests)
+- jackknifes :                  Generate jackknife samples (exclude each observation in turn)
+
+Function reference
+------------------
+"""
 import numpy as np
 
 from spynal.utils import set_random_seed
 
- 
+
 # =============================================================================
 # Random sample generators
 # =============================================================================
@@ -128,5 +140,3 @@ def jackknifes(n, n_resamples=None, seed=None):
     trials = np.arange(n)
     for trial in range(n):
         yield trials != trial
-
-

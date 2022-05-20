@@ -1047,7 +1047,7 @@ def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=
     exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels
         Shape is usually same as data, with observation axis reduced to length = n_terms.
-        
+
         For single-term 'anova1' model:
         If data is 1d, `exp_var` is just returned as single scalar.
         If data is n-d and `keepdims` is True, it's returned as same shape as `data`,
@@ -1566,7 +1566,7 @@ def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
     exp_var : float or ndarray, shape=(...,[n_terms,]...)
         Percent (or proportion) of variance in data explained by labels.
         Shape is usually same as data, with observation axis reduced to length = n_terms.
-        
+
         For single-term 'anova1' model:
         If data is 1d, `exp_var` is just returned as single scalar.
         If data is n-d and `keepdims` is True, it's returned as same shape as `data`,

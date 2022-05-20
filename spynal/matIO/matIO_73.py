@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Functions for loading from and saving to Matlab v7.3 MAT files using h5py
-"""
+""" Functions for loading from and saving to Matlab v7.3 MAT files using h5py """
 import numpy as np
 
 import h5py
 
-from spynal.matIO.matIO import _parse_typemap, _dict_to_dataframe, DEBUG
+from spynal.matIO.helpers import _parse_typemap, _dict_to_dataframe, \
+                                 _h5py_matlab_type, _convert_string, DEBUG
 
 
 def _load73(filename, variables=None, typemap=None, order='C'):
@@ -194,23 +193,4 @@ def _who73(filename):
     variables = [vbl for vbl in file.keys() if vbl[0] != '#']
     file.close()
     return variables
-
-
-def _h5py_matlab_type(obj):
-    """ Returns variable type of Matlab variable encoded in h5py object """
-    assert 'MATLAB_class' in obj.attrs, \
-        AttributeError("Can't determine Matlab variable type. " \
-                       "No 'MATLAB_class' attribute in h5py object '%s'" % obj)
-
-    # Extract attribute with Matlab variable type, convert bytes -> string
-    return obj.attrs['MATLAB_class'].decode('UTF-8')
-
-
-def _convert_string(value, encoding='UTF-16'):
-    """ Converts integer-encoded strings in HDF5 files to strings """
-    return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
-
-    # Note: Alternative methods that tested much slower:
-    # return ''.join([chr(c) for c in value])               # time test ~ 7.2 s
-    # return ''.join(map(chr,value))                        # time test ~ 7.3 s
 

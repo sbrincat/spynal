@@ -31,7 +31,7 @@ from spynal.tests.data_fixtures import simulate_dataset
 from spynal.spikes import simulate_spike_trains, times_to_bool, \
                                    rate_stats, isi, isi_stats, \
                                    plot_mean_waveforms, plot_waveform_heatmap
-from spynal.spectra import compute_tapers
+from spynal.spectra.multitaper import compute_tapers
 
 
 # =============================================================================
@@ -528,22 +528,22 @@ def test_plot_mean_waveforms(plot_dir=None):
     waveforms = np.empty((n_units,), dtype=object)
     for unit in range(n_units):
         waveforms[unit] = means[:,[unit]] + np.random.standard_normal((n_timepts,n_spikes))
-        
+
     # Basic test plot
     plt.figure()
     plot_mean_waveforms(waveforms, plot_sd=True)
     plt.title('Basic test plot')
     plt.show()
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_mean_waveforms.png'))
-            
+
     # Plot w/o SDs (means only)
     plt.figure()
     plot_mean_waveforms(waveforms, plot_sd=False)
     plt.title('Means-only plot')
     plt.show()
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_mean_waveforms-noSD.png'))
-            
-            
+
+
 def test_plot_waveform_heatmap(plot_dir=None):
     """
     Basic testing for plotting function plot_waveform_heatmap()
@@ -562,16 +562,15 @@ def test_plot_waveform_heatmap(plot_dir=None):
     waveforms = np.empty((n_units,), dtype=object)
     for unit in range(n_units):
         waveforms[unit] = means[:,[unit]] + np.random.standard_normal((n_timepts,n_spikes))
-        
+
     # Basic test plot
     plt.figure()
     plot_waveform_heatmap(waveforms)
     plt.title('Basic test plot')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_waveform_heatmap.png'))
-            
+
     # Basic test plot
     plt.figure()
     plot_waveform_heatmap(waveforms, n_ybins=50)
     plt.title('Fine-grained bins')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_waveform_heatmap-50bins.png'))
-                        

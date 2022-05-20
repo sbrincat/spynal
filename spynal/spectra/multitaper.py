@@ -7,9 +7,10 @@ from scipy.signal.windows import dpss
 
 from spynal.utils import iarange
 from spynal.spikes import _spike_data_type, times_to_bool
-from spynal.spectra.spectra import _next_power_of_2, _extract_triggered_data, remove_dc, \
-                           complex_to_spec_type, get_freq_sampling, phase, fft
-                           
+from spynal.spectra.preprocess import remove_dc
+from spynal.spectra.utils import get_freq_sampling, complex_to_spec_type, phase
+from spynal.spectra.helpers import fft, _next_power_of_2, _extract_triggered_data
+
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
@@ -44,9 +45,9 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     tapers : ndarray, shape=(n_win_samples,n_tapers), default: (computed from t/f_range,ntapers)
         Precomputed tapers (as computed by :func:`compute_tapers`).
-        
+
         Alternative method for explictly setting taper functions.
-        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.        
+        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.
         If tapers not explicitly input, we compute them from `time_width`/`freq_width`/`n_tapers`.
         If tapers *are* explicitly input, `time_width`/`freq_width`/`n_tapers` are ignored.
 
@@ -198,9 +199,9 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     tapers : ndarray, shape=(n_win_samples,n_tapers), default: (computed from t/f_range,ntapers)
         Precomputed tapers (as computed by :func:`compute_tapers`).
-        
+
         Alternative method for explicitly setting taper functions.
-        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.        
+        Input either `time_width`/`freq_width`/`n_tapers` OR `tapers`.
         If tapers not explicitly input, we compute them from `time_width`/`freq_width`/`n_tapers`.
         If tapers *are* explicitly input, `time_width`/`freq_width`/`n_tapers` are ignored.
 

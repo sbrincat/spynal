@@ -5,12 +5,11 @@ import numpy as np
 
 from spynal.utils import axis_index_slices, isarraylike, one_way_fstat, two_way_fstat
 from spynal.randstats.sampling import signs, permutations
-from spynal.randstats.randstats import resamples_to_pvalue, _tail_to_compare, \
-                                       _paired_sample_data_checks, _two_sample_data_checks, \
-                                       _str_to_one_sample_stat, _str_to_assoc_stat, \
-                                       _str_to_two_sample_stat, _str_to_one_way_stat, \
-                                       _str_to_two_way_stat
-                                       
+from spynal.randstats.utils import resamples_to_pvalue
+from spynal.randstats.helpers import _str_to_one_sample_stat, _str_to_assoc_stat, \
+                                     _str_to_two_sample_stat, _str_to_one_way_stat, \
+                                     _str_to_two_way_stat, _tail_to_compare, \
+                                     _paired_sample_data_checks, _two_sample_data_checks
 
 
 def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both', n_resamples=10000,

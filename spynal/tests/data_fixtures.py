@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import norm, poisson, bernoulli
 from scipy.stats.mstats import gmean
 
-from spynal.spectra import simulate_oscillation
+from spynal.spectra.utils import simulate_oscillation
 
 # Possible errors to expect when inputting a missing/misspelled argument
 # Used for unit tests against silently ignoring incorrect arguments
@@ -258,7 +258,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     correlation Float in range[-1,+1]. Correlation between data in each condition.
             Note: Currently only supported for 2 conditions with normal distribution
             (simulated as multivariate normal w/ covariance matrix based on correlation,spreads)
-    
+
     seed    Int. Random generator seed for repeatable results.
             Set=None [default] for unseeded random numbers.
 
@@ -298,7 +298,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     if correlation == 0:
         assert (n_conds == 2) and (distribution == 'normal'), \
             ValueError("correlation currently only supported for 2 conds, normal distribution")
-        
+
     # Final mean value = baseline + condition-specific gain
     means = offset + gains
 
@@ -307,15 +307,15 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
         data = np.hstack([simulate_data(distribution=distribution, mean=mean, spread=spread,
                                         n=n, seed=None)
                         for mean,spread in zip(means,spreads)])
-        
-    # Generate data for both condition using single multivariate normal distribution        
+
+    # Generate data for both condition using single multivariate normal distribution
     else:
         # Convert SDs -> variances and compute pooled variance = geometric mean
         variances = np.asarray(spreads)**2
         var_pooled = gmean(variances)
         # Covariance matrix = variances and covariance = pooled variance * correlation
         cov_mx = [[variances[0], var_pooled*correlation], [var_pooled*correlation, variances[1]]]
-        
+
         # Generate multivariate normal data with given means and covariance matrix
         data = np.random.multivariate_normal(means, cov_mx, (n,))
         # Reshape (n,n_conds) -> (n*n_conds,)

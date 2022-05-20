@@ -6,12 +6,13 @@ from spynal.utils import data_labels_to_data_groups
 
 from spynal.tests.data_fixtures import one_sample_data, two_sample_data, \
                                        one_way_data, two_way_data, MISSING_ARG_ERRS
-from spynal.randstats import one_sample_tstat, one_sample_test, \
-                             paired_tstat, paired_sample_test, paired_sample_test_labels, \
-                             paired_sample_association_test, paired_sample_association_test_labels, \
-                             two_sample_tstat, two_sample_test, two_sample_test_labels, \
-                             one_way_fstat, one_way_test, two_way_fstat, two_way_test, \
-                             one_sample_confints, paired_sample_confints, two_sample_confints
+from spynal.utils import one_sample_tstat, paired_tstat, two_sample_tstat, \
+                         one_way_fstat, two_way_fstat
+from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_test_labels, \
+                                       paired_sample_association_test, paired_sample_association_test_labels, \
+                                       two_sample_test, two_sample_test_labels, \
+                                       one_way_test, two_way_test, \
+                                       one_sample_confints, paired_sample_confints, two_sample_confints
 
 
 # =============================================================================
@@ -56,7 +57,7 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
     assert stat_obs.shape == (n_chnls,)
     assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
-    
+
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = one_sample_test(data.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                               axis=0, method=method, seed=1,
@@ -111,7 +112,7 @@ def test_one_sample_test(one_sample_data, method, result_p, result_obs, result_r
                          [('paired_diff',   'permutation',  0.05, -2.97, -0.35),
                           ('paired_diff',   'bootstrap',    0.05, -2.97, -0.54),
                           ('paired_assoc',  'permutation',  0.35, -0.33, -0.09),
-                          ('paired_assoc',  'bootstrap',    0.25, -0.33, -0.05),                          
+                          ('paired_assoc',  'bootstrap',    0.25, -0.33, -0.05),
                           ('two_sample',    'permutation',  0.05, -3.39, -0.28),
                           ('two_sample',    'bootstrap',    0.05, -3.39, -0.49)])
 def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, result_resmp):
@@ -123,13 +124,13 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     data1_orig = data1.copy()
     data2_orig = data2.copy()
 
-    if stat == 'paired_diff':   
+    if stat == 'paired_diff':
         test_func, test_func_labels = paired_sample_test, paired_sample_test_labels
     elif stat == 'paired_assoc':
         test_func, test_func_labels = paired_sample_association_test, paired_sample_association_test_labels
     else:
         test_func, test_func_labels = two_sample_test, two_sample_test_labels
-    
+
     n = int(10)
     n_chnls = int(4)
     n_resamples = int(20)
@@ -147,7 +148,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     assert np.isclose(p[0,0], result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
- 
+
     # Test for consistent output with return_stats=False call
     p2 = test_func(data1, data2, axis=0, method=method, seed=1,
                    n_resamples=n_resamples, return_stats=False)
@@ -200,7 +201,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
     assert stat_obs.shape == (n_chnls,)
     assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
-   
+
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = test_func(data1.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                         data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),
@@ -287,7 +288,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
     assert p2.shape == p.shape
     assert np.allclose(p, p2)
- 
+
     # Test for consistent output with string-valued labels
     groups = np.asarray(['cond1','cond2','cond3'])
     p2, stat_obs2, stat_resmp2 = one_way_test(data, groups[labels], axis=0, method=method, seed=1,
@@ -321,7 +322,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     assert stat_obs.shape == (n_chnls,)
     assert np.isclose(p[0], result_p, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
-   
+
     # Test for consistent output with different data array shape (3rd axis)
     p, stat_obs, stat_resmp = one_way_test(data.reshape((n*n_groups,int(n_chnls/2),int(n_chnls/2))),
                                            labels, axis=0, method=method, seed=1,
@@ -495,7 +496,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     assert np.allclose(ci[:,0], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_resmp[:,0].mean(), result_resmp, rtol=1e-2, atol=1e-2)
-    
+
     # Test for consistent output with return_stats=False call
     ci2 = one_sample_confints(data, axis=0, n_resamples=n_resamples, seed=1, return_stats=False)
     assert np.array_equal(data,data_orig)     # Ensure input data not altered by func
@@ -564,7 +565,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
 def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_obs, result_resmp):
     """ Unit tests for paired/two_sample_confints function for paired/two-sample CI's """
     data, labels = two_sample_data
-    
+
     data1, data2 = data_labels_to_data_groups(data, labels, axis=0, groups=[0,1])
     data1_orig = data1.copy()
     data2_orig = data2.copy()
@@ -601,7 +602,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
                                          return_stats=True, keepdims=False)
     assert stat_obs.shape == (n_chnls,)
     assert np.isclose(stat_obs[0], result_obs, rtol=1e-2, atol=1e-2)
-    
+
     # Test for consistent output with different data array shape (3rd axis)
     ci, stat_obs, stat_resmp = test_func(data1.reshape((n,int(n_chnls/2),int(n_chnls/2))),
                                          data2.reshape((n,int(n_chnls/2),int(n_chnls/2))),
@@ -626,7 +627,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     assert stat_resmp.shape == (n_chnls,n_resamples)
     assert np.allclose(ci[0,:], result_ci, rtol=1e-2, atol=1e-2)
     assert np.isclose(stat_obs[0,0], result_obs, rtol=1e-2, atol=1e-2)
-    # print(stat_resmp.shape, stat_resmp[:].mean(), result_resmp)    
+    # print(stat_resmp.shape, stat_resmp[:].mean(), result_resmp)
     assert np.isclose(stat_resmp[0,:].mean(), result_resmp, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with vector-valued data
@@ -661,3 +662,20 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples,
                                             seed=1, return_stats=True, foo=None)
+
+def test_imports():
+    """ Test different import methods for randstats subpackage """
+    # Import entire package
+    import spynal
+    spynal.randstats.bootstrap.one_sample_bootstrap_test    
+    spynal.randstats.one_sample_bootstrap_test
+    # Import subpackage
+    import spynal.randstats as rand
+    rand.bootstrap.one_sample_bootstrap_test
+    rand.one_sample_bootstrap_test
+    # Import specific function from subpackage
+    from spynal.randstats import one_sample_bootstrap_test
+    one_sample_bootstrap_test
+    # Import specific function from module
+    from spynal.randstats.bootstrap import one_sample_bootstrap_test
+    one_sample_bootstrap_test

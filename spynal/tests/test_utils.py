@@ -51,7 +51,7 @@ def test_zscore(one_sample_data):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         z = zscore(data, foo=None)
-    
+
 
 @pytest.mark.parametrize('stat_func,    result',
                          [(fano,        1.95),
@@ -303,35 +303,35 @@ def test_gaussian(one_sample_data, func, result, result2):
 # =============================================================================
 # Other utility functions
 # =============================================================================
-@pytest.mark.parametrize('axis, target_axis', [(0,0), (1,0), (2,0), (-1,0), 
+@pytest.mark.parametrize('axis, target_axis', [(0,0), (1,0), (2,0), (-1,0),
                                                (0,2), (1,2), (2,2), (-1,2),
                                                (0,-1), (1,-1), (2,-1), (-1,-1)])
 
 def test_standardize_array(axis, target_axis):
-    """ Unit tests for standardize_array/undo_standardize_array """    
+    """ Unit tests for standardize_array/undo_standardize_array """
     # Test whether standardize->unstandardize returns original array
     data = np.random.rand(3,4,5)
     data_orig = data.copy()
-    
+
     data2, data_shape = standardize_array(data, axis=axis, target_axis=target_axis)
-    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
-    
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+
     data2 = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis)
-    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data,data2)
-    
+
     # Same test w/ 2D data array
     axis = min(axis,1)  # Reset axes from 2 -> 1
     target_axis = min(target_axis,1)
-    
+
     data = np.random.rand(3,4)
     data_orig = data.copy()
-    
+
     data2, data_shape = standardize_array(data, axis=axis, target_axis=target_axis)
-    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
-    
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+
     data2 = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis)
-    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data,data2)
 
 
@@ -351,8 +351,8 @@ def test_object_array_functions(axis):
     result_false[0,0] = [False]*5
     if axis == 0:
         result[0,0] = [1,2,6,7,8]
-        result[0,1] = [3,4,5,9,10]        
-        result_true[0,1] = [True]*5        
+        result[0,1] = [3,4,5,9,10]
+        result_true[0,1] = [True]*5
         result_false[0,1] = [False]*5
     elif axis == 1:
         result = np.empty((2,1), dtype=object)
@@ -386,3 +386,15 @@ def test_object_array_functions(axis):
     assert np.all(object_array_compare(data_cat, result, reduce_func=np.all) == [True, True])
     assert np.all(object_array_compare(data_cat, result, reduce_func=np.sum) == [5, 5])
 
+
+def test_imports():
+    """ Test different import methods for utils module """
+    # Import entire package
+    import spynal
+    spynal.utils.zscore
+    # Import subpackage
+    import spynal.utils as utils
+    utils.zscore
+    # Import specific function from subpackage
+    from spynal.utils import zscore
+    zscore

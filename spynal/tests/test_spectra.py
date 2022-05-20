@@ -6,9 +6,9 @@ import xarray as xr
 
 from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
                                        oscillatory_data, MISSING_ARG_ERRS
-from spynal.spectra import spectrum, spectrogram, itpc, \
-                           cut_trials, realign_data, pool_freq_bands, pool_time_epochs, \
-                           plot_spectrum, plot_spectrogram
+from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
+from spynal.spectra.preprocess import cut_trials, realign_data
+from spynal.spectra.postprocess import pool_freq_bands, pool_time_epochs
 
 
 # =============================================================================
@@ -463,15 +463,15 @@ def test_plot_spectrum(oscillation, method):
 
     # Basic test that plotted data == input data
     lines, _ = plot_spectrum(freqs, mean)
-    assert np.array_equal(freqs, freqs_orig) # Ensure input data isn't altered by function    
+    assert np.array_equal(freqs, freqs_orig) # Ensure input data isn't altered by function
     assert np.array_equal(mean, mean_orig)
     assert np.allclose(lines[0].get_xdata(), freqs_result)
     assert np.allclose(lines[0].get_ydata(), mean)
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         lines, _ = plot_spectrum(freqs, mean, foo=None)
-        
+
 
 @pytest.mark.parametrize('method', [('multitaper'), ('wavelet'), ('bandfilter')])
 def test_plot_spectrogram(oscillation, method):
@@ -489,8 +489,25 @@ def test_plot_spectrogram(oscillation, method):
     assert np.array_equal(freqs, freqs_orig) # Ensure input data isn't altered by function
     assert np.array_equal(spec, spec_orig)
     assert np.allclose(img.get_array().data, spec)
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         img, _ = plot_spectrogram(freqs, spec, foo=None)
-            
+
+def test_imports():
+    """ Test different import methods for spectra subpackage """
+    # Import entire package
+    import spynal
+    spynal.spectra.wavelet.wavelet_spectrogram    
+    spynal.spectra.wavelet_spectrogram
+    # Import subpackage
+    import spynal.spectra as spec
+    spec.wavelet.wavelet_spectrogram
+    spec.wavelet_spectrogram
+    # Import specific function from subpackage
+    from spynal.spectra import wavelet_spectrogram
+    wavelet_spectrogram
+    # Import specific function from module
+    from spynal.spectra.wavelet import wavelet_spectrogram
+    wavelet_spectrogram
+        

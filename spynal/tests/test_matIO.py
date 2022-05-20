@@ -7,6 +7,7 @@ import pandas as pd
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.matIO import loadmat
 
+# TODO Need tests for savemat, whomat
 # todo Should we embed mat file generation in a fixture? Would require matlab engine for Python.
 
 # =============================================================================
@@ -62,6 +63,27 @@ def test_loadmat(version):
         data = loadmat(filename, asdict=True, verbose=False, foo=None)
 
 
+def test_imports():
+    """ Test different import methods for matIO subpackage """
+    # Import entire package
+    import spynal
+    spynal.matIO.matIO.load    
+    spynal.matIO.load
+    # Import subpackage
+    import spynal.matIO as matIO
+    matIO.matIO.load
+    matIO.load
+    # Import specific function from subpackage
+    from spynal.matIO import load
+    load
+    # Import specific function from module
+    from spynal.matIO.matIO import load
+    load
+    
+    
+# =============================================================================
+# Hepler functions for unit tests
+# =============================================================================    
 def _variable_tests(data, table_type=dict, bool_type=bool):
     """ Set of tests to run on loadmat-loaded variables """
     assert isinstance(data, dict)

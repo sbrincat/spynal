@@ -5,9 +5,10 @@ Analysis of oscillatory neural coherence
 """
 import numpy as np
 
-from spynal.randstats import jackknifes
 from spynal.utils import axis_index_slices, setup_sliding_windows
-from spynal.sync.sync import jackknife_to_pseudoval, _sync_raw_to_spectral, _sfc_raw_to_spectral
+from spynal.randstats.sampling import jackknifes
+from spynal.randstats.utils import jackknife_to_pseudoval
+from spynal.sync.helpers import _sync_raw_to_spectral, _sfc_raw_to_spectral
 
 
 # =============================================================================
