@@ -2,6 +2,9 @@
 """
 Spectral analysis, signal processing, and continuous (LFP/EEG) data preprocessing
 
+This module is the base module for the `spectra` subpackage. It contains all the
+high-level API functions. Lower-level functions can be found in the other spectra modules.
+
 Overview
 --------
 Functionality for computing frequency spectra as well as time-frequency (spectrogram) transforms.
@@ -64,9 +67,9 @@ Other spectral analyses
 
 Preprocessing
 ^^^^^^^^^^^^^
+- get_freq_sampling :   Frequency sampling vector for a given FFT-based computation
 - cut_trials :          Cut LFPs/continuous data into trial segments
 - realign_data :        Realign LFPs/continuous data to new within-trial event
-- get_freq_sampling :   Frequency sampling vector for a given FFT-based computation
 - remove_dc :           Remove constant DC component of signals
 - remove_evoked :       Remove phase-locked evoked potentials from signals
 
@@ -75,16 +78,16 @@ Postprocesssing
 - pool_freq_bands :         Average spectral data within set of frequency bands
 - pool_time_epochs :        Average spectral data within set of time epochs
 - one_over_f_norm :         Normalize to correct for 1/f distribution of spectral power
-- complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
-- one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
 
 Plotting
 ^^^^^^^^
 - plot_spectrum :       Plot frequency spectrum as a line plot, handling freq axis properly
 - plot_spectrogram :    Plot time-frequency spectrogram as a heatmap plot
 
-Data simulation
-^^^^^^^^^^^^^^^
+Utilities
+^^^^^^^^^
+- complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
+- one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
 - simulate_oscillation :    Generates simulated oscillation-in-noise data
 
 
