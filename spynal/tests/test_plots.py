@@ -120,9 +120,9 @@ def test_imports():
     # Import entire package
     import spynal
     spynal.plots.full_figure
-    # Import subpackage
+    # Import module
     import spynal.plots as plots
     plots.full_figure
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.plots import full_figure
     full_figure

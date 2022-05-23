@@ -1,4 +1,4 @@
-spikes -- preprocessing & analysis of spiking activity
+Spiking data analysis & processing (**spynal.spikes**)
 ------------------------------------------------------
 
 .. automodule:: spikes

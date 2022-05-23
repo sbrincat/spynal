@@ -1,6 +1,6 @@
-==============
-Project layout
-==============
+=========================
+Library code organization
+=========================
 
 This chart shows the layout of all public directories, modules, and submodules in Spynal code
 

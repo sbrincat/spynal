@@ -423,9 +423,9 @@ def test_imports():
     # Import entire package
     import spynal
     spynal.info.dprime
-    # Import subpackage
+    # Import module
     import spynal.info as info
     info.dprime
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.info import dprime
     dprime

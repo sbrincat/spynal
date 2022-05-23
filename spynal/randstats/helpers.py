@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" Helper functions for `randstats` subpackage for randomization statistics """
+""" Helper functions for `randstats` module for randomization statistics """
 import numpy as np
 
 from spynal.utils import one_sample_tstat, two_sample_tstat, one_way_fstat, two_way_fstat, \

@@ -64,16 +64,16 @@ def test_loadmat(version):
 
 
 def test_imports():
-    """ Test different import methods for matIO subpackage """
+    """ Test different import methods for matIO module """
     # Import entire package
     import spynal
     spynal.matIO.matIO.load    
     spynal.matIO.load
-    # Import subpackage
+    # Import module
     import spynal.matIO as matIO
     matIO.matIO.load
     matIO.load
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.matIO import load
     load
     # Import specific function from module

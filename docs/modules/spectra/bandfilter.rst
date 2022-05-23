@@ -1,5 +1,5 @@
-bandfilter -- bandpass-filtering & Hilbert transform-based spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Bandpass-filter spectral analysis (**spynal.spectra.bandfilter**)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: spectra.bandfilter  
    :members:

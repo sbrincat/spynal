@@ -1,5 +1,5 @@
-wavelet -- continuous-wavelet-based spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Wavelet spectral analysis (**spynal.spectra.wavelet**)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: spectra.wavelet  
-   :members:
+    :members:

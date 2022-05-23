@@ -1,5 +1,5 @@
-sync -- oscillatory neural synchrony
-------------------------------------
+Oscillatory neural synchrony (**spynal.sync**)
+----------------------------------------------
 
 .. automodule:: sync    
    :members:

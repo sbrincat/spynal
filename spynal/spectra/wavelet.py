@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" Wavelet spectral analysis """
+""" Continuous-wavelet-based spectral analysis """
 from math import sqrt, pi, ceil
 import numpy as np
 
@@ -20,7 +20,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
 
     Not really the best way to compute 1D frequency spectra, but included for completeness
 
-    Only parameters differing from :func:`spectrum` are described here.
+    Only parameters differing from :func:`.spectrum` are described here.
 
     Parameters
     ----------
@@ -66,7 +66,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     """
     Compute continuous time-frequency wavelet transform of data at given frequencies.
 
-    Only parameters differing from :func:`spectrogram` are described here.
+    Only parameters differing from :func:`.spectrogram` are described here.
 
     Parameters
     ----------

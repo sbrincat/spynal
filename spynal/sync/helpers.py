@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" Helper functions for `sync` subpackage for oscillatory synchrony analysis """
+""" Helper functions for `sync` module for oscillatory synchrony analysis """
 import numpy as np
 
 from spynal.utils import index_axis

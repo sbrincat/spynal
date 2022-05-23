@@ -22,7 +22,7 @@ def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     Not really the best way to compute 1D frequency spectra, but included for completeness.
 
-    Only parameters differing from :func:`spectrum` are described here.
+    Only parameters differing from :func:`.spectrum` are described here.
 
     NOTE: Can specify filter implictly using (`freqs`,`filt`,`order`) OR explicitly using `params`.
           If `params` is input, `freqs`, `filt`, and `order` are ignored.
@@ -96,7 +96,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     Function aliased as bandfilter().
 
-    Only parameters differing from :func:`spectrogram` are described here.
+    Only parameters differing from :func:`.spectrogram` are described here.
 
     NOTE: Can specify filter implictly using (`freqs`,`filt`,`order`) OR explicitly using `params`.
           If `params` is input, `freqs`, `filt`, and `order` are ignored.

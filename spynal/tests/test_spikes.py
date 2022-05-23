@@ -600,9 +600,9 @@ def test_imports():
     # Import entire package
     import spynal
     spynal.spikes.density
-    # Import subpackage
+    # Import module
     import spynal.spikes as spk
     spk.density
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.spikes import density
     density

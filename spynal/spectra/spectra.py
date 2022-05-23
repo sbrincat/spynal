@@ -2,7 +2,7 @@
 """
 Spectral analysis, signal processing, and continuous (LFP/EEG) data preprocessing
 
-This module is the base module for the `spectra` subpackage. It contains all the
+This module is the base module for the `spectra` module. It contains all the
 high-level API functions. Lower-level functions can be found in the other spectra modules.
 
 Overview
@@ -40,22 +40,22 @@ General spectral analysis
 - power_spectrogram : Power of time-frequency transform
 - phase_spectrogram : Phase of time-frequency transform
 
-Multitaper spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- multitaper_spectrum :     Multitaper (DPSS) frequency spectrum
-- multitaper_spectrogram :  Multitaper (DPSS) time-frequency spectrogram
-- compute_tapers :          Compute DPSS tapers for use in multitaper spectral analysis
-
-Wavelet spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^
+Wavelet spectral analysis (spectra.wavelet)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - wavelet_spectrum :    Wavelet-based frequency spectrum
 - wavelet_spectrogram : Time-frequency continuous wavelet transform
 - compute_wavelets :    Compute wavelets for use in wavelet spectral analysis
 - wavelet_bandwidth :   Compute time,frequency bandwidths for set of wavelets
 - wavelet_edge_extent : Compute extent of edge effects for set of wavelets
 
-Bandpass-filtering spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Multitaper spectral analysis (spectra.multitaper)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- multitaper_spectrum :     Multitaper (DPSS) frequency spectrum
+- multitaper_spectrogram :  Multitaper (DPSS) time-frequency spectrogram
+- compute_tapers :          Compute DPSS tapers for use in multitaper spectral analysis
+
+Bandpass-filtering spectral analysis (spectra.bandfilter)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - bandfilter_spectrum :     Band-filtered frequency spectrum
 - bandfilter_spectrogram :  Band-filtered, Hilbert-transformed time-frequency of data
 - set_filter_params :       Set filter coefficients for use in band-filtered analysis
@@ -65,30 +65,30 @@ Other spectral analyses
 - itpc :                Intertrial phase clustering (analysis of phase locking to trial events)
 - burst_analysis :      Compute oscillatory burst analysis of Lundqvist et al 2016
 
-Preprocessing
-^^^^^^^^^^^^^
-- get_freq_sampling :   Frequency sampling vector for a given FFT-based computation
+Preprocessing (spectra.preprocess)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - cut_trials :          Cut LFPs/continuous data into trial segments
 - realign_data :        Realign LFPs/continuous data to new within-trial event
 - remove_dc :           Remove constant DC component of signals
 - remove_evoked :       Remove phase-locked evoked potentials from signals
 
-Postprocesssing
-^^^^^^^^^^^^^^^
+Postprocesssing (spectra.postprocess)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - pool_freq_bands :         Average spectral data within set of frequency bands
 - pool_time_epochs :        Average spectral data within set of time epochs
 - one_over_f_norm :         Normalize to correct for 1/f distribution of spectral power
+
+Utilities (spectra.utils)
+^^^^^^^^^^^^^^^^^^^^^^^^^
+- get_freq_sampling :       Frequency sampling vector for a given FFT-based computation
+- complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
+- one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
+- simulate_oscillation :    Generates simulated oscillation-in-noise data
 
 Plotting
 ^^^^^^^^
 - plot_spectrum :       Plot frequency spectrum as a line plot, handling freq axis properly
 - plot_spectrogram :    Plot time-frequency spectrogram as a heatmap plot
-
-Utilities
-^^^^^^^^^
-- complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
-- one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
-- simulate_oscillation :    Generates simulated oscillation-in-noise data
 
 
 Dependencies
@@ -140,15 +140,15 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_
     method : {'multitaper','wavelet','bandfilter'}, default: 'multitaper'
         Specific spectral analysis method to use:
 
-        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrum`
-        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrum`
-        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrum`
+        - 'multitaper' : Multitaper spectral analysis in :func:`.multitaper_spectrum`
+        - 'wavelet' : Wavelet analysis in :func:`.wavelet_spectrum`
+        - 'bandfilter' : Bandpass filtering in :func:`.bandfilter_spectrum`
 
     data_type : {'lfp','spike'}, default: 'lfp'
         Type of signal in data
 
     spec_type : {'complex','power','phase','real','imag'}, default: 'complex'
-        Type of spectral signal to return. See :func:`complex_to_spec_type` for details.
+        Type of spectral signal to return. See :func:`.complex_to_spec_type` for details.
 
     removeDC : bool, default: True
         If True, subtracts off mean DC component across `axis`, making signals zero-mean
@@ -207,16 +207,16 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
     method : {'multitaper','wavelet','bandfilter','burst'}, default: 'wavelet'
         Specific spectral analysis method to use:
 
-        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
-        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
-        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
-        - 'burst' : Oscillatory burst analysis in :func:`burst_analysis`
+        - 'multitaper' : Multitaper spectral analysis in :func:`.multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`.wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`.bandfilter_spectrogram`
+        - 'burst' : Oscillatory burst analysis in :func:`.burst_analysis`
 
     data_type : {'lfp','spike'}, default: 'lfp'
         Type of signal in data
 
     spec_type : {'complex','power','phase','real','imag'}, default: 'complex'
-        Type of spectral signal to return. See :func:`complex_to_spec_type` for details.
+        Type of spectral signal to return. See :func:`.complex_to_spec_type` for details.
 
     removeDC : bool, default: True
         If True, subtracts off mean DC component across `axis`, making signals zero-mean
@@ -322,9 +322,9 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
     method : {'multitaper','wavelet','bandfilter'}, default: 'wavelet'
         Specific underlying spectral analysis method to use:
 
-        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
-        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
-        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
+        - 'multitaper' : Multitaper spectral analysis in :func:`.multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`.wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`.bandfilter_spectrogram`
 
     itpc_method : {'PLV','Z','PPC'}, default: 'PLV'
         Method to use for computing intertrial phase clustering:
@@ -449,9 +449,9 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
     method : {'multitaper','wavelet','bandfilter'}, default: 'wavelet'
         Specific spectral analysis method to use:
 
-        - 'multitaper' : Multitaper spectral analysis in :func:`multitaper_spectrogram`
-        - 'wavelet' : Wavelet analysis in :func:`wavelet_spectrogram`
-        - 'bandfilter' : Bandpass filtering in :func:`bandfilter_spectrogram`
+        - 'multitaper' : Multitaper spectral analysis in :func:`.multitaper_spectrogram`
+        - 'wavelet' : Wavelet analysis in :func:`.wavelet_spectrogram`
+        - 'bandfilter' : Bandpass filtering in :func:`.bandfilter_spectrogram`
 
         Note: In the original paper, multitaper was used, but all three
         methods were claimed to produced similar results.

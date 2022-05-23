@@ -1,5 +1,5 @@
-info -- measures of neural information
---------------------------------------
+Neural information measures (**spynal.info**)
+---------------------------------------------
 
 .. automodule:: info
    :members:

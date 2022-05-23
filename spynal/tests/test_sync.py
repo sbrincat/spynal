@@ -443,16 +443,16 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
 
 
 def test_imports():
-    """ Test different import methods for sync subpackage """
+    """ Test different import methods for sync module """
     # Import entire package
     import spynal
     spynal.sync.phasesync.ppc
     spynal.sync.ppc
-    # Import subpackage
+    # Import module
     import spynal.sync as sync
     sync.phasesync.ppc
     sync.ppc
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.sync import ppc
     ppc
     # Import specific function from module

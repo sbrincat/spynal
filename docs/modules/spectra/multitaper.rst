@@ -1,5 +1,5 @@
-multitaper - multitaper spectral analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Multitaper spectral analysis (**spynal.spectra.multitaper**)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: spectra.multitaper  
    :members:

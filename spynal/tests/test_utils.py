@@ -392,9 +392,9 @@ def test_imports():
     # Import entire package
     import spynal
     spynal.utils.zscore
-    # Import subpackage
+    # Import module
     import spynal.utils as utils
     utils.zscore
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.utils import zscore
     zscore

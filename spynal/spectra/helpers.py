@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" Helper functions for spectra subpackage for spectral analysis """
+""" Helper functions for spectra module for spectral analysis """
 from warnings import warn
 from math import floor, ceil, log2
 import numpy as np

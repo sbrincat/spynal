@@ -495,16 +495,16 @@ def test_plot_spectrogram(oscillation, method):
         img, _ = plot_spectrogram(freqs, spec, foo=None)
 
 def test_imports():
-    """ Test different import methods for spectra subpackage """
+    """ Test different import methods for spectra module """
     # Import entire package
     import spynal
     spynal.spectra.wavelet.wavelet_spectrogram    
     spynal.spectra.wavelet_spectrogram
-    # Import subpackage
+    # Import module
     import spynal.spectra as spec
     spec.wavelet.wavelet_spectrogram
     spec.wavelet_spectrogram
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.spectra import wavelet_spectrogram
     wavelet_spectrogram
     # Import specific function from module

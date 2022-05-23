@@ -664,16 +664,16 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
                                             seed=1, return_stats=True, foo=None)
 
 def test_imports():
-    """ Test different import methods for randstats subpackage """
+    """ Test different import methods for randstats module """
     # Import entire package
     import spynal
     spynal.randstats.bootstrap.one_sample_bootstrap_test    
     spynal.randstats.one_sample_bootstrap_test
-    # Import subpackage
+    # Import module
     import spynal.randstats as rand
     rand.bootstrap.one_sample_bootstrap_test
     rand.one_sample_bootstrap_test
-    # Import specific function from subpackage
+    # Import specific function from module
     from spynal.randstats import one_sample_bootstrap_test
     one_sample_bootstrap_test
     # Import specific function from module

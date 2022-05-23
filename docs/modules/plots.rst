@@ -1,5 +1,5 @@
-plots -- plotting functions and utilities
------------------------------------------
+Plotting functions and utilities (**spynal.plots**)
+---------------------------------------------------
 
 .. automodule:: plots
     :members:

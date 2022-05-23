@@ -27,7 +27,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     This will change the frequency sampling (number of freqs and exact freqs sampled) from what
     would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
-    Only parameters differing from :func:`spectrum` are described here.
+    Only parameters differing from :func:`.spectrum` are described here.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     This will change the frequency sampling (number of freqs and exact freqs sampled) from what
     would be obtained from the original raw data, but can be skipped by inputtng pad=False.
 
-    Only parameters differing from :func:`spectrogram` are described here.
+    Only parameters differing from :func:`.spectrogram` are described here.
 
     Parameters
     ----------
