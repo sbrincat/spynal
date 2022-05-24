@@ -1,8 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Analysis of phase-based oscillatory neural synchrony
-"""
+""" Phase-based oscillatory neural synchrony analysis """
 from warnings import warn
 import numpy as np
 
@@ -29,7 +26,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
         dphi = phase(data1) - phase(data2)
         PLV  = abs( trial_mean(exp(i*dphi)) )
 
-    Only parameters differing from :func:`synchrony` are described here.
+    Only parameters differing from :func:`.synchrony` are described here.
 
     Parameters
     ----------
@@ -158,7 +155,7 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
 
         PPC = (n*PLV^2 - 1) / (n-1)
 
-    Only parameters differing from :func:`synchrony` are described here.
+    Only parameters differing from :func:`.synchrony` are described here.
 
     Parameters
     ----------
@@ -199,6 +196,8 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     Because spiking response are sparse, spike-LFP PLV is typically computed within sliding
     time windows (ie summation across trials AND across within-window timepoints). These can
     be specified either explicitly using `timewins` or implicitly using `width`/`spacing`/`lims`.
+
+    Only parameters differing from :func:`.spike_field_coupling` are described here.
 
     Parameters
     ----------
@@ -414,6 +413,8 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     Because spiking response are sparse, spike-LFP PPC is typically computed within sliding
     time windows (ie summation across trials AND across within-window timepoints). These can
     be specified either explicitly using `timewins` or implicitly using `width`/`spacing`/`lims`.
+
+    Only parameters differing from :func:`.spike_field_coupling` are described here.
 
     Parameters
     ----------

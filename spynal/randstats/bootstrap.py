@@ -15,7 +15,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both', n_resam
     """
     Mass univariate 1-sample bootstrap test
 
-    Parameters and returns are same as :func:`one_sample_test`
+    Parameters and returns are same as :func:`.one_sample_test`
 
     Computes stat on each bootstrap resample, and subtracts off stat computed on
     observed data to center resamples at 0 (mu) to estimate null distribution.
@@ -100,7 +100,7 @@ def paired_sample_bootstrap_test(data1, data2, axis=0, d=0, stat='t', tail='both
     """
     Mass univariate paired-sample bootstrap test
 
-    Parameters and returns are same as :func:`paired_sample_test`
+    Parameters and returns are same as :func:`.paired_sample_test`
 
     Computes stat on each bootstrap resample, and subtracts off stat computed on
     observed data to center resamples at 0 (mu) to estimate null distribution.
@@ -129,7 +129,7 @@ def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tai
     """
     Mass bivariate boostrap test of association (eg correlation) between two paired samples
 
-    Parameters and returns are same as :func:`paired_sample_association_test`
+    Parameters and returns are same as :func:`.paired_sample_association_test`
 
     Observations are bootstrap resampled in pairs, and stat is recomputed on each.
     Stat computed on observed data is subtracted off resamples, to center them at 0 and estimate
@@ -210,7 +210,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
     """
     Mass univariate bootstrap two-sample test
 
-    Parameters and returns are same as :func:`two_sample_test`
+    Parameters and returns are same as :func:`.two_sample_test`
 
     Computes stat on each pair of bootstrap resamples, and subtracts off stat computed
     on observed data to center resamples at 0 (mu) to estimate null distribution.

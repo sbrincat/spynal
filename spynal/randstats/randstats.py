@@ -118,8 +118,8 @@ def one_sample_test(data, axis=0, method='randomization', mu=0, stat='t', tail='
     method : str
         Resampling paradigm to use for test:
 
-        - 'randomization' : Randomization sign test in :func:`one_sample_randomization_test`
-        - 'bootstrap'     : Bootstrap test in :func:`one_sample_bootstrap_test`
+        - 'randomization' : Randomization sign test in :func:`.one_sample_randomization_test`
+        - 'bootstrap'     : Bootstrap test in :func:`.one_sample_bootstrap_test`
 
     mu : float, default: 0
         Expected value of `stat` under the null hypothesis (usually 0)
@@ -213,8 +213,8 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t'
     method : str
         Resampling paradigm to use for test:
 
-        - 'permutation' : Permutation test in :func:`paired_sample_permutation_test`
-        - 'bootstrap' : Bootstrap test in :func:`paired_sample_bootstrap_test`
+        - 'permutation' : Permutation test in :func:`.paired_sample_permutation_test`
+        - 'bootstrap' : Bootstrap test in :func:`.paired_sample_bootstrap_test`
 
     d : float, Default: 0
         Expected value of `stat` under null distribution (usually 0)
@@ -328,8 +328,8 @@ def paired_sample_association_test(data1, data2, axis=0, method='permutation', s
     method : str, default: 'permutation'
         Resampling paradigm to use for test:
 
-        - 'permutation'   : Permutation test in :func:`paired_sample_association_permutation_test`
-        - 'bootstrap'     : Bootstrap test in :func:`paired_sample_association_bootstrap_test`
+        - 'permutation'   : Permutation test in :func:`.paired_sample_association_permutation_test`
+        - 'bootstrap'     : Bootstrap test in :func:`.paired_sample_association_bootstrap_test`
 
     stat : str or callable, default: 'r'
         Statistic to compute and resample. Can be given as a string specifier:
@@ -445,8 +445,8 @@ def two_sample_test(data1, data2, axis=0, method='permutation', stat='t', tail='
     method : str
         Resampling paradigm to use for test:
 
-        - 'permutation' : Permutation test in :func:`two_sample_permutation_test`
-        - 'bootstrap' : Bootstrap test in :func:`two_sample_bootstrap_test`
+        - 'permutation' : Permutation test in :func:`.two_sample_permutation_test`
+        - 'bootstrap' : Bootstrap test in :func:`.two_sample_bootstrap_test`
 
     d : float, Default: 0
         Expected value of `stat` under null distribution (usually 0)

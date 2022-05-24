@@ -17,7 +17,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both', n_r
     """
     Mass univariate 1-sample randomization test
 
-    Parameters and returns are same as :func:`one_sample_test`
+    Parameters and returns are same as :func:`.one_sample_test`
 
     For each random resample, each observation is randomly assigned a sign
     (+ or -), similar to a Fisher sign test.  The same stat is then computed on
@@ -105,7 +105,7 @@ def paired_sample_permutation_test(data1, data2, axis=0, d=0, stat='t', tail='bo
     """
     Mass univariate paired-sample permutation test
 
-    Parameters and returns are same as :func:`paired_sample_test`
+    Parameters and returns are same as :func:`.paired_sample_test`
 
     For each random resample, each paired-difference observation is randomly
     assigned a sign (+ or -), which is equivalent to randomly permuting each
@@ -136,7 +136,7 @@ def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', t
     """
     Mass bivariate permutation test of association (eg correlation) between two paired samples
 
-    Parameters and returns are same as :func:`paired_sample_association_test`
+    Parameters and returns are same as :func:`.paired_sample_association_test`
 
     Observations are randomly permuted across one of the paired samples (data1 vs data2) relative
     to the other, to eliminate any association between them while preserving the marginal
@@ -211,7 +211,7 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both', n_r
     """
     Mass univariate permutation two-sample test
 
-    Parameters and returns are same as :func:`two_sample_test`
+    Parameters and returns are same as :func:`.two_sample_test`
 
     Observations are permuted across the two samples (data1 vs data2).
     The data is pooled across data1 and and data2, and for each random resample,
@@ -309,7 +309,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     """
     Mass univariate one-way permutation test
 
-    Parameters and returns are same as :func:`one_way_test`
+    Parameters and returns are same as :func:`.one_way_test`
 
     Observation labels are randomly shuffled and allocated to groups
     with the same n's as in the actual observed data.
@@ -403,7 +403,7 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
     """
     Mass univariate permutation 2-way test
 
-    Parameters and returns are same as :func:`two_way_test`
+    Parameters and returns are same as :func:`.two_way_test`
 
     Observation labels are randomly shuffled and allocated to groups (ANOVA cells)
     with the same n's as in the actual observed data.

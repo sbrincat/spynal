@@ -1,8 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Analysis of oscillatory neural coherence
-"""
+""" Oscillatory coherence analysis """
 import numpy as np
 
 from spynal.utils import axis_index_slices, setup_sliding_windows
@@ -24,7 +21,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     Coherence is a spectral analog of linear correlation that takes both phase and amplitude
     into account.
 
-    Only parameters differing from :func:`synchrony` are described here.
+    Only parameters differing from :func:`.synchrony` are described here.
 
     Parameters
     ----------
@@ -146,7 +143,7 @@ def spike_field_coherence(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=N
     """
     Compute pairwise coherence between single-channel spiking data and LFP data
 
-    Only parameters differing from :func:`spike_field_coupling` are described here.
+    Only parameters differing from :func:`.spike_field_coupling` are described here.
 
     Parameters
     ----------

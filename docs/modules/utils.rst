@@ -1,5 +1,5 @@
-General utility functions (**spynal.untils**)
----------------------------------------------
+General utility functions (**spynal.utils**)
+--------------------------------------------
 
 .. automodule:: utils
     :members:

@@ -1,5 +1,13 @@
-Nonparametric randomization statistics (**spynal.randstats**)
--------------------------------------------------------------
+Randomization statistics (**spynal.randstats**)
+-----------------------------------------------
 
-.. automodule:: randstats
-   :members:
+.. automodule:: randstats.randstats
+    :members:
+
+    .. toctree::
+        :maxdepth: 1
+
+        randstats/sampling
+        randstats/permutation
+        randstats/bootstrap
+        randstats/utils

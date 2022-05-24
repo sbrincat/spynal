@@ -2,26 +2,65 @@
 """
 Analysis of oscillatory neural synchrony
 
+This module is the base module for the `sync` module. It contains all the
+high-level API functions. Lower-level functions can be found in the other sync modules.
+
+Overview
+--------
+Contains functionality for computing oscillatory neural synchrony between pairs of 
+continuous signals (LFPs/EEGs/etc.) or between pairs of spiking and continuous signals
+(ie spike-LFP pair).
+
+Currently two types of synchrony methods, based on different theoretical frameworks, are available.
+Coherence is based on the theory of linear stochastic processes, and is a frequency-domain analog
+of standard (Pearson) correlation. Phase-based methods (Phase-locking value, pairwise phase consistency)
+are based on circular statistics, and are closely-related to the length of the vector average of the
+relative phases of a signal pair (eg spike-triggered LFP phase or phase difference between LFP pair).
+
+Input data (for most functions) can either be raw data or data already spectrally-transformed
+(using either functionality in the `spynal.spectra` module or users' own custom code). In either
+case, any synchrony method can be combined with any underlying spectral method (eg wavelet, 
+multitaper, or bandfilter).
+ 
+NOTE: Unlike other spynal functions that can run in parallel across multiple channels
+("mass-univariate" analysis), these functions are currently set up to compute synchrony
+on only a single pair of channels (2 LFPs or spike/LFP pair) at once.
+
+Nevertheless, sync functions can perform operations in a mass-bivariate manner over all other
+dimension. This means that rather than embedding function calls in for loops over frequencies,
+timepoints, etc., like this::
+
+    for f in frequencies:
+        for t in timepoints:
+            results[f,t] = compute_something(data[f,t],data2[f,t])
+
+You can instead execute a single call on ALL the data, labeling the relevant axis
+for the computation (usually trials/observations here), and it will run in parallel (vectorized)
+across all frequencies, timepoints, etc. in the data, like this:
+
+``results = compute_something(data1, data2, axis)``
+
 Function list
 -------------
-Field-field synchrony
-^^^^^^^^^^^^^^^^^^^^^
+General synchrony functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - synchrony :               General synchrony between pair of analog channels using given method
+- spike_field_coupling :    General spike-field coupling/synchrony btwn spike/LFP pair
+- simulate_multichannel_oscillation : Generates simulated oscillatory paired data
+
+Coherence analysis (**sync.coherence**)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - coherence :               Time-frequency coherence between pair of analog channels
+- spike_field_coherence :   Spike-field coherence between a spike/LFP pair
 - ztransform_coherence  :   Z-transform coherence so ~ normally distributed
+
+Phase-based synchrony analysis (**sync.phasesync**)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - plv :                     Phase locking value (PLV) between pair of analog channels
 - ppc :                     Pairwise phase consistency (PPC) btwn pair of analog channels
-
-Spike-field synchrony
-^^^^^^^^^^^^^^^^^^^^^
-- spike_field_coupling :    General spike-field coupling/synchrony btwn spike/LFP pair
-- spike_field_coherence :   Spike-field coherence between a spike/LFP pair
 - spike_field_plv :         Spike-field PLV between a spike/LFP pair
 - spike_field_ppc :         Spike-field PPC between a spike/LFP pair
 
-Data simulation
-^^^^^^^^^^^^^^^
-- simulate_multichannel_oscillation : Generates simulated oscillatory paired data
 
 Function reference
 ------------------
@@ -69,9 +108,9 @@ def synchrony(data1, data2, axis=0, method='PPC', return_phase=False, single_tri
     method : {'PPC','PLV','coherence'}, default: 'PPC'
         Synchrony estimation method:
 
-        - 'PPC' : Pairwise Phase Consistency, measure of phase synchrony (see :func:`ppc`)
-        - 'PLV' : Phase Locking Value, measure of phase synchrony (see :func:`plv`)
-        - 'coherence' : coherence, measure of linear oscillatory coupling (see :func:`coherence`)
+        - 'PPC' : Pairwise Phase Consistency, measure of phase synchrony (see :func:`.ppc`)
+        - 'PLV' : Phase Locking Value, measure of phase synchrony (see :func:`.plv`)
+        - 'coherence' : coherence, measure of linear oscillatory coupling (see :func:`.coherence`)
 
     return_phase : bool, default: False
         If False, only return measure of synchrony magnitude/strength between data1 and data2.
@@ -194,9 +233,9 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
     method : {'PPC','PLV','coherence'}, default: 'PPC'
         Spike-field coupling estimation method
 
-        - 'PPC' : Pairwise Phase Consistency (see :func:`spike_field_ppc`)
-        - 'PLV' : Phase Locking Value (see :func:`spike_field_plv`)
-        - 'coherence' : coherence (see :func:`spike_field_coherence`)
+        - 'PPC' : Pairwise Phase Consistency (see :func:`.spike_field_ppc`)
+        - 'PLV' : Phase Locking Value (see :func:`.spike_field_plv`)
+        - 'coherence' : coherence (see :func:`.spike_field_coherence`)
 
     return_phase : bool, default: False
         If False, only return measure of synchrony magnitude/strength between data1 and data2.
@@ -306,7 +345,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
 
     *args :
     **kwargs :
-        Rest of place and keyword arguments are passed to :func:`simulate_oscillation`
+        Rest of place and keyword arguments are passed to :func:`.simulate_oscillation`
         for each channel. Each argument can be given in one of two forms:
 
         (1) Scalar. A single value equivalent to the same argument to simulate_oscillation().
@@ -314,7 +353,7 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
         (2) Array-like, shape=(n_chnls,). List with different values for each channel,
             which will be iterated through.
 
-        See :func:`simulate_oscillation` for details on arguments.
+        See :func:`.simulate_oscillation` for details on arguments.
 
         Exceptions: If a value is set for `seed`, it will be used to set the
         random number generator only ONCE at the start of this function, so that
