@@ -2,7 +2,9 @@
 """
 General-purpose python utilities for data preprocessing and analysis
 
-Includes:
+Overview
+--------
+Functionality includes:
 
 - basic statistics: z-scoring, t/F-stats, SNR measures (Fano,CV,etc.), correlation
 - numerical methods: interpolation, setting random seed

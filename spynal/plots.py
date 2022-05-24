@@ -3,6 +3,17 @@
 """
 Functions for generating common data plots and plotting-related utilities
 
+Overview
+--------
+High-level interfaces to create plot types commonly used in neuroscience, including heat maps,
+line/curve plots with tranparent fills indicating errors, and offset lineseries plots (eg for
+plotting series of ephys traces or evoked potentials).
+
+Also contains some utility functions useful in generating plots.
+
+Built using `matplotlib.pyplot` functions.
+
+
 Function list
 -------------
 Plot-generating functions

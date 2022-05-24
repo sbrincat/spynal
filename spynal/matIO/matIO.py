@@ -3,6 +3,32 @@
 """
 Functions for loading from and saving to Matlab MAT files
 
+Overview
+--------
+Seamlessly loads all Matlab .mat files, both older versions (which require scipy.io loaders)
+and the newer HDF5-based version (which requires h5py loaders). Dispatch to appropriate loader
+takes place under-the-hood, without any user input.
+
+Matlab variables are loaded into the closest Python approximation that is also useful for data
+analysis, with some user-specified options. These are summarized below (see `loadmat` for details):
+
+=================== =============================================
+MATLAB              PYTHON
+=================== =============================================
+array               Numpy ndarray of appropriate dtype
+cell array          Numpy ndarray of `object` dtype
+struct (table-like) dict or Pandas DataFrame (user's option)
+struct (general)    dict
+=================== =============================================
+    
+All "container" variables (structs, cell arrays) are loaded recursively, so each element
+(and sub-element, etc.) is processed appropriately.
+
+Module alsso contains functionality for introspection into the contents of mat files without
+having to load them (`whomat`), and for saving variables back out to mat files with proper
+conversion to types encodable in mat files (`savemat`).
+
+    
 Function list
 -------------
 - loadmat : Loads variables from any Matlab MAT file. Also aliased as 'load'.
@@ -42,17 +68,19 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
     Variables returned individually or in a dict, where each variable maps to key/value pair
 
     Returned variable types are logical Python equivalents of Matlab types:
-    ======              ======
+    
+    =================== ===============================================
     MATLAB              PYTHON
-    ======              ======
+    =================== ===============================================
     double/single       float
     int                 int
     char,string         str
     logical             bool
     array               Numpy ndarray of appropriate dtype
-    cell array          Numpy ndarray of object dtype
-    struct              dict or Pandas Dataframe (for table-like structs; depends on typemap)
-    ======              ======
+    cell array          Numpy ndarray of `object` dtype
+    struct (table-like) dict or Pandas DataFrame (depends on `typemap`)
+    struct (general)    dict
+    =================== ===============================================
 
     Single-element Matlab arrays are converted to the contained item type (eg float/int/str)
 

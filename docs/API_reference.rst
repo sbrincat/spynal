@@ -59,13 +59,18 @@ Hierarchical organization
 Spynal functionality is organized into multiple hierarchical levels. At the highest level are
 modules, each of which contains all functions for a specific neural signal type (eg `spikes`
 for spiking data analysis) or class of analyses (eg `info` for neural information analysis).
-Some modules are further divided into submodules.
+
+Some modules are further divided into submodules (eg `spectra.wavelet` and `spectra.multitaper`
+for wavelet and multitaper spectral analysis, respectively). Spynal is set up so that submodule
+functionality can be accessed by users at the module level without needing to know the exact
+location of functions in the code (eg calling `spectra.wavelet_spectrogram` insteaad of
+`spectra.wavelet.wavelet_spectrogram`).
 
 Many functions themselves also have a hierarchical organization. A top-level function provides
 a general interface for a given type of analysis (eg `spectrogram` for time-frequency spectral
 analysis, `neural_info` for neural information analysis). These contain parameters used across
 all specific methods for this analysis, as well as a `method` parameter, allowing users to
-specify which specific method to use (eg 'wavelet' vs 'multitaper' spectrogram, 'pev' vs
+specify which specific method to use (eg 'wavelet' vs 'multitaper' spectrogram, 'decode' vs
 'mutual_info' as an information measure).
 
 Each specific method is contained within a lower-level function, which may also contain additional
