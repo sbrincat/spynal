@@ -6,8 +6,8 @@ import numpy as np
 from spynal.utils import standardize_array
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
-from spynal.spectra.utils import complex_to_spec_type
-from spynal.spectra.helpers import fft, ifft, _FFTW_KWARGS_DEFAULT, _next_power_of_2, \
+from spynal.spectra.utils import next_power_of_2, complex_to_spec_type
+from spynal.spectra.helpers import fft, ifft, _FFTW_KWARGS_DEFAULT, \
                                    _extract_triggered_data, _undo_standardize_array_newaxis
 
 
@@ -130,7 +130,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Set FFT length = data length if no padding; else pad to next power of two
     if not pad: n_fft = n_timepts_in
-    else:       n_fft = _next_power_of_2(n_timepts_in)
+    else:       n_fft = next_power_of_2(n_timepts_in)
 
     # Compute set of Fourier-transformed wavelet functions (if not already given)
     if isinstance(wavelet,str):

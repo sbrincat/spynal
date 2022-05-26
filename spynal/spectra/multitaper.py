@@ -8,8 +8,8 @@ from scipy.signal.windows import dpss
 from spynal.utils import iarange
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
-from spynal.spectra.utils import get_freq_sampling, complex_to_spec_type, phase
-from spynal.spectra.helpers import fft, _next_power_of_2, _extract_triggered_data
+from spynal.spectra.utils import next_power_of_2, get_freq_sampling, complex_to_spec_type, phase
+from spynal.spectra.helpers import fft, _extract_triggered_data
 
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
@@ -91,7 +91,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     n_timepts = data.shape[0]
     # Set FFT length = data length if no padding; else pad to next power of two
     if not pad: n_fft = n_timepts
-    else:       n_fft = _next_power_of_2(n_timepts)
+    else:       n_fft = next_power_of_2(n_timepts)
     # Set frequency sampling vector
     freqs,fbool = get_freq_sampling(smp_rate,n_fft,freq_range=freq_range)
 

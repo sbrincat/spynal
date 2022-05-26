@@ -16,8 +16,8 @@ Vectorized mass-univariate analysis: runs in parallel across all channels, no fo
 
 ### Package includes the following modules:
 matIO -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
-spikes -- Preprocessing and analyses of neural spiking activity  
-spectra -- Spectral analysis and LFP/continuous data preprocessing  
+spikes -- Preprocessing and analyses of neural spiking data  
+spectra -- Spectral analysis and continuous (LFP/EEG) data preprocessing  
 sync -- Analysis of oscillatory neural synchrony (field-field and spike-field)  
 info -- Measures of neural information about task/behavior variables  
 randstats -- Nonparametric randomization, permutation, and bootstrap statistics  

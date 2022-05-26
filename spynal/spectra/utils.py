@@ -1,11 +1,17 @@
 # -*- coding: utf-8 -*-
 """ Utility functions for LFP/EEG/continuous data and spectral analysis """
-from math import pi
+from math import pi, ceil, log2
 import numpy as np
 
 from scipy.stats import norm
 
 from spynal.utils import axis_index_slices, set_random_seed, interp1
+
+
+def next_power_of_2(n):
+    """ Find next power of 2 (smallest power of 2 greater than n) """
+    # todo  Think about switching this to use scipy.fftpack.next_fast_len
+    return 1 if n == 0 else 2**ceil(log2(n))
 
 
 def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):

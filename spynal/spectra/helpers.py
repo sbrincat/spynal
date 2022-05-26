@@ -20,12 +20,6 @@ _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
 # enable_pyfftw_cache()
 
 
-def _next_power_of_2(n):
-    """ Find next power of 2 (smallest power of 2 greater than n) """
-    # todo  Think about switching this to use scipy.fftpack.next_fast_len
-    return 1 if n == 0 else 2**ceil(log2(n))
-
-
 def _extract_triggered_data(data, smp_rate, event_times, window):
     """
     Extracts windowed chunks of data around given set of event times
