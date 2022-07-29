@@ -76,8 +76,6 @@ Function reference
 # @author: sbrincat
 
 # TODO  Parallelize resampling loops! (using joblib?)
-# TODO  How to pass custom function to paired_sample tests (eval'd as 1-samples)?
-# TODO  How to enforce dimensionality of custom functions (esp re: keepdims)?
 
 from math import sqrt
 import numpy as np
@@ -229,6 +227,7 @@ def paired_sample_test(data1, data2, axis=0, method='permutation', d=0, stat='t'
         Should take single array argument (equal to differences between
         paired samples, with `axis` corresponding to trials/observations)
         and return a scalar value for each independent data series.
+        NOTE: Custom function should take *single array* = data1 - data2
 
     tail : {'both','right','left'}, default: 'both' (2-tailed test)
         Specifies tail of test to perform:

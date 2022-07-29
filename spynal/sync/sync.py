@@ -323,11 +323,6 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
 
 
 # =============================================================================
-# Utility functions for generating single-trial jackknife pseudovalues
-# =============================================================================
-
-
-# =============================================================================
 # Data simulation and testing functions
 # =============================================================================
 def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):

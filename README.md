@@ -1,4 +1,6 @@
 # spynal
+Simple Python Neural Analysis Library, the backbone of your neural data analysis pipeline.
+
 Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python  
 
 Covers typical preprocessing and basic analysis steps in neural analysis workflows.
@@ -16,8 +18,8 @@ Vectorized mass-univariate analysis: runs in parallel across all channels, no fo
 
 ### Package includes the following modules:
 matIO -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
-spikes -- Preprocessing and analyses of neural spiking data  
-spectra -- Spectral analysis and continuous (LFP/EEG) data preprocessing  
+spikes -- Preprocessing and analyses of spiking data  
+spectra -- Spectral analysis and preprocessing of continuous data (LFP/EEG)   
 sync -- Analysis of oscillatory neural synchrony (field-field and spike-field)  
 info -- Measures of neural information about task/behavior variables  
 randstats -- Nonparametric randomization, permutation, and bootstrap statistics  
@@ -36,7 +38,7 @@ plots -- Generation of common plot types; plotting utilities
         (this will allow you to edit the library without reinstalling)
 
 You should now be able to directly import spynal and its modules/functions in your code/notebooks like so:  
-    import spynal
+    import spynal  
     import spynal as spy  
     import spynal.spectra as spectra  
     from spynal.spectra import spectrogram  

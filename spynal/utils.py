@@ -38,6 +38,7 @@ Numerical utility functions
 - gaussian :          Evaluate parameterized 1D Gaussian function at given datapoint(s)
 - gaussian_2d :       Evaluate parameterized 2D Gaussian function at given datapoint(s)
 - gaussian_nd :       Evaluate parameterized N-D Gaussian function at given datapoint(s)
+- is_symmetric :      Test if matrix is symmetric
 - is_positive_definite : Test if matrix is symmetric positive (semi)definite
 
 Data indexing and reshaping functions
@@ -1033,8 +1034,8 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
     covariance : ndarray, shape=(n_dims,n_dims), default: (identity matrix: var's=1, covar's=0)
         Variance/covariance matrix for N-D Gaussian. Diagonals are variances for each dim, off-
         diagonals are covariances btwn corrresponding dims.
-        Must be TODO
-        Alternative method for setting Gaussian width/shape, allowing non-axis-aligned function.
+        Must be symmetric symmetric, positive semi-definite matrix
+        Alternative method for setting function width/shape, allowing non-axis-aligned Gaussian.
         NOTE: Can input values for either `width` OR `covariance`. Setting both raises an error.
 
     amplitude : scalar, default: 1.0
@@ -1120,6 +1121,32 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
     return f_x
 
 
+def is_symmetric(X):
+    """
+    Test if matrix is symmetric
+
+    Parameters
+    ----------
+    X : ndarray or Numpy matrix, shape=Any
+        Matrix to test
+
+    Returns
+    -------
+    symmetric : bool
+        True only if `X` is square and symmetric
+
+    References
+    ----------
+    https://stackoverflow.com/questions/16266720/find-out-if-matrix-is-positive-definite-with-numpy
+    """
+    # Test for square, symmetric matrix
+    # todo should this be array_equal or all_close?    
+    if (X.ndim == 2) and (X.shape[0] == X.shape[1]) and np.array_equal(X, X.T): 
+        return True
+    else:
+        return False
+    
+
 def is_positive_definite(X, semi=False):
     """
     Test if matrix is symmetric positive (semi)definite
@@ -1141,11 +1168,7 @@ def is_positive_definite(X, semi=False):
     ----------
     https://stackoverflow.com/questions/16266720/find-out-if-matrix-is-positive-definite-with-numpy
     """
-    if (X.ndim != 2) or (X.shape[0] != X.shape[1]): # Test for square matrix
-        return False
-
-    # todo should this be array_equal or all_close?
-    if not np.array_equal(X, X.T): # Test if symmetric
+    if not is_symmetric(X):
         return False
 
     try:
@@ -1396,12 +1419,20 @@ def data_groups_to_data_labels(*data, axis=0, groups=None):
 # =============================================================================
 # Other utility functions
 # =============================================================================
-def iarange(start=0, stop=0, step=1):
+def iarange(*args, **kwargs):
     """
     Implements :func:`np.arange` with an inclusive endpoint. Same inputs as np.arange(),
     same output, except ends at stop, not stop - 1 (or more generally stop - step)
 
-    NOTE: Must input all 3 arguments or use keywords (unlike flexible arg's in arange)
+    Like np.arange, iarange can be called with a varying number of positional arguments:
+
+    - iarange(stop) : Values are generated within the closed interval [0,stop]
+        (in other words, the interval including both start AND stop).
+
+    - iarange(start,stop) : Values are generated within the closed interval [start,stop].
+
+    - iarange(start,stop,step) : Values are generated within the closed interval [start,stop],
+        with spacing between values given by step.
 
     Parameters
     ----------
@@ -1414,17 +1445,34 @@ def iarange(start=0, stop=0, step=1):
     step : int, default: 1
         Stepping value for range
 
+    **kwargs :
+        Any other kwargs passed directly to :func:`np.arange` function
+    
     Returns
     -------
     range : ndarray
-        Range from `start` to `stop` (*inclusive*) in steps of length `step`
+        Array of evenly spaced values from `start` to `stop` (*inclusive*) in length `step` steps
     """
+    # Parse different argument formats
+    if len(args) == 1:
+        start = 0
+        stop = args[0]
+        step = 1
+    elif len(args) == 2:
+        start = args[0]
+        stop = args[1]
+        step = 1
+    elif len(args) == 3:
+        start = args[0]
+        stop = args[1]
+        step = args[2]
+        
     # Offset to get final value in sequence is 1 for int-valued step, small float otherwise
     offset = 1 if isinstance(step,int) else 1e-12
     # Make offset negative for a negative step
     if step < 0: offset = -offset
 
-    return np.arange(start,stop+offset,step)
+    return np.arange(start, stop+offset, step, **kwargs)
 
 
 def unsorted_unique(x, axis=None, **kwargs):

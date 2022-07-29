@@ -4,11 +4,11 @@ import os
 import numpy as np
 import pandas as pd
 
-from spynal.tests.data_fixtures import MISSING_ARG_ERRS
-from spynal.matIO import loadmat
+import tempfile
 
-# TODO Need tests for savemat, whomat
-# todo Should we embed mat file generation in a fixture? Would require matlab engine for Python.
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+from spynal.matIO import loadmat, load, whomat, who, savemat, save
+
 
 # =============================================================================
 # Unit tests
@@ -16,12 +16,8 @@ from spynal.matIO import loadmat
 @pytest.mark.parametrize('version', [('v7'), ('v73')])
 def test_loadmat(version):
     """ Unit tests for loadmat function in matIO module """
-    # HACK Make this work when run from top-level Python dir in VS Code or from tests dir in terminal
-    cwd = os.getcwd()
-    if cwd.endswith('tests'):   load_dir = r'./'
-    else:                       load_dir = r'./spynal/spynal/tests'
-    filename = os.path.join(load_dir, 'testing_datafile_' + version + '.mat')
-
+    filename = _set_filename(version)
+    
     print("PWD", os.getcwd())
     variables = ['integer','floating','boolean','string', 'num_array','cell_array',
                  'gen_struct','table_struct']
@@ -33,6 +29,10 @@ def test_loadmat(version):
     # _print_data_summary(data)
     _variable_tests(data, dict, bool_type)
 
+    # Test function alias
+    data = load(filename, asdict=True, verbose=False)
+    _variable_tests(data, dict, bool_type)
+    
     # Test data is loaded correctly when all variables loaded into separate variables
     integer, floating, boolean, string, num_array, cell_array, gen_struct, table_struct = \
         loadmat(filename, variables=variables, asdict=False, verbose=False)
@@ -63,6 +63,49 @@ def test_loadmat(version):
         data = loadmat(filename, asdict=True, verbose=False, foo=None)
 
 
+@pytest.mark.parametrize('version', [('v7'), ('v73')])
+def test_whomat(version):
+    """ Unit tests for whomat function in matIO module """
+    filename = _set_filename(version)
+    
+    variables = ['boolean', 'cell_array', 'floating', 'gen_struct', 'integer',
+                 'num_array', 'string', 'table_struct']
+    
+    # Basic test of functionality
+    test_vbls = sorted(whomat(filename, verbose=False))
+    assert test_vbls == variables
+    
+    # Test function alias
+    test_vbls = sorted(who(filename, verbose=False))
+    assert test_vbls == variables
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        data = whomat(filename, verbose=False, foo=None)
+
+
+@pytest.mark.parametrize('version', [('v7'), ]) # TODO Add ('v73') when that's coded up in savemat
+def test_savemat(version):
+    _version = 7 if version == 'v7' else 7.3
+    
+    # Load variables from test file
+    filename = _set_filename(version)    
+    variables = loadmat(filename, asdict=True, verbose=False)
+
+    # Save variables out to temporary file        
+    with tempfile.TemporaryDirectory() as temp_folder:
+        # Basic test of function
+        filename = os.path.join(temp_folder, 'test_matfile_'+version+'.mat')
+        savemat(filename, variables, version=_version)
+
+        # Test function alias
+        save(filename, variables, version=_version)
+
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises(MISSING_ARG_ERRS):
+            data = savemat(filename, variables, version=_version, foo=None)
+            
+                
 def test_imports():
     """ Test different import methods for matIO module """
     # Import entire package
@@ -83,7 +126,16 @@ def test_imports():
     
 # =============================================================================
 # Hepler functions for unit tests
-# =============================================================================    
+# ============================================================================= 
+def _set_filename(version):
+    """ Set filename for test file independent of current dir """
+    # HACK Make this work when run from top-level Python dir in VS Code or from tests dir in terminal
+    cwd = os.getcwd()
+    if cwd.endswith('tests'):   load_dir = r'./'
+    else:                       load_dir = r'./spynal/spynal/tests'
+    return os.path.join(load_dir, 'testing_datafile_' + version + '.mat')
+
+           
 def _variable_tests(data, table_type=dict, bool_type=bool):
     """ Set of tests to run on loadmat-loaded variables """
     assert isinstance(data, dict)

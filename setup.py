@@ -20,13 +20,13 @@ requirements = [
 
 setuptools.setup(
       name='spynal',
-      version='0.0.1',
+      version='0.1.0',
       description='Simple Python Neural Analysis Library',
       long_description=long_description,
       long_description_content_type='text/markdown',
       url='https://github.com/sbrincat/spynal.git',
       author= ['Scott Brincat', 'John Tauber'],
-      author_email= ['sbrincat@mit.edu', 'jtauber@mit.edu'],
+      author_email= 'sbrincat@mit.edu',
       license='LICENSE',
       packages=setuptools.find_packages(),
       install_requires=requirements,

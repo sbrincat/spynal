@@ -24,7 +24,9 @@ Plot-generating functions
 
 Plotting utilities
 ^^^^^^^^^^^^^^^^^^
-- full_figure :                 Creates full-screen figure
+- full_figure :                 Create full-screen figure
+- savefig :                     Save figure to file in ~WYSIWYG manner
+- colorbar :                    Create colorbar without messing up parent axis size/shape
 - plot_markers :                Plot set of markers (eg to mark trial event times) on given axis(s)
 
 Function reference
@@ -33,7 +35,7 @@ Function reference
 # Created on Tue Nov 23 14:22:47 2021
 #
 # @author: sbrincat
-
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -273,7 +275,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     # Merge any input parameters with default values
     axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
     imshow_args = _merge_dicts(dict(extent=[*xlim,*ylim], vmin=clim[0], vmax=clim[1],
-                                    cmap='viridis', origin='lower', aspect='auto'), imshow_args)
+                                    cmap='viridis', origin='lower', aspect='auto',
+                                    interpolation='none'), imshow_args)
 
     img = ax.imshow(data, **imshow_args)
 
@@ -412,6 +415,130 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
 # =============================================================================
 # Plotting utilities
 # =============================================================================
+def full_figure(**kwargs):
+    """
+    Create full-screen figure
+
+    Wrapper around :func:`plt.figure` that sets size to full screen.
+
+    Parameters
+    ----------
+    **kwargs
+        Any keyword args passed directly to :func:`plt.figure`
+
+    Returns
+    -------
+    fig : Figure object
+        Output of :func:`plt.figure`
+    """
+    if 'frameon' not in kwargs: kwargs.update(frameon=True) # WAS False (changed due to MPL 3.1.0)
+    fig = plt.figure(**kwargs)
+    _maximize_figure()
+    return fig
+
+
+def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwargs):
+    """
+    Save figure to file in (more-or-less) WYSIWYG manner, generate target directory if missing
+    
+    Wrapper around fig.savefig()
+
+    Parameters
+    ----------
+    filename : string
+        Full-path filename to save figure into. If no file extension included, by default
+        we add .png (to save a PNG file).
+
+    fig : Pyplot Figure object, default: plt.gcf()
+        Figure to save. Defaults to current figure.
+
+    figsize : 2-tuple of float, default: default: (11.0,8.5)
+        Figure dimension (width, height) in inches. Defaults to standard 8.5 x 11 in portrait.
+
+    dpi : float, default: 500
+        Resolution of saved figure in dots per inch.
+
+    makedir : bool, default, True
+        If True, creates requested directory to save figure into if missing
+
+    References
+    ----------
+    https://stackoverflow.com/questions/45515320/matplotlib-savefig-fullscreen
+    """
+    if fig is None: fig = plt.gcf()
+
+    # Create full path to save figure file into if doesn't already exist
+    path, file = os.path.split(filename)
+    if not os.path.exists(path):
+        if makedir:
+            os.makedirs(path)
+        else:
+            raise RuntimeError("Directory '%s does not exist. "
+                               "Please make it or set `makedir`=True." % path)
+
+    # If filename has no extension, make it PNG by defaults
+    _, ext = os.path.splitext(file)
+    if ext == '':   filename = filename + '.png'
+
+    # Set size of figure to save and save it
+    fig.set_size_inches(figsize, forward=False)
+    fig.savefig(filename, dpi=dpi, **kwargs)
+
+
+def colorbar(mappable=None, ax=None, size=0.05, pad=0.05):
+    """
+    Create a colorbar for given axis without messing up parent axis size (as plt.colorbar() does)
+
+    Wrapper around fig.colorbar
+    
+    Parameters
+    ----------
+    mappable : matplotlib.cm.ScalarMappable object, default: ax._gci() (current artist)
+        The thing this colorbar is supposed to describe (eg the output of plt.imshow()).
+        Defaults to current colorable artist, if available.
+
+    ax :  Pyplot Axis object, default: plt.gca() (current axis)
+         Parent axis to plot colorbar for (eg axis with image/heatmap plot)
+
+    size : float, default: 0.05
+        Colorbar width, expressed as proportion of parent axis width
+
+    pad : float, default: 0.05
+        Distance of colorbar from parent axis, expressed as proportion of parent axis width
+
+    Returns
+    -------
+    cbar : matplotlib.colorbar.Colorbar object
+        Output of plt.colorbar(). Allows customization of colorbar properties.
+
+    References
+    ----------
+    https://stackoverflow.com/questions/32462881/add-colorbar-to-existing-axis
+    """
+    # Default: Get the current colorable artist (see pyplot for details)
+    if ax is None: ax = plt.gca()
+    fig = ax.figure
+    if mappable is None: mappable = ax._gci()
+
+    assert mappable is not None, \
+        RuntimeError('No mappable was found to use for colorbar creation. '
+                     'First define a mappable such as an image (eg with imshow)')
+
+    # Get size/position of parent axis: (x0, y0, width, height)
+    bounds = ax.get_position().bounds
+
+    # Make colorbar axis size/position based on base axis
+    # x position of left side of colorbar = `pad`*(parent axis width) from right side
+    xpos = bounds[0] + bounds[2] + bounds[2]*pad
+    # Width of colorbar = `size`*(parent axis width)
+    width   = bounds[2]*size
+
+    # Add new axis of given position,size for colorbar
+    cax = fig.add_axes([xpos, bounds[1], width, bounds[3]])
+    # Create colorbar
+    return fig.colorbar(mappable, cax=cax)
+
+
 def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
                  linecolor=[0.50,0.50,0.50], linewidth=0.5,
                  fillcolor=[0.50,0.50,0.50], fillalpha=0.2):
@@ -534,28 +661,6 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     return ax, handles
 
 
-def full_figure(**kwargs):
-    """
-    Create full-screen figure
-
-    Wrapper around :func:`plt.figure` that sets size to full screen.
-
-    Parameters
-    ----------
-    **kwargs
-        Any keyword args passed directly to :func:`plt.figure`
-
-    Returns
-    -------
-    fig : Figure object
-        Output of :func:`plt.figure`
-    """
-    if 'frameon' not in kwargs: kwargs.update(frameon=True) # WAS False (changed due to MPL 3.1.0)
-    fig = plt.figure(**kwargs)
-    _maximize_figure()
-    return fig
-
-
 # =============================================================================
 # Helper functions
 # =============================================================================
@@ -568,7 +673,7 @@ def _hash_kwargs(args_dict, attr_lists):
     ----------
     args_dict : dict {str:value}
         List of all keyword args (name:value pairs) input into a plotting function
-        
+
     attr_lists : List of lists
         Set of lists of attributes of plotting objects that keywords args
         may be attributes of. Function matches each args to its proper attribute list
