@@ -12,7 +12,7 @@ from spynal.matIO.helpers import _parse_typemap, _is_structured_array, \
 
 def _load7(filename, variables=None, typemap=None, order='Matlab'):
     """
-    Loads data variables from a version 7 (or older) Matlab MAT file
+    Load data variables from a version 7 (or older) Matlab MAT file
     Uses scipy.io.loadmat to load data
     """
     typemap = _parse_typemap(typemap)
@@ -61,7 +61,7 @@ def _load7(filename, variables=None, typemap=None, order='Matlab'):
 
 
 def _who7(filename, **kwargs):
-    """  Lists data variables from a version 7 (or older) Matlab MAT file """
+    """  List data variables from a version 7 (or older) Matlab MAT file """
     # Load list of 3-tuples of (variable,size,type) for each variable in file
     variables = scipy.io.whosmat(filename, appendmat=True, **kwargs)
     # Extract and return just the variable names
@@ -70,8 +70,8 @@ def _who7(filename, **kwargs):
 
 def _save7(filename, variables, **kwargs):
     """
-    Saves data variables to version 7 Matlab MAT file
-    Uses scipy.io.savemat to load data
+    Save data variables to version 7 Matlab MAT file
+    Uses scipy.io.savemat to save data
     """
     scipy.io.savemat(filename,variables,**kwargs)
 

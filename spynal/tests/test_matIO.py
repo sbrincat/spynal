@@ -84,7 +84,7 @@ def test_whomat(version):
         data = whomat(filename, verbose=False, foo=None)
 
 
-@pytest.mark.parametrize('version', [('v7'), ]) # TODO Add ('v73') when that's coded up in savemat
+@pytest.mark.parametrize('version', [('v7'), ('v73')])
 def test_savemat(version):
     _version = 7 if version == 'v7' else 7.3
     

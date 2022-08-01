@@ -24,7 +24,7 @@ struct (general)    dict
 All "container" variables (structs, cell arrays) are loaded recursively, so each element
 (and sub-element, etc.) is processed appropriately.
 
-Module alsso contains functionality for introspection into the contents of mat files without
+Module also contains functionality for introspection into the contents of mat files without
 having to load them (`whomat`), and for saving variables back out to mat files with proper
 conversion to types encodable in mat files (`savemat`).
 
@@ -37,7 +37,8 @@ Function list
 
 Dependencies
 ------------
-- h5py :    Python interface to the HDF5 binary data format (used for mat v7.3 files)
+- h5py :    Python interface to the HDF5 binary data format (used for v7.3 MAT files)
+- hdf5storage : Utilities to write Python types to HDF5 files, including v7.3 MAT files.
 
 Function reference
 ------------------
@@ -51,7 +52,7 @@ import numpy as np
 import pandas as pd
 
 from spynal.matIO.matIO_7 import _load7, _who7, _save7
-from spynal.matIO.matIO_73 import _load73, _who73
+from spynal.matIO.matIO_73 import _load73, _who73, _save73
 from spynal.matIO.helpers import _parse_typemap, _get_matfile_version, _variables_to_mat
 
 
@@ -213,8 +214,6 @@ def savemat(filename, variables, version=None, **kwargs):
     """
     Save data variables to a Matlab MAT file
 
-    NOTE: Currently can only save older (v7), not newer (v7.3), versions of MAT files
-
     Parameters
     ----------
     filename : str
@@ -249,7 +248,7 @@ def savemat(filename, variables, version=None, **kwargs):
 
     # Use hdf5storage to save v7.3 MAT-files (which are a type of hdf5 file)
     if version == 7.3:
-        raise ValueError('Saving MAT file version 7.3 not coded up yet')
+        _save73(filename, variables, **kwargs)
 
     # Use scipy.io.savemat() to save v7 MAT-files
     else:

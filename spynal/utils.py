@@ -1078,7 +1078,7 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
             ValueError("`covariance` must have shape (n_dims,n_dims): (%d,%d) not (%d,%d)" % \
                         (n_dims,n_dims,*covariance.shape))
         if check:
-            assert is_positive_definite(covariance), \
+            assert is_positive_definite(covariance, semi=True), \
                 ValueError("`covariance` must be symmetric, positive semi-definite matrix")
 
     # If `width` is input, use to generate covariance (with var = width**2)

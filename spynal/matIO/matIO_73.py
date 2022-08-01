@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-""" Functions for loading from and saving to Matlab v7.3 MAT files using h5py """
+""" Functions for loading from and saving to Matlab v7.3 MAT files using h5py & hdf5storage """
 import numpy as np
 
 import h5py
+import hdf5storage
 
 from spynal.matIO.helpers import _parse_typemap, _dict_to_dataframe, \
                                  _h5py_matlab_type, _convert_string, DEBUG
@@ -11,7 +12,7 @@ from spynal.matIO.helpers import _parse_typemap, _dict_to_dataframe, \
 
 def _load73(filename, variables=None, typemap=None, order='C'):
     """
-    Loads data variables from a version 7.3 Matlab MAT file
+    Load data variables from a version 7.3 Matlab MAT file
 
     Uses h5py to load data, as v7.3 MAT files are a type of HDF5 file
     """
@@ -181,7 +182,7 @@ def _load73(filename, variables=None, typemap=None, order='C'):
 
 
 def _who73(filename):
-    """ Lists data variables from a version 7.3 Matlab MAT file """
+    """ List data variables from a version 7.3 Matlab MAT file """
     # Open datafile for reading
     if h5py.__version__ >= '2.9.0':
         file = h5py.File(filename,'r',track_order=True)
@@ -194,3 +195,11 @@ def _who73(filename):
     file.close()
     return variables
 
+
+def _save73(filename, variables, appendmat=True, oned_as='column', store_python_metadata=True):
+    """
+    Save data variables to version 7.3 Matlab MAT file (HDF5 file with specific header).
+    Uses hdf5storage.savemat to save data
+    """
+    hdf5storage.savemat(filename, variables, format='7.3', appendmat=appendmat, oned_as=oned_as,
+                        store_python_metadata=store_python_metadata)

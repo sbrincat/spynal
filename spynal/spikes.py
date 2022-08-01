@@ -83,7 +83,7 @@ from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
 from scipy.stats import poisson, expon
 
-from spynal.utils import set_random_seed, unsorted_unique, index_axis, \
+from spynal.utils import set_random_seed, unsorted_unique, iarange, index_axis, \
                          standardize_array, undo_standardize_array, \
                          setup_sliding_windows, concatenate_object_array, \
                          fano, cv, cv2, lv
@@ -158,7 +158,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     use `bins` to set any arbitrary custom time bins
 
     NOTE: Spikes are counted within each bin including the start, but *excluding* the end
-    of the bin. That is each bin is defined as [start,end).
+    of the bin. That is each bin is defined as the half-open interval [start,end).
 
     Parameters
     ----------
@@ -342,16 +342,16 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     lims : array-like, shape=(2,)
         Full time range (in s) of analysis
 
-    TODO Sort this out
     smp_rate : scalar, default: 1000
-        Final sampling rate (in Hz; 1/sample period) for returned spike density
+        Sampling rate (in Hz; 1/sample period) for computed spike density.
+        Final output may have lower sampling rate if `downsmp` != 1.
 
     buffer : float, default: (kernel-dependent, approximates length of kernel's edge effects)
         Length (in s) of symmetric buffer to add to each end of time dimension
         (and trim off before returning) to avoid edge effects.
 
     downsmp : int, default: 1 (no downsampling)
-        Factor to downsample time sampling by (after spike density computation).
+        Factor to downsample time sampling by for final output (after spike density computation).
         eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smp_rate_final=100 (dt=0.01)
 
     axis : int, default: -1 (last axis of array)
@@ -394,7 +394,7 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         else:                                   buffer = 0
 
     # Set time sampling from smp_rate,lims
-    if timepts is None: timepts = np.arange(lims[0], lims[1]+1e-12, 1/smp_rate)
+    if timepts is None: timepts = iarange(lims[0], lims[1], 1/smp_rate)
 
     # Compute sampling rate from input time sampling vector
     dt = np.diff(timepts).mean()
@@ -407,9 +407,9 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     if buffer != 0:
         n_buffer = int(round(buffer*smp_rate))    # Convert buffer from time units -> samples
         # Extend time sampling by n_buffer samples on either end (for both data types)
-        timepts = np.concatenate((np.flip(np.arange(timepts[0]-dt, timepts[0]-n_buffer*dt-1e-12, -dt)),
+        timepts = np.concatenate((np.flip(iarange(timepts[0]-dt, timepts[0]-n_buffer*dt, -dt)),
                                   timepts,
-                                  np.arange(timepts[-1]+dt, timepts[-1]+n_buffer*dt+1e-12, dt)))
+                                  iarange(timepts[-1]+dt, timepts[-1]+n_buffer*dt, dt)))
         # For bool data, reflectively resample edges of data to create buffer
         if data_type == 'bool':
             n_samples = data.shape[axis]
