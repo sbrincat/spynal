@@ -26,6 +26,7 @@ Plotting utilities
 ^^^^^^^^^^^^^^^^^^
 - full_figure :                 Create full-screen figure
 - savefig :                     Save figure to file in ~WYSIWYG manner
+- make_colormap :               Create custom colormap and register name for further use
 - colorbar :                    Create colorbar without messing up parent axis size/shape
 - plot_markers :                Plot set of markers (eg to mark trial event times) on given axis(s)
 
@@ -43,8 +44,9 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.patches import Polygon
+from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 
-from spynal.utils import isnumeric
+from spynal.utils import isnumeric, isarraylike
 from spynal.helpers import _merge_dicts
 
 # Lambda returns list of all settable attributes of given plotting object
@@ -214,7 +216,7 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
         Sampling vector for data dimension to be plotted along y-axis
 
     data  : ndarray, shape=(n_y,n_x)
-        Data to plot on color axis.  NOTE: Data array must be 2d,
+        Data to plot on color axis. NOTE: Data array must be 2d,
         with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
 
     ax : Pyplot Axis object, default: plt.gca() (current axis)
@@ -445,7 +447,7 @@ def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwa
 
     Parameters
     ----------
-    filename : string
+    filename : str
         Full-path filename to save figure into. If no file extension included, by default
         we add .png (to save a PNG file).
 
@@ -483,6 +485,69 @@ def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwa
     # Set size of figure to save and save it
     fig.set_size_inches(figsize, forward=False)
     fig.savefig(filename, dpi=dpi, **kwargs)
+
+
+def make_colormap(name, colors=None, **kwargs):
+    """
+    Create a custom colormap and register its name for later convenient use
+    
+    Parameters
+    ----------
+    name : str
+        Name of colormap to create. Name will be registered as a matplotlib colormap,
+        so later you can invoke it using cmap=`name`.        
+        
+    colors : callable or dict or array-like
+        Specifies the colors in custom colormap in one of three ways:
+        
+        (1) callable : `colors` is input as a function/lambda that generates
+            `colors` under one of the two following specifications...
+            
+        (2) dict : Keys = 'red', 'green', 'blue', and (optionally) 'alpha'.
+            Values for each = (n_segments-1,3) array-like of floats in range (0,1). These are
+            anchor points for each color, and segments of colormap will be linearly interpolated
+            between each to generate a full colormap. The first of the 3 values in each row
+            determines where the anchor point lies in the colormap (0-1 ~ lowest to highest point).
+            Color segements are interpolated from the 3rd value in one row to the 2nd value in 
+            the subsequent row (see LinearSegmentedColormap ref below for full explanation).
+            Colormap generated using :func:`matplotlib.colors.LinearSegmentedColormap`.
+
+        (3) array-like : List of Matplotlib color specifications, or an equivalent 
+            (n_colors,3=RGB) or (n_colors,4=RGBA) array. Specifies each color in entire 
+            colormap. Colormap generated using :func:`matplotlib.colors.ListedColormap`.
+
+    **kwargs :
+        Any other keyword args passed directly to `LinearSegmentedColormap` or `ListedColormap`.
+        
+    Returns
+    -------
+    cmap : matplotlib.colors.Colormap object (LinearSegmentedColormap or ListedColormap) 
+        Generated colormap        
+    
+    References
+    ----------
+    https://matplotlib.org/stable/tutorials/colors/colormap-manipulation.html
+    https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.LinearSegmentedColormap.html
+    https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.ListedColormap.html
+    """
+    # If `colors` input as callable, run it to generate actual colors for colormap
+    colors_ = colors() if callable(colors) else colors
+    
+    # If `colors` is dict, we assume it contains points to linearly interp colormap segments btwn
+    if isinstance(colors_,dict):        
+        cmap = LinearSegmentedColormap(name=name, segmentdata=colors_)
+        
+    # If `colors` is array/list, we assume it directly represents all colors in colormap    
+    elif isarraylike(colors_):
+        cmap = ListedColormap(colors=colors_, name=name)
+    
+    else:
+        raise TypeError("Unsupported type <%s> set for `colors`" % type(colors_))
+    
+    # Register colormap name for later use        
+    plt.register_cmap(cmap=cmap)
+    
+    return cmap
 
 
 def colorbar(mappable=None, ax=None, size=0.05, pad=0.05):

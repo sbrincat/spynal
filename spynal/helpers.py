@@ -1,32 +1,36 @@
 # -*- coding: utf-8 -*-
 """
-helpers   Private helper functions for spynal code
+Private helper functions for spynal code
 
 These are functions used internally in one or more analysis modules,
 but not intended to be public-facing.
-
-Created on Fri Apr  9 14:08:15 2021
-
-@author: sbrincat
 """
+# Created on Fri Apr  9 14:08:15 2021
+#
+# @author: sbrincat
 from copy import deepcopy
 import numpy as np
 
 from scipy.stats import mode
 
 
-def _check_window_lengths(windows,tol=1):
+def _check_window_lengths(windows, tol=1):
     """
     Ensures a set of windows are the same length. If not equal, but within given tolerance,
     windows are trimmed or expanded to the modal window length.
 
-    ARGS
-    windows (n_wins,2) array-like. Set of windows to test, given as series of [start,end].
+    Parameters
+    ----------
+    windows : array-like, shape=(n_wins,2)
+        Set of windows to test, given as series of [start,end].
 
-    tol     Scalar. Max tolerance of difference of each window length from the modal value.
+    tol : scalar, default: 1
+        Max tolerance of difference of each window length from the modal value.
 
-    RETURNS
-    windows (n_wins,2) ndarray. Same windows, possibly slightly trimmed/expanded to uniform length
+    Returns
+    -------
+    windows : ndarray, shape=(n_wins,2)
+        Same windows, possibly slightly trimmed/expanded to uniform length
     """
     windows = np.asarray(windows)
 
@@ -57,7 +61,7 @@ def _enclose_in_object_array(data):
 
 
 def _isbinary(x):
-    """ Test whether variable contains only binary values (True,False,0,1) """
+    """ Test whether variable contains only binary values in set {True,False,0,1} """
     x = np.asarray(x)
     return (x.dtype == bool) or \
            (np.issubdtype(x.dtype,np.number) and \
@@ -66,23 +70,30 @@ def _isbinary(x):
 
 def _has_method(obj, method):
     """
-    Determines if given object class instance has given method
+    Determine if given object class instance has given method
 
-    INPUTS
-    obj     Object class instance (of any type) to test for method
-    method  String. Name of method to test for
+    Parameters
+    ----------
+    obj : object class instance (of any type)
+        Object to test for presence of given method
 
-    RETURNS
-    tf      Bool. True if obj.method exists; False otherwise
+    method : str
+        Name of method to test for
 
-    SOURCE
+    Returns
+    -------
+    tf : bool
+        True if obj.method exists; False otherwise
+
+    References
+    ----------
     stackoverflow.com/questions/7580532/how-to-check-whether-a-method-exists-in-python/7580687
     """
     return callable(getattr(obj, method, None))
 
 
 def _merge_dicts(dict1, dict2):
-    """ Merges two dictionaries, with values in dict2 overriding (default) values in dict1 """
+    """ Merge two dictionaries, with values in dict2 overriding (default) values in dict1 """
     dict_out = deepcopy(dict1)
     dict_out.update(dict2)
     return dict_out
@@ -90,25 +101,26 @@ def _merge_dicts(dict1, dict2):
 
 def _standardize_to_axis_0(data, axis=0):
     """
-    Reshapes multi-dimensional data array to standardized 2D array (matrix-like) form,
+    Reshape multi-dimensional data array to standardized 2D array (matrix-like) form,
     with "business" axis shifted to axis 0 for analysis
 
-    data, data_shape = _standardize_to_axis_0(data,axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...). Data array of arbitrary shape.
 
-    ARGS
-    data    (...,n,...) ndarray. Data array of arbitrary shape.
+    axis : int, default: 0
+        Axis of data to move to axis 0 for subsequent analysis
 
-    axis    Int. Axis of data to move to axis 0 for subsequent analysis. Default: 0
+    Returns
+    -------
+    data : ndarray, shape=(n,m)
+        Data array w/ `axis` moved to axis=0, and all other axes unwrapped into single dimension,
+        where m = prod(shape[axes != axis])
 
-    RETURNS
-    data    (n,m) ndarray. Data array w/ <axis> moved to axis=0,
-            and all other axes unwrapped into single dimension,
-            where m = prod(shape[axes != axis])
+    data_shape : tuple, shape=(data.ndim,)
+        Original shape of data array
 
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    Note:   Even 1d (vector) data is expanded into 2d (n,1) array to
-            standardize for calling code.
+    NOTE: Even 1d (vector) data is expanded into 2d (n,1) array to standardize for calling code.
     """
     # Save original shape/dimensionality of <data>
     data_ndim  = data.ndim
@@ -140,25 +152,26 @@ def _standardize_to_axis_0(data, axis=0):
 
 def _undo_standardize_to_axis_0(data, data_shape, axis=0):
     """
-    Undoes effect of _standardize_to_axis_0() -- reshapes data array from unwrapped
-    2D (matrix-like) form back to ~ original multi-dimensional form, with <axis>
+    Undo effect of _standardize_to_axis_0() -- reshapes data array from unwrapped
+    2D (matrix-like) form back to ~ original multi-dimensional form, with `axis`
     shifted back to original location (but allowing that data.shape[axis] may have changed)
 
-    data = _undo_standardize_to_axis_0(data,data_shape,axis=0)
+    Parameters
+    ----------
+    data : ndarray, shape=(axis_len,m)
+        Data array w/ `axis` moved to axis=0, and all axes != 0 unwrapped into single dimension,
+        where m = prod(shape[1:])
 
-    ARGS
-    data    (axis_len,m) ndarray. Data array w/ <axis> moved to axis=0,
-            and all axes != 0 unwrapped into single dimension, where
-            m = prod(shape[1:])
+    data_shape : tuple, shape=(data_orig.ndim,)
+        Original shape of data array. Second output of :func:`_standardize_to_axis_0`.
 
-    data_shape (data_orig.ndim,) tuple. Original shape of data array.
-            Second output of _standardize_to_axis_0.
+    axis : int, default: 0
+        Axis of original data moved to axis 0, which will be shifted back to original axis.
 
-    axis    Int. Axis of original data moved to axis 0, which will be shifted
-            back to original axis. Default: 0
-
-    RETURNS
-    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
+    Returns
+    -------
+    data : ndarray, shape=(...,axis_len,...)
+        Data array reshaped back to original shape
     """
     data_ndim = len(data_shape) # Number of dimensions in original data
     axis_len  = data.shape[0]   # Length of dim 0 (will become dim <axis> again)
@@ -186,25 +199,27 @@ def _undo_standardize_to_axis_0(data, data_shape, axis=0):
 
 def _standardize_to_axis_end(data, axis=-1):
     """
-    Reshapes multi-dimensional data array to standardized 2D array (matrix-like) form,
+    Reshape multi-dimensional data array to standardized 2D array (matrix-like) form,
     with "business" axis shifted to axis -1 (end) for analysis
 
-    data, data_shape = _standardize_to_axis_end(data,axis=-1)
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...)
+        Data array of arbitrary shape.
 
-    ARGS
-    data    (...,n,...) ndarray. Data array of arbitrary shape.
+    axis : int, default: -1
+        Axis of data to move to axis -1 for subsequent analysis. 
 
-    axis    Int. Axis of data to move to axis -1 for subsequent analysis. Default: -1
+    Returns
+    -------
+    data : ndarray, shape=(m,n)
+        Data array w/ `axis` moved to axis=-1, and all other axes unwrapped into single dimension,
+        where m = prod(shape[axes != axis])
 
-    RETURNS
-    data    (m,n) ndarray. Data array w/ <axis> moved to axis=-1,
-            and all other axes unwrapped into single dimension,
-            where m = prod(shape[axes != axis])
+    data_shape : tuple, shape=(data.ndim,)
+        Original shape of data array
 
-    data_shape (data.ndim,) tuple. Original shape of data array
-
-    Note:   Even 1d (vector) data is expanded into 2d (1,n) array to
-            standardize for calling code.
+    NOTE: Even 1d (vector) data is expanded into 2d (1,n) array to standardize for calling code.
     """
     if axis < 0: axis = data.ndim + axis
     data = np.asarray(data)
@@ -238,25 +253,26 @@ def _standardize_to_axis_end(data, axis=-1):
 
 def _undo_standardize_to_axis_end(data, data_shape, axis=-1):
     """
-    Undoes effect of _standardize_to_axis_end() -- reshapes data array from unwrapped
-    2D (matrix-like) form back to ~ original multi-dimensional form, with <axis>
+    Undo effect of :func:`_standardize_to_axis_end` -- reshapes data array from unwrapped
+    2D (matrix-like) form back to ~ original multi-dimensional form, with `axis`
     shifted back to original location (but allowing that data.shape[axis] may have changed)
 
-    data = _undo_standardize_to_axis_end(data,data_shape,axis=-1)
+    Parameters
+    ----------
+    data : ndarray, shape=(m,axis_len)
+        Data array w/ <axis> moved to axis=-1, and all axes != -1 unwrapped into single dimension,
+        where m = prod(shape[:-1])
 
-    ARGS
-    data    (m,axis_len) ndarray. Data array w/ <axis> moved to axis=-1,
-            and all axes != -1 unwrapped into single dimension, where
-            m = prod(shape[:-1])
+    data_shape : tuple, shape=(data_orig.ndim,)
+        Original shape of data array. Second output of :func:`_standardize_to_axis_end`.
 
-    data_shape (data_orig.ndim,) tuple. Original shape of data array
-            Second output of _standardize_to_axis_end.
+    axis : int, default: -1
+        Axis of original data moved to axis -1, which will be shifted back to original axis.
 
-    axis    Int. Axis of original data moved to axis -1, which will be shifted
-            back to original axis.. Default: -1
-
-    RETURNS
-    data    (...,axis_len,...) ndarray. Data array reshaped back to original shape
+    Returns
+    -------
+    data : ndarray, shape=(...,axis_len,...)
+        Data array reshaped back to original shape
     """
     data_shape  = np.asarray(data_shape)
 

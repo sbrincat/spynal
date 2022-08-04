@@ -329,7 +329,7 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     return_stats : bool, default: False
         Set=True to return additional classifier stats
 
-    stats : string or list of str, default: ['predict','prob'] (if return_stats=True)
+    stats : str or list of str, default: ['predict','prob'] (if return_stats=True)
         List of additional classifier stats to return. Options:
         'predict' : Predicted class for each trial/observation
         'prob' :    Posterior probability for each class, for each trial/observation
@@ -1133,7 +1133,7 @@ def anova1(data, labels, axis=0, omega=True, groups=None, gm_method='mean_of_obs
         Useful for enforcing a given order to groups (reflected in mu's),
         or for computing info btwn pairs of groups within data with > 2 groups.
 
-    gm_method : str, Default: 'mean_of_obs'
+    gm_method : str, default: 'mean_of_obs'
         Method used to calculate grand mean for ANOVA formulas. Options:
 
         - 'mean_of_obs' : Mean of all observations (more standard ANOVA formula)
@@ -1331,7 +1331,7 @@ def anova2(data, labels, axis=0, interact=None, omega=True, partial=False, total
         If True, return PEV as a percent (range ~ 0-100).
         If False, return PEV as a proportion (range ~ 0-1)
 
-    gm_method : str, Default: 'mean_of_obs'
+    gm_method : str, default: 'mean_of_obs'
         Method used to calculate grand mean for ANOVA formulas. Options:
 
         - 'mean_of_obs' : Mean of all observations (more standard ANOVA formula)
@@ -1535,7 +1535,7 @@ def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
         If True, uses bias-corrected omega-squared formula for PEV,
         If False uses eta-squared formula, which is positively biased.
 
-    constant : bool, Default: True
+    constant : bool, default: True
         If True, ensures there is a constant column in labels to fit an
         intercept/bias term (appends if missing, does nothing if present).
 

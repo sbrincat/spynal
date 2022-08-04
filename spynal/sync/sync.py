@@ -248,7 +248,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
     taper_axis : int
         Axis of spectral data corresponding to tapers. Only needed for multitaper spectral data.
 
-    timepts : array-like, shape=(n_timepts,), Default: (0 - n_timepts-1)/smp_rate
+    timepts : array-like, shape=(n_timepts,), default: (0 - n_timepts-1)/smp_rate
         Time sampling vector for data. Default value starts at 0, with spacing = 1/smp_rate.
         For phase methods, should be in same time units as `width`/`spacing`/`lims` or `timewins`.
 

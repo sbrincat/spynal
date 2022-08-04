@@ -210,7 +210,7 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     lims : array-like, shape=(2,), default: (timepts[0],timepts[-1]) (full sampled time of data)
         [Start,end] time limits (in s) for full series of sliding windows
 
-    timewins : ndarray, shape=(n_timewins,2), Default: setup_sliding_windows(width,lims,spacing)
+    timewins : ndarray, shape=(n_timewins,2), default: setup_sliding_windows(width,lims,spacing)
         Alternative method for setting sliding time windows; overrides `width`/`spacing`/`lims`.
         Custom time windows to compute PLV within, given as explicit series of window [start,end]'s
         (in s). Can have any arbitrary width/spacing (eg to compute PLV in arbitary time epochs).
@@ -427,7 +427,7 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     lims : array-like, shape=(2,), default: (timepts[0],timepts[-1]) (full sampled time of data)
         [Start,end] time limits (in s) for full series of sliding windows
 
-    timewins : ndarray, shape=(n_timewins,2), Default: setup_sliding_windows(width,lims,spacing)
+    timewins : ndarray, shape=(n_timewins,2), default: setup_sliding_windows(width,lims,spacing)
         Alternative method for setting sliding time windows; overrides `width`/`spacing`/`lims`.
         Custom time windows to compute PPC within, given as explicit series of window [start,end]'s
         (in s). Can have any arbitrary width/spacing (eg to compute PPC in arbitary time epochs).

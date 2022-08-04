@@ -17,7 +17,7 @@ Most functions expect one of two formats of spiking data:
     to Matlab cell arrays). Each object element is a variable-length list-like 1D subarray
     of spike timestamps (of dtype float or int), and the container object array can have any
     arbitrary dimensionality (including optional axes corresponding to trials, units, etc.).
-    
+
     Alternatively, for a single spike train, a simple 1D list or ndarray of timestamps
     may be given instead.
 
@@ -75,6 +75,7 @@ Function reference
 #
 # @author: sbrincat
 
+from warnings import warn
 from math import isclose, ceil
 import numpy as np
 import matplotlib.pyplot as plt
@@ -115,7 +116,7 @@ def rate(data, method='bin', **kwargs):
 
     method : {'bin','density'}, default: 'bin'
         Spike rate estimation method:
-        
+
         - 'bin' :       Traditional rectangular-binned rate (aka PSTH; see :func:`bin_rate`)
         - 'density' :   Kernel density estimator for smoothed spike rate (see :func:`density`)
 
@@ -179,7 +180,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     width : scalar, default: 0.050 (50 ms)
         Full width (in s) of each time bin
 
-    step : scalar, Default: `width` (each bin starts at end of previous bin)
+    step : scalar, default: `width` (each bin starts at end of previous bin)
         Spacing (in s) between successive time bins
 
     bins : array-like, shape=(n_bins,2), default: setup_sliding_windows(width,lims,step)
@@ -189,7 +190,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
 
     output : str, default: 'rate'
         Which type pf spike measure to return:
-        
+
         - 'rate' :    spike rate in each bin, in spk/s. Float valued.
         - 'count' :   spike count in each bin. Integer valued.
         - 'bool' :    binary presence/absence of any spikes in each bin. Boolean valued.
@@ -308,10 +309,10 @@ psth = bin_rate
 """ Alias of :func:`bin_rate`. See there for details. """
 
 
-def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
-            buffer=None, downsmp=1, axis=-1, timepts=None, **kwargs):
+def density(data, lims=None, width=50e-3, step=1e-3, kernel='gaussian', buffer=None,
+            axis=-1, timepts=None, **kwargs):
     """
-    Compute spike density function (aka smoothed rate) via convolution with given kernel
+    Compute spike density function (smoothed rate) via convolution with given kernel
 
     Spiking data can be timestamps or binary (0/1) spike trains
 
@@ -327,7 +328,26 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         Binary/boolean representation of spike times, for either a single
         or multiple spike trains.
 
-    kernel : str or ndarray or callable, default='gaussian'
+    lims : array-like, shape=(2,)
+        Desired time range of returned spike density ([start,end] in s).
+        For boolean spike data, defaults to (timepts[0],timepts[-1]).
+        For spike timestamp data, a value MUST be input.
+        
+        NOTE: For either data type, lims should be within (or equal to) the full
+        extent of the data itself. We test this for binary spike data, but we
+        don't know the actual extent of timestamp data, so that is up to the user!
+
+    width : scalar, default: 0.50 (50 ms)
+        Width parameter (in s) for given convolution kernel.
+        Interpretation is specific to value of `kernel` (see `kernel` below).
+
+    step : scalar, default: 0.001 (1 ms)
+        Spacing (in s) between successive time points in returned spike density.
+        Values > 1 ms imply some downsampling from original spike train time sampling.
+        NOTE: Must be an integer multiple of original data sampling (1 ms for timestamp data).
+        NOTE: This argument replaces `downsmp` in previous versions.
+
+    kernel : str or ndarray or callable, default: 'gaussian'
         Convolution kernel to use. Can be given as kernel name, with current options:
 
         - 'gaussian' : Gaussian kernel, `width` = standard deviation
@@ -336,31 +356,16 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         Alternatively, can input any arbitrary kernel as an array of float values
         or as a custom function that takes `width` argument and returns an array.
 
-    width : scalar, default: 0.50 (50 ms)
-        Width parameter for given kernel. Interpretation is kernel-specific (see `kernel`).
-
-    lims : array-like, shape=(2,)
-        Full time range (in s) of analysis
-
-    smp_rate : scalar, default: 1000
-        Sampling rate (in Hz; 1/sample period) for computed spike density.
-        Final output may have lower sampling rate if `downsmp` != 1.
-
     buffer : float, default: (kernel-dependent, approximates length of kernel's edge effects)
         Length (in s) of symmetric buffer to add to each end of time dimension
         (and trim off before returning) to avoid edge effects.
-
-    downsmp : int, default: 1 (no downsampling)
-        Factor to downsample time sampling by for final output (after spike density computation).
-        eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smp_rate_final=100 (dt=0.01)
 
     axis : int, default: -1 (last axis of array)
         Axis of binary data corresponding to time dimension. Not used for spike timestamp data.
 
     timepts : ndarray, shape=(n_timepts,)
-        Time sampling vector (in s) for binary input data and/or computed rates.
-        MUST be input for binary data. For timestamp data, defaults to
-        np.arange(lims[0], lims[1]+1/smp_rate, 1/smp_rate) (ranging btwn lims, in 1/smp_rate steps).
+        Time sampling vector (in s) for binary data.
+        Not used for spike timestamp data, but MUST be input for binary data.
 
     **kwargs :
         All other kwargs passed directly to kernel function
@@ -377,15 +382,30 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
 
        TODO n_timepts_out depends on `lims`, `smp_rate`
 
-    timepts : ndarray, shape=(n_timepts_out,)
+    timepts_out : ndarray, shape=(n_timepts_out,)
         Time sampling vector (in s) for rates
     """
+    ### Argument processing ###
+    if 'downsmp' in kwargs:
+        downsmp = kwargs.pop('downsmp')
+        step = 1000/downsmp
+        warn("<downsmp> argument has been deprecated. Please use <step> argument instead (see docs).")
+
     data_type = _spike_data_type(data)
     if axis < 0: axis = data.ndim + axis
 
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> must be given"
+        assert (lims is None) or ((lims[0] >= timepts[0]) and (lims[1] <= timepts[-1])), \
+            ValueError("Input <lims> must lie within range of time points in spiking data.")
+
+    # If `lims` not input, set=(1st,last) timepts for boolean data; raise error for timestamp data
+    if lims is None:
+        if data_type == 'bool':
+            lims = (timepts[0],timepts[-1])
+        else:
+            raise ValueError("For spike timestamp data, analysis time range must be set in <lims>")
 
     # Set default buffer based on overlap of kernel used
     if buffer is None:
@@ -393,37 +413,68 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
         elif kernel in ['gaussian','normal']:   buffer = 3*width
         else:                                   buffer = 0
 
-    # Set time sampling from smp_rate,lims
-    if timepts is None: timepts = iarange(lims[0], lims[1], 1/smp_rate)
+    # Compute sampling rate of input data (and thus initial convolution)
+    if data_type == 'bool': dt = np.diff(timepts).mean()
+    # Hard code sampling of timestamp->bool conveersion (and initial convolution) to 1 kHz (1 ms)
+    else:                   dt = 1e-3
 
-    # Compute sampling rate from input time sampling vector
-    dt = np.diff(timepts).mean()
     smp_rate = round(1/dt)
-
-    if smp_rate < 500:
-        print('Warning: Sampling of %d Hz will binarize >1 spike/bin to 1' % round(smp_rate))
-
-    # Add buffer to time sampling vector and data to mitigate edge effects
+    if smp_rate < 1000:
+        warn('Sampling of %d Hz may binarize >1 spike/bin to 1' % smp_rate)
+ 
     if buffer != 0:
-        n_buffer = int(round(buffer*smp_rate))    # Convert buffer from time units -> samples
-        # Extend time sampling by n_buffer samples on either end (for both data types)
-        timepts = np.concatenate((np.flip(iarange(timepts[0]-dt, timepts[0]-n_buffer*dt, -dt)),
-                                  timepts,
-                                  iarange(timepts[-1]+dt, timepts[-1]+n_buffer*dt, dt)))
-        # For bool data, reflectively resample edges of data to create buffer
-        if data_type == 'bool':
-            n_samples = data.shape[axis]
-            idxs = np.concatenate((np.flip(np.arange(n_buffer)+1), np.arange(n_samples),
-                                   np.arange(n_samples-2, n_samples-2-n_buffer, -1)))
-            data = data.take(idxs,axis=axis)
+        # Convert buffer from time units -> samples
+        n_smps_buffer = int(round(buffer*smp_rate))
+        # Extend limits of data sampling (and initial analysis) by +/- buffer
+        lims = (lims[0]-n_smps_buffer, lims[1]-n_smps_buffer)
+        
+    # Downsampling factor necessary to convert initial sampling rate to final desired sampling
+    downsmp = int(round(step/dt))
+    assert (downsmp >= 1) and np.isclose(downsmp, step/dt), \
+        ValueError("<step> must be an integer multiple of %.3f (for %d ms sampling)" % \
+                   (dt,int(dt*1000)))
 
-    # Convert kernel specifier to actual kernel (window) function
-    width_smps = width*smp_rate # convert width to samples
+
+    ### Set up data for spike density computation ###
+    # Convert spike timestamps to binary spike trains w/in desired time range -> (...,n_timepts)
+    if data_type == 'timestamp':
+        data,timepts = times_to_bool(data, lims=lims, width=dt)
+        axis = data.ndim
+
+    # Reshape boolean data appropriately for analysis (including buffer)
+    else:
+        # Reshape boolean data so that time axis is -1 (end of array)
+        if axis != data.ndim: data = np.moveaxis(data,axis,-1)
+
+        # If desired limits of data sampling (+ buffer) is more restricted than data range,
+        # truncate data to desired limits (no need to do more analysis than necessary!)
+        if (lims[0] > timepts[0]) or (lims[1] < timepts[-1]):
+            tbool   = (timepts >= lims[0]) & (timepts <= lims[1])
+            timepts = timepts[tbool]
+            data    = data[...,tbool]
+        
+        # If desired limits + buffer extend *beyond* range of data, reflect data at edges
+        # Note: This conditional is indpendent of above bc could have both effects on start vs end
+        if (lims[0] < timepts[0]) or (lims[1] > timepts[-1]):
+            n_samples = data.shape[axis]
+            # Number of samples to reflect data around (start,end) to generate desired buffer
+            n_smps_reflect = (int(round((timepts[0]-lims[0])*dt)),
+                              int(round((lims[1]-timepts[-1])*dt)))
+            # Indexes corresponding to any reflection at start,end, with actual data in between
+            idxs = np.concatenate((np.flip(iarange(1,n_smps_reflect[0])), 
+                                   np.arange(n_samples),
+                                   iarange(n_samples-2, n_samples-(n_smps_reflect[1]+1), -1)))
+            data = data[...,idxs]
+                                    
+
+    ### Set up convolution kernel for spike density computation ###
+    n_smps_width = width*smp_rate # convert width to 1 kHz samples
 
     # Kernel is a function/callable -- call it with width in samples
     if callable(kernel):
-        kernel_ = kernel(width_smps,**kwargs)
+        kernel_ = kernel(n_smps_width, **kwargs)
 
+    # Convert kernel specifier to actual kernel (window) function
     else:
         assert len(kwargs) == 0, \
             TypeError("Incorrect or misspelled variable(s) in keyword args: " +
@@ -438,9 +489,9 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
             kernel = kernel.lower()
 
             if kernel in ['hann','hanning']:
-                kernel_ = hann(int(round(width_smps*2.0)))
+                kernel_ = hann(int(round(n_smps_width*2.0)))
             elif kernel in ['gaussian','normal']:
-                kernel_ = gaussian(int(round(width_smps*6.0)),width_smps)
+                kernel_ = gaussian(int(round(n_smps_width*6.0)),n_smps_width)
             else:
                 raise ValueError("Unsupported value '%s' given for kernel. \
                                 Should be 'hanning'|'gaussian'" % kernel)
@@ -448,38 +499,32 @@ def density(data, kernel='gaussian', width=50e-3, lims=None, smp_rate=1000,
     # Normalize kernel to integrate to 1
     kernel_ = kernel_ / (kernel_.sum()/smp_rate)
 
-    # Convert spike times to binary spike trains -> (...,n_timepts)
-    if data_type == 'timestamp':
-        bins = np.stack((timepts-dt/2, timepts+dt/2), axis=1)
-        data,timepts = times_to_bool(data,bins=bins)
-        axis = data.ndim
-    else:
-        # Reshape data so that time axis is -1 (end of array)
-        if axis != data.ndim: data = np.moveaxis(data,axis,-1)
 
+    ### Compute spike density and reshape data back to desired form ###
     # Ensure kernel broadcasts against data
     slicer = tuple([np.newaxis]*(data.ndim-1) + [slice(None)])
 
     # Compute density as convolution of spike trains with kernel
     # Note: 1d kernel implies 1d convolution across multi-d array data
-    rates = convolve(data,kernel_[slicer],mode='same')
+    rates = convolve(data, kernel_[slicer], mode='same')
 
     # Remove any time buffer from spike density and time sampling vector
-    # (also do same for data bc of 0-fixing bit below)
     if buffer != 0:
-        data        = _remove_buffer(data,n_buffer,axis=-1)
-        rates       = _remove_buffer(rates,n_buffer,axis=-1)
-        timepts     = _remove_buffer(timepts,n_buffer,axis=-1)
+        rates   = _remove_buffer(rates, n_smps_buffer, axis=-1)
+        timepts = _remove_buffer(timepts, n_smps_buffer, axis=-1)
 
-    # Implement any temporal downsampling of rates
+    # Implement any temporal downsampling of rates to final desired <step> size
+    print("BEFORE", downsmp, rates.shape, timepts.shape)
     if downsmp != 1:
-        rates       = rates[...,0::downsmp]
-        timepts     = timepts[0::downsmp]
+        rates   = rates[...,0::downsmp]
+        timepts = timepts[0::downsmp]
+    print("AFTER", downsmp, rates.shape, timepts.shape)
 
     # KLUDGE Sometime trials/neurons/etc. w/ 0 spikes end up with tiny non-0 values
     # due to floating point error in fft routines. Fix by setting = 0.
-    no_spike_idxs   = ~data.any(axis=-1,keepdims=True)
-    shape           = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])
+    # Note: Polling data for any spikes should be done on original data (+buffer, no downsmp)
+    no_spike_idxs = ~data.any(axis=-1,keepdims=True)
+    shape = tuple([1]*(rates.ndim-1) + [rates.shape[-1]])
     rates[np.tile(no_spike_idxs,shape)] = 0
 
     # KLUDGE Sometime rates end up with minute negative values due to floating point error,
@@ -634,7 +679,7 @@ def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
 
     stat : {'Fano','CV','CV2','LV','burst_fract}, default: 'Fano'
         ISI statistic to compute. Options:
-        
+
         - 'Fano' :    Fano factor = var(ISIs)/mean(ISIs), using :func:`fano`
         - 'CV' :      Coefficient of Variation = SD(ISIs)/mean(ISIs), using :func:`cv`
         - 'CV2' :     Local Coefficient of Variation (Holt 1996), using :func:`cv2`
@@ -1044,13 +1089,13 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
         or dtype=bool or dtype=float or int
         Spiking data pooled across all single units into a single electrode-level multi-unit
         for each electrode. Same shape as `data_sua`, but with `axis` reduced to length=n_elecs.
-        
+
         For timestamp data, spike timestamps are concatenated together across units, and optionally
         resorted into sequential order (if `sort` is True).
-        
+
         For bool data, spike trains are combined via "logical OR" across units (spike is registered
         in output at times when there is a spike in *any* single-unit on electrode).
-        
+
         For rate data, spike rates/counts are summed across units.
 
     elec_idxs : ndarray, shape=(n_elecs,), dtype=int, optional
@@ -1324,7 +1369,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     n_trials : int, default: 1000
         Number of trials/observations to simulate
 
-    window : scalar, Default: 1.0 s
+    window : scalar, default: 1.0 s
         Time window (in s) to count simulated spikes over.
         Set = 1 if you want spike *counts*, rather than rates.
 
@@ -1402,8 +1447,8 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     refractory : scalar, default: 0 (no refractory)
         Absolute refractory period in which a second spike cannot occur after another.
         Set=0 for proper Poisson process with no refractory.
-        
-        NOTE: currently implemented by simply deleting spikes < refractory period, 
+
+        NOTE: currently implemented by simply deleting spikes < refractory period,
         which affects rates and is thus not optimal
 
     seed : int, default: None

@@ -245,7 +245,7 @@ def test_density(spike_data, data_type, kernel, result):
 
     # Test for ~ consistent ouptut with 10x downsampling after spike density estimation
     rates, tout = rate(data, method='density', kernel=kernel, width=width, lims=[0,1], buffer=0,
-                          downsmp=10, axis=-1, timepts=timepts)
+                       step=10e-3, axis=-1, timepts=timepts)
     assert data_checker(data,data_orig)     # Ensure input data not altered by func
     assert tout.shape == (101,)
     assert rates.shape == (10, 2, 101)
