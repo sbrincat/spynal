@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import norm, poisson, bernoulli
 from scipy.stats.mstats import gmean
 
-from spynal.spectra.utils import simulate_oscillation
+from spynal.spectra.utils import set_random_seed, simulate_oscillation
 
 # Possible errors to expect when inputting a missing/misspelled argument
 # Used for unit tests against silently ignoring incorrect arguments
@@ -24,7 +24,7 @@ def one_sample_data():
     data    (10,4) ndarray. Simulated data, simulating (10 trials x 4 channels)
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
-    np.random.seed(1)
+    set_random_seed(1)
 
     n       = 10
     n_chnls = 4
@@ -44,7 +44,7 @@ def two_sample_data():
     labels  (20,) ndarray of int8. Set of condition labels corresponding to each trial in data
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
-    np.random.seed(1)
+    set_random_seed(1)
 
     n       = 10
     n_chnls = 4
@@ -68,7 +68,7 @@ def one_way_data():
     labels  (30,) ndarray of int8. Set of condition labels corresponding to each trial in data
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
-    np.random.seed(1)
+    set_random_seed(1)
 
     n       = 10
     n_groups= 3
@@ -94,7 +94,7 @@ def two_way_data():
             Columns 0,1 correspond to main effects, column 2 corresponds to interaction
     """
     # Note: seed=1 makes data reproducibly match output of Matlab
-    np.random.seed(1)
+    set_random_seed(1)
 
     n       = 10
     n_groups= 4
@@ -213,7 +213,7 @@ def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
                     Returns as 1D array if n is an int.
                     Returns with shape given by n if it is a tuple.
     """
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     if mean is None:
         if distribution in ['normal','norm','gaussian','gauss']:    mean = 0.0
@@ -269,7 +269,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
             Sorted in group order to simplify visualization.
     """
     # todo Add ability to simulate independent data series, different n for each cond,
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     # For single-condition data, treat gain as scalar increase over baseline response
     if n_conds == 1:
@@ -295,7 +295,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     assert (correlation >= -1) and (correlation <= 1), \
         ValueError("Correlation must be in range [-1,+1] (%.2f input)" % correlation)
 
-    if correlation == 0:
+    if correlation != 0:
         assert (n_conds == 2) and (distribution == 'normal'), \
             ValueError("correlation currently only supported for 2 conds, normal distribution")
 

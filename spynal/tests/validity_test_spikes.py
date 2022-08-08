@@ -18,8 +18,6 @@ rate_stat_test_battery  Runs standard battery of tests of rate stat functions
 test_isi_stats      Tests of inter-spike interval statistic estimation functions
 isi_stat_test_battery  Runs standard battery of tests of ISI stat functions
 """
-# TODO  Generalize testing framework of test_rate cf other validity test functions
-#       (test battery function, n_trials test)
 import os
 import time
 from warnings import warn
@@ -28,25 +26,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from spynal.tests.data_fixtures import simulate_dataset
+from spynal.utils import set_random_seed
 from spynal.spikes import simulate_spike_trains, times_to_bool, \
-                                   rate_stats, isi, isi_stats, \
-                                   plot_mean_waveforms, plot_waveform_heatmap
+                          rate, rate_stats, isi, isi_stats, \
+                          plot_mean_waveforms, plot_waveform_heatmap
 from spynal.spectra.multitaper import compute_tapers
+from spynal.plots import plot_line_with_error_fill
 
 
 # =============================================================================
 # Tests for rate computation functions
 # =============================================================================
-def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
+def test_rate(method, test='rate', test_values=None, data_type='timestamp', n_trials=1000,
               do_tests=True, do_plots=False, plot_dir=None, seed=1, **kwargs):
     """
     Basic testing for functions estimating spike rate over time.
 
     Generates synthetic spike train data with given underlying rates,
     estimates rate using given function, and compares estimated to expected.
-
-    means,sems = test_rate(method,rates=(5,10,20,40),data_type='timestamp',n_trials=1000,
-                           do_tests=True,do_plots=False,plot_dir=None,seed=1, **kwargs)
 
     ARGS
     method      String. Name of rate estimation function to test: 'bin' | 'density'
@@ -82,9 +79,35 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
     If do_tests is True, raises an error if any estimated stat is too far from expected value
     If do_plots is True, also generates a plot summarizing expected vs estimated rates
     """
-    assert data_type in ['timestamp','bool'], \
-        ValueError("Unsupported value '%s' given for data_type. Should be 'timestamp' | 'bool"
+    method = method.lower()
+    test = test.lower()
+    data_type = data_type.lower()
+
+    assert method in ['bin','density'], \
+        ValueError("Unsupported value '%s' given for <method>. Should be 'bin' | 'density"
                    % data_type)
+    assert data_type in ['timestamp','bool'], \
+        ValueError("Unsupported value '%s' given for <data_type>. Should be 'timestamp' | 'bool"
+                   % data_type)
+
+    # Set defaults for tested values and set up data generator function depending on <test>
+    # Note: Only set random seed once above, don't reset in data generator function calls
+    # todo Should we move some/all of these into function arguments, instead of hard-coding?
+    sim_args = dict(offset=10, gain=0.0, data_type='timestamp', n_conds=1, n_trials=n_trials, seed=seed)
+
+    if test in ['rate','mean']:
+        test_values = [5,10,20,40] if test_values is None else test_values
+        del sim_args['offset']              # Delete preset arg so uses arg to lambda below
+        gen_data = lambda rate: simulate_spike_trains(**sim_args, offset=rate)
+
+    elif test in ['n','n_trials']:
+        test_values = [25,50,100,200,400,800] if test_values is None else test_values
+        del sim_args['n_trials']            # Delete preset arg so uses arg to lambda below
+        gen_data = lambda n_trials: simulate_spike_trains(**sim_args, n_trials=n_trials)
+
+    else:
+        raise ValueError("Unsupported value '%s' set for <test>" % test)
+
 
     if method == 'bin':
         n_timepts = 20
@@ -92,24 +115,20 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
 
     elif method == 'density':
         n_timepts = 1001
-        # HACK For spike density method, remove edges, which are influenced by boundary artifacts
+        # HACK For spike density method, remove edges, which are influenced by boundary artifacts        
         timepts   = np.arange(0,1.001,0.001)
-        tbool     = (timepts > 0.1) & (timepts < 0.9)
-
+        tbool     = (timepts > 0.1) & (timepts < 0.9)        
+        
     else:
         raise ValueError("Unsupported option '%s' given for <method>. \
                          Should be 'bin_rate'|'density'" % method)
 
-    rates = np.asarray(rates)
+    means = np.empty((len(test_values),n_timepts))
+    sems = np.empty((len(test_values),n_timepts))
 
-    means = np.empty((len(rates),))
-    sems = np.empty((len(rates),))
-    if do_plots: time_series = np.empty((n_timepts,len(rates)))
-
-    for i,rate in enumerate(rates):
+    for i_value,test_value in enumerate(test_values):
         # Generate simulated spike train data
-        trains,_ = simulate_spike_trains(gain=0.0,offset=float(rate),data_type='timestamp',
-                                         n_conds=1,n_trials=n_trials,seed=seed)
+        trains,_ = gen_data(test_value)
 
         # Convert spike timestamps -> binary 0/1 spike trains (if requested)
         if data_type == 'bool':
@@ -120,55 +139,109 @@ def test_rate(method, rates=(5,10,20,40), data_type='timestamp', n_trials=1000,
         spike_rates,timepts = rate(trains, method=method, lims=[0,1], **kwargs)
         if method == 'bin': timepts = timepts.mean(axis=1)  # bins -> centers
 
-        if do_plots: time_series[:,i] = spike_rates.mean(axis=0)
-        # Take average across timepoints -> (n_trials,)
-        spike_rates = spike_rates[:,tbool].mean(axis=1)
+        # Compute mean and SEM of rate time series across trials -> (1,n_timepts)
+        n = test_value if test in ['n','n_trials'] else n_trials
+        means[i_value,:] = spike_rates.mean(axis=0)
+        sems[i_value,:]  = spike_rates.std(axis=0,ddof=0) / sqrt(n)
 
-        # Compute mean and SEM across trials
-        means[i] = spike_rates.mean(axis=0)
-        sems[i]  = spike_rates.std(axis=0,ddof=0) / sqrt(n_trials)
+    # Take average rate across timepoints (excluding ends with edge effect for density method)
+    grand_means = means[:,tbool].mean(axis=1)
+    grand_sems = sems[:,tbool].mean(axis=1)
 
     # Optionally plot summary of test results
     if do_plots:
         plt.figure()
         colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
-        # Plot time course of estimated rates
+        # Plot time course of estimated rates for each tested value
         ax = plt.subplot(1,2,1)
-        ylim = (0,1.05*time_series.max())
-        for i,rate in enumerate(rates):
-            plt.plot(timepts, time_series[:,i], '-', color=colors[i], linewidth=1.5)
-            plt.text(0.99, (0.95-0.05*i)*ylim[1], np.round(rate,decimals=2),
-                     color=colors[i], fontweight='bold', horizontalalignment='right')
+        plot_line_with_error_fill(timepts, means, err=sems, ax=ax, color=colors[:len(test_values)])
+        for i_value,test_value in enumerate(test_values):
+            plt.text(0.99, (0.95-0.05*i_value)*plt.ylim()[1], np.round(test_value,decimals=2),
+                     color=colors[i_value], fontweight='bold', horizontalalignment='right')
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
-        plt.ylim(ylim)
         plt.xlabel('Time')
         plt.ylabel('Estimated rate')
 
         # Plot across-time mean rates
         ax = plt.subplot(1,2,2)
-        ax.set_aspect('equal', 'box')
+        plt.errorbar(test_values, grand_means, grand_sems, marker='o')
+
+        if test in ['rate','mean']:
+            ax.set_aspect('equal', 'box')
+            plt.plot([0,1.1*test_values[-1]], [0,1.1*test_values[-1]], '-', color='k', linewidth=1)
         plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
-        plt.plot([0,1.1*rates[-1]], [0,1.1*rates[-1]], '-', color='k', linewidth=1)
-        plt.errorbar(rates, means, 3*sems, marker='o')
-        plt.xlabel('Simulated rate (spk/s)')
+        plt.xlabel(test)
         plt.ylabel('Estimated rate')
         if plot_dir is not None:
-            plt.savefig(os.path.join(plot_dir,'rate-%s-%s.png' % (method,data_type)))
+            plt.savefig(os.path.join(plot_dir,'rate-summary-%s-%s-%s.png' % (method,test,data_type)))
 
-    # Determine if any estimated rates are outside acceptable range (expected mean +/- 3*SEM)
-    errors = np.abs(means - rates) / sems
 
-    # Find estimates that are clearly wrong
+    # Determine if test actually produced the expected values
+    # 'mean' : Test if estimated rate increases monotonically with actual simulated rate
+    if test in ['rate','mean']:
+        evals = [((np.diff(grand_means) >= 0).all(),
+                    "Estimated rate does not inccrease monotonically with simulated rate")]
+
+    # 'n' : Test if stat is ~ same for all values of n (unbiased by n)
+    elif test in ['n','n_trials']:
+        evals = [(grand_means.ptp() < grand_sems.max(),
+                  "Estimated rate has larger than expected range across n's (likely biased by n)")]
+
     passed = True
-    bad_estimates = (errors > 3.3)
-    if bad_estimates.any():
-        passed = False
-        if do_plots: plt.plot(rates[bad_estimates], means[bad_estimates]+0.1, '*', color='k')
-        if do_tests:    raise AssertionError("%d tested rates failed" % bad_estimates.sum())
-        else:           warn("%d tested rates failed" % bad_estimates.sum())
+    for cond,message in evals:
+        if not cond:    passed = False
+
+        # Raise an error for test fails if do_tests is True
+        if do_tests:    assert cond, AssertionError(message)
+        # Just issue a warning for test fails if do_tests is False
+        elif not cond:  warn(message)
 
     return means, sems, passed
+
+
+def rate_test_battery(methods=('bin','density'), tests=('mean','n'),
+                      data_types=('timestamp','bool'), do_tests=True, **kwargs):
+    """
+    Runs a battery of given tests on given spike rate computation methods
+
+    ARGS
+    methods     Array-like. List of spike rate computation methods to evaluate.
+                Default: ('bin','density') (all supported methods)
+
+    tests       Array-like. List of tests to run.
+                Default: ('mean','n') (all supported tests)
+
+    data_types  Array-like. List of spike data types to evaluate.
+                Default: ('timestamp','bool') (all supported values)
+
+    do_tests    Bool. Set=True to evaluate test results against expected values and
+                raise an error if they fail. Default: True
+
+    kwargs      Any other kwargs passed directly to test_randstats()
+
+    ACTION
+    If do_tests is True, raises an error if any estimated value for any (method,test)
+    is too far from expected value
+    """
+    if isinstance(methods,str): methods = [methods]
+    if isinstance(tests,str): tests = [tests]
+    if isinstance(data_types,str): data_types = [data_types]
+
+    for method in methods:
+        for test in tests:
+            for data_type in data_types:
+                print("Running %s test on %s %s" % (test,method,data_type))
+
+                t1 = time.time()
+
+                _,_,passed = test_rate(method, test=test, data_type=data_type,
+                                       do_tests=do_tests, **kwargs)
+
+                print('%s (test ran in %.1f s)' %
+                      ('PASSED' if passed else 'FAILED', time.time()-t1))
+                if 'plot_dir' in kwargs: plt.close('all')
+
 
 
 # =============================================================================
@@ -224,7 +297,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
     If do_plots is True, also generates a plot summarizing results
     """
     # Note: Set random seed once here, not for every random data generation loop below
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     stat = stat.lower()
     test = test.lower()
@@ -408,7 +481,7 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
     If do_plots is True, also generates a plot summarizing results
     """
     # Note: Set random seed once here, not for every random data generation loop below
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     stat = stat.lower()
     test = test.lower()

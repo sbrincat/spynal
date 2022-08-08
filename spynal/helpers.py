@@ -87,7 +87,7 @@ def _has_method(obj, method):
 
     References
     ----------
-    stackoverflow.com/questions/7580532/how-to-check-whether-a-method-exists-in-python/7580687
+    https://stackoverflow.com/questions/7580532/how-to-check-whether-a-method-exists-in-python/7580687
     """
     return callable(getattr(obj, method, None))
 

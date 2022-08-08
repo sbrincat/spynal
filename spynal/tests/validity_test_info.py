@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 from patsy import dmatrix
 
 from spynal.tests.data_fixtures import simulate_dataset
+from spynal.utils import set_random_seed
 from spynal.info import neural_info, neural_info_2groups
 
 
@@ -95,7 +96,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     If do_plots is True, also generates a plot summarizing expected vs estimated values
     """
     # Note: Set random seed once here, not for every random data generation loop below
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     test = test.lower()
     method = method.lower()

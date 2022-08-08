@@ -24,6 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from spynal.tests.data_fixtures import simulate_dataset
+from spynal.utils import set_random_seed
 from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_association_test, \
                                        two_sample_test, one_way_test, two_way_test, \
                                        one_sample_confints, paired_sample_confints, two_sample_confints
@@ -109,7 +110,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     If do_plots is True, also generates a plot summarizing expected vs estimated values
     """
     # Note: Set random seed once here, not for every random data generation loop below
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     test = test.lower()
     method = method.lower()
@@ -447,7 +448,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     # HACK Hard-code term=0, but keep term for possible future extension to 1-way/2-way stats
     term = 0
     # Note: Set random seed once here, not for every random data generation loop below
-    if seed is not None: np.random.seed(seed)
+    if seed is not None: set_random_seed(seed)
 
     test = test.lower()
 
