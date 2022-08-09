@@ -1,6 +1,4 @@
 """
-validity_test_info.py
-
 Suite of tests to assess "face validity" of neural information computation functions in info.py
 Usually used to test new or majorly updated functions to ensure they perform as expected.
 
@@ -9,11 +7,11 @@ means, assays of bias, etc. to establish methods produce expected pattern of res
 
 Plots results and runs assertions that basic expected results are reproduced
 
-FUNCTIONS
-test_neural_info        Contains tests of neural information computation functions
-info_test_battery       Runs standard battery of tests of information computation functions
+Function list
+-------------
+- test_neural_info :    Contains tests of neural information computation functions
+- info_test_battery :   Run standard battery of tests of information computation functions
 """
-
 import os
 from warnings import warn
 import numpy as np
@@ -27,7 +25,7 @@ from spynal.info import neural_info, neural_info_2groups
 
 
 def test_neural_info(method, test='gain', test_values=None, distribution='normal',
-                     n_reps=100, seed=None, arg_type='label',
+                     arg_type='label', n_reps=100, seed=None, 
                      do_tests=True, do_plots=False, plot_dir=None, **kwargs):
     """
     Basic testing for functions estimating neural information.
@@ -35,65 +33,74 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     Generates synthetic data, estimates information using given method,
     and compares estimated to expected values.
 
-    info,sd,passed = test_neural_info(method,test='gain',test_values=None,distribution='normal',
-                                      n_reps=100,seed=None,arg_type='label',
-                                      do_tests=True,do_plots=False,plot_dir=None, **kwargs)
+    For test failures, raises an error or warning (depending on value of `do_tests`).
+    Optionally plots summary of test results.
+    
+    Parameters
+    ----------
+    method : str
+        Name of information function to test: 'pev'|'dprime'|'auroc'|'mutual_information'|'decode'
+        Can also set to specific 'pev' model type: 'anova1' | 'anova2' | 'regress'
 
-    ARGS
-    method  String. Name of information function to test:
-            'pev' | 'dprime' | 'auroc' | 'mutual_information' | 'decode'
-            Can also set to specific 'pev' model type: 'anova1' | 'anova2' | 'regress'
+    test : str, default: 'gain'
+        Type of test to run. Options:
+        
+        - 'gain' : Tests multiple values for between-condition response difference (gain).
+            Checks for monotonically increasing information.
+        - 'spread' : Tests multiple values for distribution spread (SD).
+            Checks for monotonically decreasing information.
+        - 'n': Tests multiple values of number of trials (n).
+            Checks that information doesn't vary with n.
+        - 'bias' : Tests multiple n values with 0 btwn-cond difference.
+            Checks that information is not > 0 (unbiased).
+        - 'n_conds' : Tests multiple values for number of conditions.
+            (no actual checking, just to see behavior of info measure)
 
-    test    String. Type of test to run. Default: 'gain'. Options:
-            'gain'  Tests multiple values for between-condition response difference (gain)
-                    Checks for monotonically increasing information
-            'spread'Tests multiple values for distribution spread (SD)
-                    Checks for monotonically decreasing information
-            'n'     Tests multiple values of number of trials (n)
-                    Checks that information doesn't vary with n.
-            'bias'  Tests multiple n values with 0 btwn-cond difference
-                    Checks that information is not > 0 (unbiased)
-            'n_conds' Tests multiple values for number of conditions
-                    (no actual checking, just to see behavior of info measure)
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
+        - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
+        - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
+        - 'n_conds' :   Number of conditions. Default: [2,4,8]
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'gain'      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
-            'spread'    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
-            'n'/'bias'  Trial numbers. Default: [25,50,100,200,400,800]
-            'n_conds'   Number of conditions. Default: [2,4,8]
+    distribution : str, default: 'normal'
+        Name of distribution to simulate data from. Options: 'normal' | 'poisson'
 
-    distribution    String. Name of distribution to simulate data from.
-                    Options: 'normal' [default] | 'poisson'
+    arg_type : str, default: 'label'
+        Which input-argument version of info computing function to use:
+        
+        - 'label'   : Standard version with data,labels arguments
+        - '2groups' : Binary contrast version with data1,data2 arguments
 
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
+    n_reps : int, default: 100
+        Number of independent repetitions of tests to run
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for unseeded random numbers.
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    arg_type String. Which input-argument version of info computing function to use:
-            'label'     : Standard version with data,labels arguments [default]
-            '2groups'   : Binary contrast version with data1,data2 arguments
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    do_tests Bool. Set=True to evaluate test results against expected values and
-            raise an error if they fail. Default: True
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+    **kwargs :
+        All other keyword args passed to information estimation function
+                
+    Returns
+    -------
+    info : ndarray, shape=(n_values,)
+        Estimated information for each tested value
 
-    **kwargs All other keyword args passed to information estimation function
+    sd : ndarray, shape=(n_values,)
+        Across-run SD of information for each tested value
 
-    RETURNS
-    info    (n_values,) ndarray. Estimated information for each tested value
-
-    sd      (n_values,) ndarray. Across-run SD of information for each tested value
-
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raisers an error if any estimated value is too far from expected value
-    If do_plots is True, also generates a plot summarizing expected vs estimated values
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     # Note: Set random seed once here, not for every random data generation loop below
     if seed is not None: set_random_seed(seed)
@@ -228,29 +235,23 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 def info_test_battery(methods=('pev','dprime','auroc','mutual_information','decode'),
                       tests=('gain','spread','n','bias'), do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given neural information computation methods
+    Run a battery of given tests on given neural information computation methods
 
-    info_test_battery(f=('pev','dprime','auroc','mutual_information','decode'),
-                      tests=('gain','spread','n','bias'), **kwargs)
-
-    ARGS
-    methods     Array-like. List of neural information methods to test.
-                Default: ('pev','dprime','auroc','mutual_information','decode')
-
-    tests       Array-like. List of tests to run.
-                Note: certain combinations of methods,tests are skipped, as they
-                are not expected to pass
-                (ie 'n_trials','bias' tests skipped for biased metric 'mutual_information')
+    Parameters
+    ----------
+    methods : array-like of str, default: ('pev','dprime','auroc','mutual_information','decode')
+        List of neural information methods to test.
+                
+    tests : array-like of str
+        List of tests to run. Certain combinations of methods,tests are skipped, as they are not
+        expected to pass (ie 'n_trials','bias' tests skipped for biased metric 'mutual_info').
                 Default: ('gain','spread','n','bias') (all supported tests)
 
-    do_tests    Bool. Set=True to evaluate test results against expected values and
-                raise an error if they fail. Default: True
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    kwargs      Any other kwargs passed directly to test_neural_info()
-
-    ACTION
-    Raises an error or warning if any estimated value for any (method,test)
-    is too far from expected value
+    **kwargs :
+        Any other kwargs passed directly to test_neural_info()        
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]

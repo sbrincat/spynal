@@ -1105,7 +1105,7 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
         d = points - center[np.newaxis,:]
 
         # Note: empirically, this algorithm is faster for small n, other is faster for large n
-        # todo Must be more efficient way to do this???        
+        # todo Must be more efficient way to do this???
         if n_datapoints < 10000:
             f_x = np.diagonal(d @ np.linalg.pinv(covariance) @ d.T)
         else:
@@ -1140,12 +1140,11 @@ def is_symmetric(X):
     https://stackoverflow.com/questions/16266720/find-out-if-matrix-is-positive-definite-with-numpy
     """
     # Test for square, symmetric matrix
-    # todo should this be array_equal or all_close?    
-    if (X.ndim == 2) and (X.shape[0] == X.shape[1]) and np.array_equal(X, X.T): 
+    if (X.ndim == 2) and (X.shape[0] == X.shape[1]) and np.array_equal(X, X.T):
         return True
     else:
         return False
-    
+
 
 def is_positive_definite(X, semi=False):
     """
@@ -1189,8 +1188,6 @@ def index_axis(data, axis, idxs):
 
     Similar to function of Numpy take and compress functions, but this can take either
     integer indexes, boolean indexes, or a slice object. And this is generally much faster.
-
-    data = index_axis(data, axis, idxs)
 
     Parameters
     ----------
@@ -1281,7 +1278,7 @@ def standardize_array(data, axis=0, target_axis=0):
     data = np.asarray(data)
     if axis < 0: axis = data.ndim + axis
     if target_axis < 0: target_axis = data.ndim + target_axis
-    
+
     assert target_axis in [0,data.ndim-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
 
@@ -1322,7 +1319,7 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
     data_shape  = np.asarray(data_shape)
     if axis < 0: axis = len(data_shape) + axis
     if target_axis < 0: target_axis = len(data_shape) + target_axis
-    
+
     assert target_axis in [0,len(data_shape)-1], \
         ValueError("target_axis set = %d. Must be 0 (first axis) or -1 (last axis)" % target_axis)
 
@@ -1447,7 +1444,7 @@ def iarange(*args, **kwargs):
 
     **kwargs :
         Any other kwargs passed directly to :func:`np.arange` function
-    
+
     Returns
     -------
     range : ndarray
@@ -1466,7 +1463,7 @@ def iarange(*args, **kwargs):
         start = args[0]
         stop = args[1]
         step = args[2]
-        
+
     # Offset to get final value in sequence is 1 for int-valued step, small float otherwise
     offset = 1 if isinstance(step,int) else 1e-12
     # Make offset negative for a negative step
@@ -1500,7 +1497,7 @@ def unsorted_unique(x, axis=None, **kwargs):
     ----------
     https://stackoverflow.com/questions/15637336/numpy-unique-with-order-preserved
     """
-    x    = np.asarray(x)
+    x = np.asarray(x)
     if axis is not None:
         idxs = np.unique(x, return_index=True, axis=axis, **kwargs)[1]
         return index_axis(x, axis, np.sort(idxs))
@@ -1556,12 +1553,12 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
     exclude_end : bool, default: True if force_int==True, otherwise False
         If True, excludes the endpoint of each (integer-valued) sliding win from
         the definition of that win, to prevent double-sampling
-        (eg, the range for a 100 ms window is [1 99], not [1 100])
+        (eg, the range for a 100 ms window is [1,99], not [1,100])
 
     Returns
     -------
     windows : ndarray, shape=(n_wins,2)
-        Sequence of sliding window [start end]'s
+        Sequence of sliding window [start,end]'s
     """
     # Default: step is same as window width (ie windows perfectly disjoint)
     if step is None: step = width

@@ -123,8 +123,8 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     n_freqs = method_to_n_freqs['burst'] if spec_type == 'burst' else method_to_n_freqs[method]
     freqs_shape = (n_freqs,2) if (method == 'bandfilter') or (spec_type == 'burst') else (n_freqs,)
     n_timepts = method_to_n_timepts[method]
-    if spec_type == 'complex':  dtype = np.complex
-    elif spec_type == 'burst':  dtype = np.bool
+    if spec_type == 'complex':  dtype = complex
+    elif spec_type == 'burst':  dtype = bool
     else:                       dtype = float
 
     # Time reversal -> inverted sign phase, complex conj of complex, preserves power

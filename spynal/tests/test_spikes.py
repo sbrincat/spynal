@@ -132,7 +132,7 @@ def test_bin_rate(spike_data, data_type, output, result):
 
     if output == 'rate':    dtype_type = float
     elif output == 'count': dtype_type = np.integer
-    else:                   dtype_type = np.bool
+    else:                   dtype_type = bool
 
     data_checker = np.array_equal if data_type == 'bool' else object_array_equal
     result_checker = np.mean if output == 'rate' else np.sum

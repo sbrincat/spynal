@@ -27,14 +27,16 @@ DEBUG = False
 # =============================================================================
 def _structuredarray_to_dict(sarray, typemap=None, transpose=False, level=0):
     """
-    Converts Numpy structured array (which Matlab structs are initially
+    Convert Numpy structured array (which Matlab structs are initially
     imported as, using scipy.io.loadmat) to a dict, with type names as keys
 
-    INPUT
-    sarray   Numpy structured array
+    Parameters
+    ----------
+    sarray :  Numpy structured array
 
-    OUTPUT
-    dic      Dict. {keys = sarray.dtype.names : values = sarray[key]}
+    Returns
+    -------
+    dic : dict, {sarray.dtype.names : sarray[key]}
     """
     # Convert structured array to dict
     dic = {name:sarray[name] for name in sarray.dtype.names}
@@ -60,17 +62,19 @@ def _structuredarray_to_dataframe(sarray, typemap=None, transpose=False, level=0
     Intended for table-like Matlab scalar structs, which naturally fit into a
     DataFrame (though Matlab table variables are not currently loadable in Python).
 
-    df = _structuredarray_to_dataframe(sarray)
+    Parameters
+    ----------
+    sarray : Numpy structured array
 
-    INPUT
-    sarray  Numpy structured array
+    Returns
+    -------
+    df : Pandas DataFrame
+        Columns are names and values of all the sarray.dtype.names
+        whose associated values are vector-valued with length = modal length
+        of all names. Rows are each entry from these vectors
 
-    OUTPUT
-    df      Pandas DataFrame. Columns are names and values of all the sarray.dtype.names
-            whose associated values are vector-valued with length = modal length
-            of all names. Rows are each entry from these vectors
-
-    REFERENCE Based on code obtained from:
+    References
+    ----------
     http://poquitopicante.blogspot.com/2014/05/loading-matlab-mat-file-into-pandas.html
     """
     # Convert structured array to dict {keys = sarray.dtype.names : values = sarray[key]}
@@ -86,11 +90,15 @@ def _get_matfile_version(filename):
     """
     Determines version of given MAT file (7.3 or 7/older) by reading its header
 
-    INPUT
-    filename    String. Full-path name of MAT-file to load from
+    Parameters
+    ----------
+    filename : str
+        Full-path name of MAT-file to load from
 
-    OUTPUT
-    version     Float. Version of MAT file: 7 (older) | 7.3 (newer/HDF5)
+    Returns
+    -------
+    version : float
+        Version of MAT file: 7 (or 4,5 = older) | 7.3 (newer/HDF5)
     """
     # Read in first 10 bytes of MAT file header and convert to string ("with" auto-closes file)
     with open(filename, 'rb') as file:
@@ -113,16 +121,16 @@ def _get_matfile_version(filename):
 
 def _extract_strings(x):
     """
-    Deals with weird way Matlab cell-array-of-strings data structures are loaded.
+    Deal with weird way Matlab cell-array-of-strings data structures are loaded.
 
-    Converts them from Numpy array of objects, which are each trivial
+    Convert them from Numpy array of objects, which are each trivial
     1-length arrays of strings, to just an array of strings themselves.
     """
     return np.asarray([(x[j][0] if len(x[j]) > 0 else '') for j in range(len(x))])
 
 
 def _is_structured_array(array):
-    """ Returns True if input array is a Numpy structured array, False otherwise """
+    """ Return True if input array is a Numpy structured array, False otherwise """
     # For v7.3 mat files loaded with h5py, structured arrays are ndarrays with dtype np.void
     # For v7 mat files loaded with scipy.io, structured arrays are an "np.void" type
     # Test for either version
@@ -132,24 +140,25 @@ def _is_structured_array(array):
 
 def _dict_to_dataframe(dic):
     """
-    Converts dict (which Matlab structs are initially imported as, using h5py)
+    Convert dict (which Matlab structs are initially imported as, using h5py)
     to a Pandas DataFrame, with type names as keys. Intended for table-like
     Matlab scalar structs, which naturally fit into a DataFrame
     (though Matlab tables themselves are not currently loadable in Python AKAIK).
 
-    df = _dict_to_dataframe(dic)
+    Parameters
+    ----------
+    dic : dict, {str : array-like, shape=(n_rows,)}
+        Dictionary with keys to be used as column names and values that are same-length
+        vectors. Values not fitting this criterion are not retained in output.
 
-    INPUT
-    dic {string:(nRow,) array-like} dict. Dictionary with keys to be used as
-        column names and values that are same-length vectors. Values not
-        fitting this criterion are not retained in output.
+    Returns
+    -------
+    df : Pandas DataFrame, shape=(n_rows,n_columns)
+        Columns are dict keys, for all associated values are vector-valued with
+        length = modal length of all keys. Rows are each entry from these vectors.
 
-    OUTPUT
-    df  Pandas DataFrame. Columns are dict keys, for all associated values are
-        vector-valued with length = modal length of all keys.
-        Rows are each entry from these vectors.
-
-    REFERENCE Based on code obtained from:
+    References
+    ----------
     http://poquitopicante.blogspot.com/2014/05/loading-matlab-mat-file-into-pandas.html
     """
     # Special case: Matlab structs converted from Matlab tables may retain the
@@ -215,16 +224,16 @@ def _dict_to_dataframe(dic):
 
 def _array_to_tuple_vector(array):
     """
-    Converts ndarray vector of shape (n_rows,n_cols) to (n_rows,) vector of
+    Convert ndarray vector of shape (n_rows,n_cols) to (n_rows,) vector of
     n_cols length tuples, which can more easily be assembled into a DataFrame
 
-    tuples = _array_to_tuple_vector(array)
+    Parameters
+    ----------
+    array : ndarray, shape=(n_rows,n_cols)
 
-    INPUT
-    array   (n_rows,n_cols) Numpy ndarray
-
-    OUTPUT
-    tuples  (n_rows,) Numpy vector of nCol-tuples
+    Returns
+    -------
+    tuples : ndarray, shape=(n_rows,) of tuples, shape=(n_cols,)
     """
     n = array.shape[0]
     # Create vector of size (n,) of same type as <array>
@@ -237,21 +246,24 @@ def _array_to_tuple_vector(array):
 
 def _xarray_to_array(array):
     """
-    Converts xarray DataArray -> Numpy array + dict with metadata attributes
+    Convert xarray DataArray -> Numpy array + dict with metadata attributes
 
-    array,attrs = _xarray_to_array(array,attrDict)
+    Parameters
+    ----------
+    array : xarray DataArray, shape=Any
 
-    INPUT
-    array       xarray DataArray (any shape and dtype)
+    Returns
+    -------
+    array : ndarray, shape=Any
+        Data values from DataArray `array`. Same shape and dtype as `array`.
 
-    OUTPUT
-    array       Numpy ndarray (same shape and dtype). Data values from DataArray.
-    attrs       {String:*} dict. Metatdata attributes extracted from DataArray:
-                'dims' :    (n_dims,) tuple of strings. Dimension names.
-                'coords' :  (n_dims,) tuple of [len(dim),] array.
-                            Coordinate indexes for each dimension
-                'name' :    String. Name of variable ('' if none set)
-                'attrs':    OrderedDict. Any additional metadata ([] if none set)
+    attrs : dict, {str : *}
+        Metatdata attributes extracted from DataArray:
+
+        - 'dims' :  tuple, shape=(n_dims,), of str. Dimension names.
+        - 'coords' : tuple, shape=(n_dims,), of [len(dim),]. Coordinate indexes for each dimension.
+        - 'name' :  str. Name of variable ('' if none set).
+        - 'attrs':  OrderedDict. Any additional metadata ([] if none set).
     """
     # Extract metadata from variable into dict
     attrs = {'dims':   array.dims,
@@ -268,22 +280,21 @@ def _xarray_to_array(array):
 
 def _parse_typemap(typemap_in=None):
     """
-    Combines any input values for typemap (which maps loaded Matlab variable
+    Combine any input values for typemap (which maps loaded Matlab variable
     types to Python variable types) with defaults
 
-    INPUT
-    typemap_in  {string:string} Dict. Maps names of Matlab variable types or
-                specific Matlab variable names to Python variable types.
-                Matlab types: 'array' = numerical array, 'cell' = cell array,
-                    'struct' = structure).
-                Python type: 'array' = Numpy ndarray, 'dataframe' = Pandas
-                    DataFrame, 'dict' = dictionary
+    Parameters
+    ----------
+    typemap_in : dict, {str:str}
+        Maps names of Matlab variable types or specific Matlab variable names
+        to Python variable types.
+        Matlab types: 'array' = numerical array, 'cell' = cell array, 'struct' = structure).
+        Python type: 'array' = Numpy ndarray, 'dataframe' = Pandas DataFrame, 'dict' = dictionary.
 
-    OUTPUT
-    typemap_out {string:string} Dict. Default mapping, overwritten with any
-                input values.
-                Default: {'array':'array', 'cell':'array', 'struct':'dict'}
-
+    Returns
+    -------
+    typemap_out : dict, {str:str}, default: {'array':'array', 'cell':'array', 'struct':'dict'}
+        Default mapping, overwritten with any input values.
     """
     # Set of Matlab data types to deal with here
     vbl_types = {'array', 'cell', 'struct', 'structarray'}
@@ -313,14 +324,20 @@ def _variables_to_mat(variables):
 
     variables = _variables_to_mat(variables)
 
-    INPUT
-    variables   {String:<vbl>} dict. Names and values of variables to convert
+    Parameters
+    ----------
+    variables : dict, {str : <vbl>}
+        Names and values of variables to convert
 
-    OUTPUT
-    variables   Same, but with variables converted to mat compatible types:
-                xarray.DataArray -> Numpy ndarray + {string:*} dict with metadata
-                attributes (stored in separate variable named <variable>_attr)
-                strings, lists of strings -> Numpy object ndarray
+    Returns
+    -------
+    variables : dict, {str : <vbl>}
+       Same as input, but with variables converted to mat compatible types:
+        
+        - xarray.DataArray -> Numpy ndarray + {string:*} dict with metadata
+        attributes (stored in separate variable named <variable>_attr)
+        
+        - strings, lists of strings -> Numpy object ndarray
     """
     new_vbl_dict = {}     # In case we need to create new variables in loop below
 
@@ -487,7 +504,7 @@ def _v7_matlab_type(obj):
 # v7.3-specific helper functions
 # =============================================================================
 def _h5py_matlab_type(obj):
-    """ Returns variable type of Matlab variable encoded in h5py object """
+    """ Return variable type of Matlab variable encoded in h5py object """
     assert 'MATLAB_class' in obj.attrs, \
         AttributeError("Can't determine Matlab variable type. " \
                        "No 'MATLAB_class' attribute in h5py object '%s'" % obj)
@@ -497,8 +514,9 @@ def _h5py_matlab_type(obj):
 
 
 def _convert_string(value, encoding='UTF-16'):
-    """ Converts integer-encoded strings in HDF5 files to strings """
-    return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
+    """ Convert integer-encoded strings in HDF5 files to strings """
+    return ''.join(value[:].tobytes().decode(encoding))    # time test ~ 700 ms
+    # DEL return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
 
     # Note: Alternative methods that tested much slower:
     # return ''.join([chr(c) for c in value])               # time test ~ 7.2 s

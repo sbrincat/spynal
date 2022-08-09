@@ -1,6 +1,4 @@
 """
-validity_test_randstats.py
-
 Suite of tests to assess "face validity" of randomization statistic functions in randstats.py
 Usually used to test new or majorly updated functions to ensure they perform as expected.
 
@@ -9,14 +7,14 @@ means, assays of bias, etc. to establish methods produce expected pattern of res
 
 Plots results and runs assertions that basic expected results are reproduced
 
-FUNCTIONS
-test_randstats      Contains tests of randomization statistic computation functions
-stat_test_battery   Runs standard battery of tests of randomization stat functions
+Function list
+-------------
+- test_randstats :          Contains tests of randomization statistic computation functions
+- stat_test_battery :       Runs standard battery of tests of randomization stat functions
 
-test_confints       Contains tests of confidence interval computation functions
-confint_test_battery Runs standard battery of tests of confidence interval functions
+- test_confints :           Contains tests of confidence interval computation functions
+- confint_test_battery :    Runs standard battery of tests of confidence interval functions
 """
-
 import os
 import time
 from math import ceil
@@ -42,72 +40,83 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     Generates synthetic data, computes statistics, p values, and significance using given method,
     and compares computed to expected values.
 
-    means,sds,passed = test_randstats(stat,method,test='gain',test_values=None,term=0,
-                                      distribution='normal',alpha=0.05,n_reps=100,seed=None,
-                                      do_tests=True,do_plots=False,plot_dir=None, **kwargs)
+    For test failures, raises an error or warning (depending on value of `do_tests`).
+    Optionally plots summary of test results.
 
-    ARGS
-    stat    String. Type of statistical test to evaluate:
-            'one_sample' | 'paired_sample' | 'paired_sample_assoc' | 
-            'two_sample' | 'one_way' | 'two_way'
+    Parameters
+    ----------
+    stat : str
+        Type of statistical test to evaluate: 
+        'one_sample'|'paired_sample'|'paired_sample_assoc'| 'two_sample'|'one_way'|'two_way'
 
-    method  String. Resampling paradigm to use for test: 'permutation' | 'bootstrap'
+    method : str
+        Resampling paradigm to use for test: 'permutation' | 'bootstrap'
 
-    test    String. Type of test to run. Default: 'gain'. Options:
-            'gain'  Tests multiple values for btwn-cond response difference (gain)
-                    Checks for monotonically increasing stat/decreasing p value
-            'spread'Tests multiple values for distribution spread (SD)
-                    Checks for monotonically decreasing stat/increasing p value
-            'n'     Tests multiple values of number of trials (n)
-                    Checks that stat doesn't vary, but p value decreases, with n
-            'bias'  Tests multiple n values with 0 btwn-cond difference
-                    Checks that stat doesn't vary and p value remains ~ 0 (unbiased)
+    test : str, default: 'gain'
+        Type of test to run. Options:
+        
+        - 'gain' : Tests multiple values for btwn-cond response difference (gain).
+            Checks for monotonically increasing stat/decreasing p value.
+        - 'spread' : Tests multiple values for distribution spread (SD).
+            Checks for monotonically decreasing stat/increasing p value.
+        - 'n' : Tests multiple values of number of trials (n).
+            Checks that stat doesn't vary, but p value decreases, with n.
+        - 'bias' : Tests multiple n values with 0 btwn-cond difference.
+            Checks that stat doesn't vary and p value remains ~ 0 (unbiased).
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'gain'      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
-            'spread'    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
-            'n'/'bias'  Trial numbers. Default: [25,50,100,200,400,800]
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
+        - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
+        - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
 
-    term    Int. Which model term to modify for testing 2-way stats (unused for other stats).
-            0,1 = main effects, 2 = interaction. Default: 0
+    term : int, default: 0
+        Which model term to modify for testing 2-way stats (unused for other stats).
+        0,1 = main effects, 2 = interaction. 
 
-    distribution    String. Name of distribution to simulate data from.
-                    Options: 'normal' [default] | 'poisson'
+    distribution : str, default: 'normal'
+        Name of distribution to simulate data from. Options: 'normal' | 'poisson'
 
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
+    n_reps : int, default: 100
+        Number of independent repetitions of tests to run
 
-    alpha   Float. Significance criterion "alpha". Default: 0.05
+    alpha : float, default: 0.05
+        Significance criterion "alpha"
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for unseeded random numbers.
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    do_tests Bool. Set=True to evaluate test results against expected values and
-            raise an error if they fail. Default: True
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
 
-    **kwargs All other keyword args passed to statistic computation function
+    **kwargs :
+        All other keyword args passed to statistic computation function
 
-    RETURNS
-    means   {'variable' : (n_values,) ndarray}. Mean results (across independent test runs)
-            of variables output from randomization tests for each tested value. Keys:
-            'signif'        Binary signficance decision (at criterion <alpha>)
-            'p'             p values
-            'log_p'         p values negative log-transformed -log10(p) to increase with effect size
-            'stat_obs'      Observed evaluatation statistic values
-            'stat_resmp'    Mean resampled statistic values (across all resamples)
+    Returns
+    -------
+    means : dict, {str : ndarray. shape=(n_values,)}
+        Mean results (across independent test runs) of variables output from randomization tests
+        for each tested value. Each key/value pair corressponds to a computed statistic variable:
+        
+        - 'signif' :    Binary signficance decision (at criterion <alpha>)
+        - 'p' :         p values
+        - 'log_p' :     p values negative log-transformed -log10(p) to increase with effect size
+        - 'stat_obs' :  Observed evaluatation statistic values
+        - 'stat_resmp' :Mean resampled statistic values (across all resamples)
 
-    sds     {'variable' : (n_values,) ndarray}. Standard deviation of results (across test runs)
-            of variables output from rand tests for each tested value. Same fields as means.
+    sds : : dict, {str : ndarray. shape=(n_values,)}
+        Standard deviation of results (across test runs) of variables output from rand tests for
+        each tested value. Same fields as means.
 
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raisers an error if any estimated value is too far from expected value
-    If do_plots is True, also generates a plot summarizing expected vs estimated values
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     # Note: Set random seed once here, not for every random data generation loop below
     if seed is not None: set_random_seed(seed)
@@ -322,30 +331,25 @@ def stat_test_battery(stats=('one_sample','paired_sample','paired_sample_assoc',
                       tests=('gain','spread','n','bias','correlation'),
                       do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given randomization statistic computation methods
+    Run a battery of given tests on given randomization statistic computation methods
 
-    stat_test_battery(stats=('one_sample','paired_sample','two_sample','one_way','two_way'),
-                      methods=('permutation','bootstrap'), tests=('gain','n','bias'), **kwargs)
+    Parameters
+    ----------
+    stats : array-like of str, default: ('one_sample','paired_sample','paired_sample_assoc',
+        'two_sample','one_way','two_way')
+        List of statistical tests to evaluate.
 
-    ARGS
-    stats       Array-like. List of statistical tests to evaluate.
-                Default: ('one_sample','paired_sample','paired_sample_assoc',
-                          'two_sample','one_way','two_way') (all supported methods)
+    methods : array-like of str, default: ('permutation','bootstrap') (all supported methods)
+        List of resampling paradigms to run.
+                
+    tests : array-like of str, default: ('gain','spread','n','bias','correlation')
+        List of tests to run.
+                
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    methods     Array-like. List of resampling paradigms to run.
-                Default: ('permutation','bootstrap') (all supported methods)
-
-    tests       Array-like. List of tests to run.
-                Default: ('gain','spread','n','bias','correlation') (all supported tests)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
-                raise an error if they fail. Default: True
-
-    kwargs      Any other kwargs passed directly to test_randstats()
-
-    ACTION
-    Raises an error or warning if any estimated value for any (stat,method,test)
-    is too far from expected value
+    **kwargs :
+        Any other kwargs passed directly to test_randstats()
     """
     if isinstance(stats,str): stats = [stats]
     if isinstance(methods,str): methods = [methods]
@@ -382,68 +386,74 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     """
     Basic testing for bootstrap confidence interval computation functions
 
-    Generates synthetic data, computes statistics, confints, and significance using given method,
-    and compares computed to expected values.
+    Generate synthetic data, computes statistics, confints, and significance using given method,
+    and compare computed to expected values.
 
-    means,sds,passed = test_confints(stat,test='gain',test_values=None,
-                                     distribution='normal',confint=0.95,n_reps=100,seed=None,
-                                     do_tests=True,do_plots=False,plot_dir=None, **kwargs)
+    For test failures, raises an error or warning (depending on value of `do_tests`).
+    Optionally plots summary of test results.
+    
+    Parameters
+    ----------
+    stat : str
+        Type of statistical test to evaluate: 'one_sample' | 'paired_sample' | 'two_sample'
 
-    ARGS
-    stat    String. Type of statistical test to evaluate:
-            'one_sample' | 'paired_sample' | 'two_sample'
+    test : str, default: 'gain'
+        Type of test to run. Options:
+        
+        - 'gain' : Tests multiple values for btwn-cond response difference (gain).
+            Checks for monotonically increasing confints.
+        - 'spread' : Tests multiple values for distribution spread (SD).
+            Checks for monotonically decreasing confints.
+        - 'n' : Tests multiple values of number of trials (n).
+            Checks that confints decrease with n.
+        - 'bias' : Tests multiple n values with 0 btwn-cond difference.
+            Checks that stat doesn't vary and p value remains ~ 0 (unbiased).
 
-    test    String. Type of test to run. Default: 'gain'. Options:
-            'gain'  Tests multiple values for btwn-cond response difference (gain)
-                    Checks for monotonically increasing confints
-            'spread'Tests multiple values for distribution spread (SD)
-                    Checks for monotonically decreasing confints
-            'n'     Tests multiple values of number of trials (n)
-                    Checks that confints decrease with n
-            'bias'  Tests multiple n values with 0 btwn-cond difference
-                    Checks that stat doesn't vary and p value remains ~ 0 (unbiased)
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
+        - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
+        - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'gain'      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
-            'spread'    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
-            'n'/'bias'  Trial numbers. Default: [25,50,100,200,400,800]
+    distribution : str, default: 'normal'
+        Name of distribution to simulate data from. Options: 'normal' | 'poisson'
 
-    distribution    String. Name of distribution to simulate data from.
-                    Options: 'normal' [default] | 'poisson'
+    confint : float, default: 0.95 (95% CI)
+        Confidence interval to compute (1-alpha). 
 
-    confint Float. Confidence interval to compute (1-alpha). Default: 0.95 (95% CI)
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    n_reps  Int. Number of independent repetitions of tests to run. Default: 100
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None [default] for unseeded random numbers.
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    do_tests Bool. Set=True to evaluate test results against expected values and
-            raise an error if they fail. Default: True
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    **kwargs :
+        All other keyword args passed to confinf computation function
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+    Returns
+    -------
+    means : dict, {str : ndarray. shape=(n_values,)}
+        Mean results (across independent test runs) of variables output from randomization tests
+        for each tested value. Each key/value pair corressponds to a computed statistic variable:
+        
+        - 'signif' :       Binary signficance decision (at criterion <alpha>)
+        - 'p' :            p values (actually -log10(p) so increases with effect size)
+        - 'stat_obs' :     Observed evaluatation statistic values
+        - 'stat_resmp' :   Mean resampled statistic values (across all resamples)
 
-    **kwargs All other keyword args passed to confint computation function
+    sds : {str : (n_values,) ndarray}
+        Standard deviation of results (across test runs) of variables output from rand tests
+        for each tested value. Same fields as means.
 
-    RETURNS
-    means   {'variable' : (n_values,) ndarray}. Mean results (across independent test runs)
-            of variables output from randomization tests for each tested value. Keys:
-            'signif'        Binary signficance decision (at criterion <alpha>)
-            'p'             p values (actually -log10(p) so increases with effect size)
-            'stat_obs'      Observed evaluatation statistic values
-            'stat_resmp'    Mean resampled statistic values (across all resamples)
-
-    sds     {'variable' : (n_values,) ndarray}. Standard deviation of results (across test runs)
-            of variables output from rand tests for each tested value. Same fields as means.
-
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raisers an error if any estimated value is too far from expected value
-    If do_plots is True, also generates a plot summarizing expected vs estimated values
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     # HACK Hard-code term=0, but keep term for possible future extension to 1-way/2-way stats
     term = 0
@@ -632,26 +642,25 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
 def confint_test_battery(stats=['one_sample','paired_sample','two_sample'],
                          tests=('gain','n','bias'), do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given bootstrap confidence interval computation methods
+    Run a battery of given tests on given bootstrap confidence interval computation methods
 
-    confint_test_battery(stats=['one_sample','paired_sample','two_sample'],
-                         tests=('gain','n','bias'), **kwargs)
+    Parameters
+    ----------
+    stats : array-like of str, default: ['one_sample','paired_sample','two_sample']
+        List of statistical tests to evaluate.
+                
 
-    ARGS
-    stats       Array-like. List of statistical tests to evaluate.
-                Default: ['one_sample','paired_sample','two_sample'] (all supported methods)
+    tests : array-like of str, default: ('gain','n','bias') (all supported tests)
+        List of tests to run.
+                
+    tests : array-like of str, default: ('gain','spread','n','bias','correlation')
+        List of tests to run.
+                
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    tests       Array-like. List of tests to run.
-                Default: ('gain','n','bias') (all supported tests)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
-                raise an error if they fail. Default: True
-
-    kwargs      Any other kwargs passed directly to test_confints()
-
-    ACTION
-    Raises an error or warning if any estimated value for any (stat,test)
-    is too far from expected value
+    **kwargs :
+        Any other kwargs passed directly to test_confints()
     """
     if isinstance(stats,str): stats = [stats]
     if isinstance(tests,str): tests = [tests]
@@ -679,7 +688,7 @@ def confint_test_battery(stats=['one_sample','paired_sample','two_sample'],
 # Helper functions
 # =============================================================================
 def _str_to_stat_func(stat):
-    """ Converts string specifier for statistic to function for computing it """
+    """ Convert string specifier for statistic to function for computing it """
     stat = stat.lower()
     if stat == 'one_sample':            return one_sample_test
     elif stat == 'paired_sample':       return paired_sample_test
@@ -692,7 +701,7 @@ def _str_to_stat_func(stat):
 
 
 def _str_to_confint_func(stat):
-    """ Converts string specifier for statistic to function for computing its confints """
+    """ Convert string specifier for statistic to function for computing its confints """
     stat = stat.lower()
     if stat == 'one_sample':        return one_sample_confints
     elif stat == 'paired_sample':   return paired_sample_confints

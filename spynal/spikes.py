@@ -10,13 +10,14 @@ statistict, inter-spike intervals and their statistics, and spike data preproces
 Most functions expect one of two formats of spiking data:
 
 - bool : Binary spike trains where 1's label times of spikes and 0's = no spike in a
-    Numpy ndarray of dtype bool, where one axis corresponds to time, but otherwise can have any
+    Numpy ndarray of dtype=bool, where one axis corresponds to time, but otherwise can have any
     arbitrary dimensionality (including other optional axes corresponding to trials, units, etc.)
 
-- timestamp : Explicit spike timestamps in a Numpy ndarray of dtype object (analogous
-    to Matlab cell arrays). Each object element is a variable-length list-like 1D subarray
-    of spike timestamps (of dtype float or int), and the container object array can have any
-    arbitrary dimensionality (including optional axes corresponding to trials, units, etc.).
+- timestamp : Explicit spike timestamps in a Numpy ndarray of dtype=object. This is a "ragged
+    nested sequence" (array of lists/sub-arrays of different length), analogous to Matlab cell
+    arrays. Each object element is a variable-length list-like 1D subarray of spike timestamps
+    (of dtype float or int), and the container object array can have any arbitrary dimensionality
+    (including optional axes corresponding to trials, units, etc.).
 
     Alternatively, for a single spike train, a simple 1D list or ndarray of timestamps
     may be given instead.
@@ -315,14 +316,14 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
     Compute spike density function (smoothed rate) via convolution with given kernel
 
     Spiking data can be timestamps or binary (0/1) spike trains
-    
+
     NOTE: Spike densities exhibit "edge effects" where rate is biased downward at temporal limits
     of data, due to convolution kernel extending past edge of data and summing in zeros.
-    
+
     The best way to avoid this is to request `lims` that are well within the temporal limits of
     the data. We also ameliorate this by extending the requested `lims` temporarily by a buffer,
     which is trimmed off to the requested `lims` before returning the computed density.
-    
+
     Also, for binary spike data, if lims +/- buffer extend beyond the temporal limits of the data,
     we symmetrically reflect the data around its limits (note this can't be done for timestamp
     data as we don't know the data's temporal limits).
@@ -348,10 +349,10 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         extent of the data itself. We test this for binary spike data, but we
         don't know the actual extent of timestamp data, so that is up to the user!
 
-    width : scalar, default: (kernel-dependent) 
+    width : scalar, default: (kernel-dependent)
         Width parameter (in s) for given convolution kernel.
         Interpretation is specific to value of `kernel`:
-        
+
         - 'gaussian' : `width` = standard deviation, default: 0.50 (50 ms)
         - 'hanning' : `width` = half-width (~ 2.53x Gaussian SD), default: 0.125 (125 ms)
 
@@ -373,7 +374,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
     buffer : float, default: (kernel-dependent, approximates length of kernel's edge effects)
         Length (in s) of symmetric buffer to add to each end of time dimension
         (and trim off before returning) to avoid edge effects. Kernel defaults:
-        
+
         - 'gaussian' : 3*`width`  (3x std dev)
         - 'hanning' : `width` (half-width of kernel)
 
@@ -449,7 +450,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         n_smps_buffer = int(round(buffer*smp_rate))
         # Extend limits of data sampling (and initial analysis) by +/- buffer
         lims = (lims[0]-buffer, lims[1]+buffer)
-        
+
     # Downsampling factor necessary to convert initial sampling rate to final desired sampling
     downsmp = int(round(step/dt))
     assert (downsmp >= 1) and np.isclose(downsmp, step/dt), \
@@ -474,7 +475,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
             tbool   = (timepts >= lims[0]) & (timepts <= lims[1])
             timepts = timepts[tbool]
             data    = data[...,tbool]
-        
+
         # If desired limits + buffer extend *beyond* range of data, reflect data at edges
         # Note: This conditional is indpendent of above bc could have both effects on start vs end
         if (lims[0] < timepts[0]) or (lims[1] > timepts[-1]):

@@ -1,6 +1,4 @@
 """
-validity_test_sync.py
-
 Suite of tests to assess "face validity" of synchrony analysis functions in sync.py
 Usually used to test new or majorly updated functions.
 
@@ -9,10 +7,11 @@ n, etc. to establish methods produce expected pattern of results.
 
 Plots results and runs assertions that basic expected results are reproduced
 
-FUNCTIONS
-test_synchrony          Contains tests of synchrony estimation functions
-synchrony_test_battery  Runs standard battery of tests of synchrony estimation functions
-spike_field_test_battery Runs standard battery of tests of spike-field sync estimation functions
+Functions
+---------
+- test_synchrony :          Contains tests of synchrony estimation functions
+- synchrony_test_battery :  Runs standard battery of tests of synchrony estimation functions
+- spike_field_test_battery :Runs standard battery of tests of spike-field sync estimation functions
 """
 import os
 import time
@@ -42,62 +41,62 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
     Generates synthetic LFP data using given parameters, estimates time-frequency synchrony
     using given function, and compares estimated to expected.
 
-    syncs,phases,passed = test_synchrony(method,pair_type='lfp-lfp',test='frequency',
-                                         test_values=None,spec_method='wavelet',single_trial=None,
-                                         do_tests=True,do_plots=False,plot_dir=None,seed=1,
-                                         phi_sd=pi/4,dphi=0,damp=1,amp=5.0,freq=32,phi=0,
-                                         noise=0.5,n=1000,time_range=3.0,smp_rate=1000,
-                                         burst_rate=0,**kwargs)
+    For test failures, raises an error or warning (depending on value of `do_tests`).
+    Optionally plots summary of test results.
 
-    ARGS
-    method  String. Name of synchrony estimation function to test:
-            'PPC' | 'PLV' | 'coherence'
+    Parameters
+    ----------
+    method : str
+        Name of synchrony estimation function to test. Options: 'PPC' | 'PLV' | 'coherence'
 
-    test    String. Type of test to run. Default: 'frequency'. Options:
-            'synchrony' Tests multiple values of strength of synchrony
-                        (by manipulating phase SD of one signal)
-                        Checks for monotonic increase of synchrony measure
-            'frequency' Tests multiple simulated oscillatory frequencies
-                        Checks for monotonic increase of peak freq
-            'relphase'  Tests multiple simulated btwn-signal relative phases (dphi)
-                        Checks that synchrony doesn't vary appreciably
-            'ampratio'  Test multiple btwn-signal amplitude ratios (damp)
-                        Checks that synchrony doesn't vary appreciably
-            'phase'     Tests multiple simulated absolute phases (phi)
-                        Checks that synchrony doesn't vary appreciably
-            'n'         Tests multiple values of number of trials (n)
-                        Checks that synchrony doesn't greatly vary with n.
+    test : str, default: 'frequency'
+        Type of test to run. Options:
+        - 'synchrony' : Tests multiple values of strength of synchrony (by manipulating phase SD
+            of one signal). Checks for monotonic increase of synchrony measure.
+        - 'frequency' : Tests multiple simulated oscillatory frequencies.
+            Checks for monotonic increase of peak freq.
+        - 'relphase' : Tests multiple simulated btwn-signal relative phases (dphi).
+            Checks that synchrony doesn't vary appreciably.
+        - 'ampratio' : Test multiple btwn-signal amplitude ratios (damp).
+            Checks that synchrony doesn't vary appreciably.
+        - 'phase' : Tests multiple simulated absolute phases (phi).
+            Checks that synchrony doesn't vary appreciably.
+        - 'n' : Tests multiple values of number of trials (n).
+            Checks that synchrony doesn't greatly vary with n.
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'synchrony' Relative phase SD's to test (~inverse of synchrony strength).
-                        Default: [pi,pi/2,pi/4,pi/8,0]
-            'frequency' Frequencies to test. Default: [4,8,16,32,64]
-            'relphase'  Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
-            'ampratio'  Amplitude ratios to test. Default: [1,2,4,8]
-            'amplitude' Oscillation amplitudes to test. Default: [1,2,5,10,20]
-            'phase'     Absolute phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
-            'n'         Trial numbers. Default: [25,50,100,200,400,800]
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'synchrony' : Relative phase SD's (~inverse of synchrony). Default: [pi,pi/2,pi/4,pi/8,0]
+        - 'frequency' : Frequencies to test. Default: [4,8,16,32,64]
+        - 'relphase' :  Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
+        - 'ampratio' :  Amplitude ratios to test. Default: [1,2,4,8]
+        - 'amplitude' : Oscillation amplitudes to test. Default: [1,2,5,10,20]
+        - 'phase' :     Absolute phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
+        - 'n' :         Trial numbers. Default: [25,50,100,200,400,800]
 
-    spec_method  String. Name of spectral estimation function to use to
-            generate time-frequency representation to input into synchrony function
+    spec_method : str, default: 'wavelet'
+        Name of spectral estimation function to use to generate time-frequency representation
+        to input into synchrony function
 
-    single_trial String or None. What type of synchrony estimator to compute:
-                None        standard across-trial estimator [default]
-                'pseudo'    single-trial estimates using jackknife pseudovalues
-                'richter'   single-trial estimates using actual jackknife estimates
-                            as in Richter & Fries 2015
+    single_trial : str or None, default: None
+        What type of synchrony estimator to compute:
+        - None :        standard across-trial estimator [default]
+        - 'pseudo' :    single-trial estimates using jackknife pseudovalues
+        - 'richter' :   single-trial estimates using actual jackknifes as in Richter & Fries 2015
 
-    do_tests Bool. If True, an error is raised if any tests fail to produce expected results.
-            If False, only a warning is issued. Default: True
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
-
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
+       
     - Following args set param's for sim, may be overridden by <test_values> depending on test -
     phi_sd  Scalar. SD (rad) for phase diff of 2 signals if test != 'synchrony'. Default: pi/2
     dphi    Scalar. Phase difference (rad) of 2 simulated signals if test != 'relphase'. Default: 0
@@ -111,21 +110,19 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
     burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
 
-    **kwargs All other keyword args passed to synchrony estimation function given by <method>.
-            Can also include args to time-frequency estimation function given by <spec_method>.
+    **kwargs :
+        All other keyword args passed to synchrony estimation function
+ 
+    Returns
+    -------
+    syncs : ndarray, shape=(n_freqs,n_timepts,n_values)
+        Estimated synchrony strength for each tested value
 
-    RETURNS
-    syncs   (n_freqs,n_timepts,n_values) ndarray. Estimated synchrony strength for each tested value
+    phases : ndarray=(n_freqs,n_timepts,n_values)
+        Estimated synchrony phase for each tested value
 
-    phases  (n_freqs,n_timepts,n_values) ndarray. Estimated synchrony phase for each tested value
-
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raises an error if any estimated synchrony or phase value
-    is too far from expected value
-
-    If do_plots is True, also generates a plot summarizing expected vs estimated synchrony
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     method = method.lower()
     test = test.lower()
@@ -456,44 +453,49 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
     stimulated conditions, computes single-trial (jackknife) time-frequency synchrony estimates
     using given function, computes measures of information on those, and compares to expected.
 
-    ARGS
-    sync_method String. Name of synchrony estimation function to test:
-            'PPC' | 'PLV' | 'coherence'
+    Parameters
+    ----------
+    sync_method : str
+        Name of synchrony estimation function to test. Options: 'PPC' | 'PLV' | 'coherence'
 
-    test    String. Type of test to run. Default: 'frequency'. Options:
-            'synchrony' Tests multiple values of btwn-condition difference in synchrony strength
-                        (by manipulating phase SD of one signal)
-                        Checks for monotonic increase of information
-            'relphase'  Tests multiple values of btwn-condition difference in relative phase
-                        Checks that information doesn't vary appreciably
-            'ampratio'  Test multiple values of btwn-condition difference in relative amplitude
-                        Checks that information doesn't vary appreciably
+    test : str, default: 'frequency'
+        Type of test to run. Options:
+        
+        - 'synchrony' : Tests multiple values of btwn-condition difference in synchrony strength
+            (by manipulating phase SD of one signal). Checks for monotonic increase of information.
+        - 'relphase' : Tests multiple values of btwn-condition difference in relative phase.
+            Checks that information doesn't vary appreciably.
+        - 'ampratio' : Test multiple values of btwn-condition difference in relative amplitude.
+            Checks that information doesn't vary appreciably.
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'synchrony' Relative phase SD's to test (~inverse of synchrony strength).
-                        Default: [pi,pi/2,pi/4,pi/8,0]
-            'relphase'  Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
-            'ampratio'  Amplitude ratios to test. Default: [1,2,4,8]
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'synchrony' : Relative phase SDs (~inverse of synchrony strength). Default: [pi,pi/2,pi/4,pi/8,0]
+        - 'relphase' : Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
+        - 'ampratio' : Amplitude ratios to test. Default: [1,2,4,8]
 
-    spec_method  String. Name of spectral estimation function to use to
-            generate time-frequency representation to input into synchrony function:
-            'wavelet' [default] | 'multitaper' | 'bandfilter'
+    spec_method : str, default: 'wavelet'
+        Name of spectral estimation function to use to generate time-frequency representation
+        to input into synchrony function. Options: 'wavelet' | 'multitaper' | 'bandfilter'
 
-    single_trial_method String. What type of single-trial synchrony estimator to compute:
-                'pseudo'    single-trial estimates using jackknife pseudovalues
-                'richter'   single-trial estimates using actual jackknife estimates
-                            as in Richter & Fries 2015
+    single_trial_method : str, default: 'pseudo'
+        What type of single-trial synchrony estimator to compute:
+        
+        - 'pseudo' : single-trial estimates using jackknife pseudovalues
+        - 'richter' : single-trial estimates using actual jackknifes as in Richter & Fries 2015
 
-    do_tests Bool. If True, an error is raised if any tests fail to produce expected results.
-            If False, only a warning is issued. Default: True
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    seed    Int. Random generator seed for repeatable results.
-            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
 
     - Following args set param's for sim, may be overridden by <test_values> depending on test -
     phi_sd  Scalar. SD (rad) for phase diff of 2 signals if test != 'synchrony'. Default: pi/2
@@ -508,22 +510,19 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
     burst_rate Scalar. Oscillatory burst rate (bursts/trial). Default: 0 (non-bursty)
 
-    **kwargs All other keyword args passed to synchrony estimation function given by <method>.
-            Can also include args to time-frequency estimation function given by <spec_method>.
+    **kwargs :
+        All other keyword args passed to synchrony estimation function
 
-    RETURNS
-    infos   (n_freqs,n_timepts,n_values) ndarray. Estimated neural information in synchrony.
+    Returns
+    -------
+    infos : ndarray, shape=(n_freqs,n_timepts,n_values)
+        Estimated neural information in synchrony.
 
-    syncs   (n_freqs,n_timepts,n_trials,n_values) ndarray.
-            Estimated single-trial synchrony for each tested value.
+    syncs : ndarray, shape=(n_freqs,n_timepts,n_trials,n_values)
+        Estimated single-trial synchrony for each tested value.
 
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raises an error if any estimated synchrony or phase value
-    is too far from expected value
-
-    If do_plots is True, also generates a plot summarizing expected vs estimated synchrony
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     test = test.lower()
     sync_method = sync_method.lower()
@@ -534,7 +533,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
                     seed=seed)
 
     def simulate_synchrony_information(test_param, base_value, test_value, freq, **sim_args):
-        """ Generates synthetic multichannel oscillatory data with diff params across conds """
+        """ Generate synthetic multichannel oscillatory data with diff params across conds """
         base_args = deepcopy(sim_args)
         test_args = deepcopy(sim_args)
 
@@ -737,39 +736,29 @@ def synchrony_test_battery(methods=('PPC','PLV','coherence'),
                            trial_methods=(None,'richter','pseudo'),
                            do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given oscillatory synchrony computation methods
+    Run a battery of given tests on given oscillatory synchrony computation methods
 
-    synchrony_test_battery(methods=('PPC','PLV','coherence'),
-                           tests=('synchrony','relphase','ampratio','frequency','amplitude','phase','n'),
-                           spec_methods=('wavelet','multitaper','bandfilter'),
-                           trial_methods=(None,'richter','pseudo'),
-                           do_tests=True,**kwargs)
+    Parameters
+    ----------
+    methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
+        List of synchrony computation methods to test.
+                
+    tests : array-like of str, default: ('synchrony','relphase','ampratio','frequency','amplitude','phase','n')
+        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
+                
+    spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
+        List of underlying spectral analysis methods to test.                
 
-    ARGS
-    methods     Array-like. List of synchrony computation methods to test.
-                Default: ('PPC','PLV','coherence') (all supported methods)
+    trial_methods : array-like of str or None, default: (None,'richter','pseudo')
+        List of single-trial estimate methods to test (set=None to run
+        usual trial-reduced synchrony methods instead of single-trial).                
 
-    tests       Array-like. List of tests to run.
-                Note: certain combinations of methods,tests are skipped, as they are not
-                expected to pass (ie 'ampratio' tests skipped for coherence method)
-                Default: ('synchrony','relphase','ampratio','frequency','amplitude','phase','n')
-                (all supported tests)
-
-    spec_methods Array-like. List of underlying spectral analysis methods to test.
-                Default: ('wavelet','multitaper','bandfilter') (all supported methods)
-
-    trial_methods Array-like. List of single-trial estimate methods to test (set=None to run
-                usual trial-reduced synchrony methods instead of single-trial).
-                Default: (None,'richter','pseudo') (all supported values)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
+    do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
 
-    kwargs      Any other keyword passed directly to test_synchrony()
-
-    ACTION
-    Throws an error if any estimated synchrony or phase value for any (method,test)
-    is too far from expected value
+    **kwargs :
+        All other keyword args passed to synchrony estimation function
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -810,32 +799,25 @@ def spike_field_test_battery(methods=('PPC','PLV','coherence'),
                            spec_methods=('wavelet','multitaper','bandfilter'),
                            do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given oscillatory spike-field coupling computation methods
+    Run a battery of given tests on given oscillatory spike-field coupling computation methods
 
-    spike_field_test_battery(methods=('PPC','PLV','coherence'),
-                           tests=('synchrony','relphase','frequency','amplitude','phase','n'),
-                           spec_methods=('wavelet','multitaper','bandfilter'), **kwargs)
+    Parameters
+    ----------
+    methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
+        List of synchrony computation methods to test.
+                
+    tests : array-like of str, default: ('synchrony','relphase','frequency','amplitude','phase','n')
+        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
+                
+    spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
+        List of underlying spectral analysis methods to test.                
 
-    ARGS
-    methods     Array-like. List of spike-field coupling computation methods to test.
-                Default: ('PPC','PLV','coherence') (all supported methods)
-
-    tests       Array-like. List of tests to run.
-                Note: certain combinations of methods,tests are skipped,
-                as they are not expected to pass
-                Default: ('synchrony','relphase','frequency','amplitude','phase','n')
-
-    spec_methods Array-like. List of underlying spectral analysis methods to test.
-                Default: ('wavelet','multitaper','bandfilter') (all supported methods)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
+    do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
 
-    kwargs      Any other kwargs passed directly to test_synchrony()
-
-    ACTION
-    Throws an error if any estimated synchrony or phase value for any (method,test) is too far from
-    expected value
+    **kwargs :
+        All other keyword args passed to test_synchrony() function
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -873,36 +855,32 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
                            trial_methods=('richter','pseudo'),
                            do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given oscillatory synchrony computation methods
+    Run a battery of given tests on given oscillatory synchrony computation methods
 
-    sync_info_test_battery(methods=('PPC','PLV','coherence'),
-                           tests=('synchrony','relphase','ampratio'),
-                           spec_methods=('wavelet','multitaper','bandfilter'),
-                           trial_methods=('richter','pseudo'),
-                           do_tests=True,**kwargs)
+    Parameters
+    ----------
+    methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
+        List of synchrony computation methods to test.
+                
+    tests : array-like of str, default: ('synchrony','relphase','ampratio')
+        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
+                
+    spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
+        List of underlying spectral analysis methods to test.                
 
-    ARGS
-    methods     Array-like. List of synchrony computation methods to test.
-                Default: ('PPC','PLV','coherence') (all supported methods)
+    trial_methods : array-like of str or None, default: (None,'richter','pseudo')
+        List of single-trial estimate methods to test (set=None to run
+        usual trial-reduced synchrony methods instead of single-trial).                
 
-    tests       Array-like. List of tests to run.
-                Default: ('synchrony','relphase','ampratio') (all supported tests)
-
-    spec_methods Array-like. List of underlying spectral analysis methods to test.
-                Default: ('wavelet','multitaper','bandfilter') (all supported methods)
-
-    trial_methods Array-like. List of single-trial estimate methods to test (set=None to run
-                usual trial-reduced synchrony methods instead of single-trial).
-                Default: (None,'richter','pseudo') (all supported values)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
+    do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
 
-    kwargs      Any other keyword passed directly to test_sync_info()
-
-    ACTION
-    Throws an error if any estimated synchrony or phase value for any (method,test)
-    is too far from expected value
+    **kwargs :
+        All other keyword args passed to synchrony estimation function
+            
+    **kwargs :
+        Any other keyword passed directly to test_sync_info()
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -934,12 +912,12 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
 # Helper functions
 # =============================================================================
 def _amp_phase_to_complex(amp,theta):
-    """ Converts amplitude and phase angle to complex variable """
+    """ Convert amplitude and phase angle to complex variable """
     return amp * np.exp(1j*theta)
 
 
 def _continuous_to_spiking(data):
-    """ Converts continuous data to thresholded spiking response """
+    """ Convert continuous data to thresholded spiking response """
     # Convert continuous oscillation to probability (range 0-1)
     data = (data - data.min()) / data.ptp()
     data = data**2  # Sparsen high rates some

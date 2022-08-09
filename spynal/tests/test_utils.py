@@ -9,8 +9,9 @@ from spynal.tests.data_fixtures import one_sample_data, two_sample_data, two_way
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                          correlation, rank_correlation, set_random_seed, \
-                         gaussian, gaussian_2d, gaussian_nd, \
-                         standardize_array, undo_standardize_array, \
+                         gaussian, gaussian_2d, gaussian_nd, is_symmetric, is_positive_definite, \
+                         index_axis, standardize_array, undo_standardize_array, \
+                         iarange, unsorted_unique, isarraylike, isnumeric, setup_sliding_windows, \
                          object_array_equal, object_array_compare, concatenate_object_array
 
 
@@ -300,13 +301,52 @@ def test_gaussian(one_sample_data, func, result, result2):
         f_x = func(data, foo=None)
 
 
+def test_matrix_tests():
+    """ Unit tests for is_symmetric, is_positive_definite """
+    # Test that matrix tests pass for Identity matrix
+    X = np.eye(2)
+    assert is_symmetric(X)
+    assert is_positive_definite(X, semi=False)
+
+    # Test that matrix tests fail for assymmetric, non-square matrices
+    X[0,1] = 2
+    assert ~is_symmetric(X)
+    assert ~is_positive_definite(X, semi=False)
+
+    X = np.concatenate((np.eye(2), np.eye(2)), axis=0)
+    assert ~is_symmetric(X)
+    assert ~is_positive_definite(X, semi=False)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = is_symmetric(X, foo=None)
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = is_positive_definite(X, semi=False, foo=None)
+
+
 # =============================================================================
-# Other utility functions
+# Unit tests for data indexing and reshaping functions
 # =============================================================================
+def test_index_axis():
+    data = np.reshape(np.arange(3,dtype=int), (3,1,1))
+    idxs = np.arange(3,dtype=int)
+    result = np.arange(3,dtype=int)
+
+    print(data.shape)
+    # Test that correct data is extracted for each of several axes
+    for axis in range(3):
+        print(axis, np.moveaxis(data,0,axis).shape)
+        assert np.array_equal(index_axis(np.moveaxis(data,0,axis), axis, idxs).squeeze(), result)
+        assert np.array_equal(index_axis(np.moveaxis(data,0,axis), axis-3, idxs).squeeze(), result)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = index_axis(data, axis, idxs, foo=None)
+
+
 @pytest.mark.parametrize('axis, target_axis', [(0,0), (1,0), (2,0), (-1,0),
                                                (0,2), (1,2), (2,2), (-1,2),
                                                (0,-1), (1,-1), (2,-1), (-1,-1)])
-
 def test_standardize_array(axis, target_axis):
     """ Unit tests for standardize_array/undo_standardize_array """
     # Test whether standardize->unstandardize returns original array
@@ -334,12 +374,108 @@ def test_standardize_array(axis, target_axis):
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data,data2)
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _,_ = standardize_array(data, axis=axis, target_axis=target_axis, foo=None)
+    with pytest.raises(MISSING_ARG_ERRS):
+        _,_ = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis, foo=None)
+
+
+# =============================================================================
+# Other utility functions
+# =============================================================================
+@pytest.mark.parametrize('args', [(4,), (0,4), (0,4,2), (8,4,-2)])
+def test_iarange(args):
+    """ Unit tests for iarange() function """
+    # Test that each set of arguments produces an output ending in same value
+    assert iarange(*args)[-1] == 4
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = iarange(*args, foo=None)
+
+
+def test_unsorted_unique():
+    """ Unit tests for unsorted_unique() function """
+    # Test for expected output for different arguments
+    x = np.asarray((3,3,2,2,1,1))
+    x_orig = x.copy()
+    unique = unsorted_unique(x)
+    assert np.array_equal(x,x_orig)
+    assert np.array_equal(unique.shape, (3,))
+    assert np.array_equal(unique, (3,2,1))
+
+    X = np.vstack((x,x))
+    X_orig = X.copy()
+    unique = unsorted_unique(X,axis=1)
+    assert np.array_equal(X,X_orig)
+    assert np.array_equal(unique.shape, (2,3))
+    assert np.array_equal(unique[0,:], (3,2,1))
+
+    unique = unsorted_unique(X.T,axis=0)
+    assert np.array_equal(unique.shape, (3,2))
+    assert np.array_equal(unique[:,0], (3,2,1))
+
+    unique = unsorted_unique(X)
+    assert np.array_equal(unique.shape, (3,))
+    assert np.array_equal(unique, (3,2,1))
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = unsorted_unique(x, foo=None)
+
+
+@pytest.mark.parametrize('x, result',
+                         [((1,2), True), ([1,2], True), (np.array((1,2)), True),
+                          (1.2, False), (1, False), (True, False)])
+def test_isarraylike(x, result):
+    """ Unit tests for isarraylike() function """
+    # Test that each variable type produces expected result
+    assert isarraylike(x) == result
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = isarraylike(x, foo=None)
+
+
+@pytest.mark.parametrize('dtype, result',
+                         [(np.uint16, True), (np.float64, True), (np.complex128, True),
+                          (bool, False), (object, False)])
+def test_isnumeric(dtype, result):
+    """ Unit tests for isnumeric() function """
+    # Test that each dtype produces expected result
+    x = np.ones((2,), dtype=dtype)
+    assert isnumeric(x) == result
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = isnumeric(x, foo=None)
+
+
+def test_setup_sliding_windows():
+    """ Unit tests for setup_sliding_windows() function """
+    # Test for expected output with different argument sets
+    width = 0.2
+    lims = (0,1)
+    wins = setup_sliding_windows(width, lims)
+    assert np.array_equal(wins.shape, (5,2))
+    assert np.array_equal(wins[-1,:], (0.8,1.0))
+
+    wins = setup_sliding_windows(width, lims, step=0.1)
+    assert np.array_equal(wins.shape, (9,2))
+    assert np.array_equal(wins[-1,:], (0.8,1.0))
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = setup_sliding_windows(width, lims, foo=None)
+
 
 @pytest.mark.parametrize('axis', [0, 1])
 def test_object_array_functions(axis):
     """ Unit tests for concatenate_object_array, object_array_equal, object_array_compare """
     data = [[[1, 2],    [3, 4, 5]],
             [[6, 7, 8], [9, 10]  ]]
+    data = np.asarray(data, dtype=object)
     data_orig = data.copy()
 
     # HACK To get Numpy to make object arrays w/o being too smart and making them (2,5) arrays
@@ -385,6 +521,14 @@ def test_object_array_functions(axis):
     # Test `object_array_compare` with alternative `reduce_func`
     assert np.all(object_array_compare(data_cat, result, reduce_func=np.all) == [True, True])
     assert np.all(object_array_compare(data_cat, result, reduce_func=np.sum) == [5, 5])
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = concatenate_object_array(data, axis=axis, foo=None)
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = object_array_equal(data_cat, result, foo=None)
+    with pytest.raises(MISSING_ARG_ERRS):
+        _ = object_array_compare(data_cat, result, foo=None)
 
 
 def test_imports():

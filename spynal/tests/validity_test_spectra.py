@@ -1,6 +1,4 @@
 """
-validity_test_spectra.py
-
 Suite of tests to assess "face validity" of spectral analysis functions in spectra.py
 Usually used to test new or majorly updated functions.
 
@@ -9,10 +7,11 @@ n, etc. to establish methods produce expected pattern of results.
 
 Plots results and runs assertions that basic expected results are reproduced
 
-FUNCTIONS
-test_power              Contains tests of spectral estimation functions
-power_test_battery      Runs standard battery of tests of spectral estimation functions
-itpc_test_battery       Runs standard battery of tests of ITPC estimation functions
+Functions
+---------
+- test_power :            Contains tests of spectral estimation functions
+- power_test_battery :    Runs standard battery of tests of spectral estimation functions
+- itpc_test_battery :     Runs standard battery of tests of ITPC estimation functions
 """
 import os
 import time
@@ -34,50 +33,55 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     """
     Basic testing for functions estimating time-frequency spectral power
 
-    Generates synthetic LFP data using given network simulation,
-    estimates spectrogram using given function, and compares estimated to expected.
+    Generate synthetic LFP data using given network simulation,
+    estimate spectrogram using given function, and compares estimated to expected.
 
-    means,sems,passed = test_power(method,test='frequency',value=None,
-                                   do_tests=True,do_plots=False,plot_dir=None,seed=1,
-                                   amp=5.0,freq=32,phi=0,phi_sd=0noise=0.5,n=1000,burst_rate=0,
-                                   time_range=3.0,smp_rate=1000,spikes=False,**kwargs)
+    For test failures, raises an error or warning (depending on value of `do_tests`).
+    Optionally plots summary of test results.
+    
+    Parameters
+    ----------
+    method : str
+        Name of time-frequency spectral estimation function to test. Options:
+        'wavelet' | 'multitaper' | 'bandfilter' | 'burst'
 
-    ARGS
-    method  String. Name of time-frequency spectral estimation function to test:
-            'wavelet' | 'multitaper' | 'bandfilter' | 'burst'
+    test : str, default: 'frequency'
+        Type of test to run. Options:
+        
+        - 'frequency' : Tests multiple simulated oscillatory frequencies
+            Checks power for monotonic increase of peak freq
+        - 'amplitude' : Tests multiple simulated amplitudes at same freq
+            Checks power for monotonic increase of amplitude
+        - 'phase_sd': Tests multiple simulated phase std dev's (ie evoked vs induced)
+            Checks that power doesn't greatly vary with phase SD.
+            Checks that ITPC decreases monotonically with phase SD
+        - 'n' : Tests multiple values of number of trials (n)
+            Checks that power doesn't greatly vary with n.
+        - 'burst_rate' : Checks that oscillatory burst rate increases
+            as it's increased in simulated data.
 
-    test    String. Type of test to run. Default: 'frequency'. Options:
-            'frequency' Tests multiple simulated oscillatory frequencies
-                        Checks power for monotonic increase of peak freq
-            'amplitude' Tests multiple simulated amplitudes at same freq
-                        Checks power for monotonic increase of amplitude
-            'phase_sd'  Tests multiple simulated phase std dev's (ie evoked vs induced)
-                        Checks that power doesn't greatly vary with phase SD.
-                        Checks that ITPC decreases monotonically with phase SD
-            'n'         Tests multiple values of number of trials (n)
-                        Checks that power doesn't greatly vary with n.
-            'burst_rate' Checks that oscillatory burst rate increases
-                        as it's increased in simulated data.
+    test_values : array-like, shape=(n_values,), dtype=str
+        List of values to test. Interpretation and defaults are test-specific:
+        
+        - 'frequency' : List of frequencies to test. Default: [4,8,16,32,64]
+        - 'amplitude' : List of oscillation amplitudes to test. Default: [1,2,5,10,20]
+        - 'n' :         Trial numbers. Default: [25,50,100,200,400,800]
 
-    test_values  (n_values,) array-like. List of values to test.
-            Interpretation and defaults are test-specific:
-            'frequency' List of frequencies to test. Default: [4,8,16,32,64]
-            'amplitude' List of oscillation amplitudes to test. Default: [1,2,5,10,20]
-            'n'         Trial numbers. Default: [25,50,100,200,400,800]
+    spec_type : str, default: 'power'
+        Type of spectral signal to return. Options: 'power' | 'itpc' (intertrial phase clustering)
 
-    spec_type String. Type of spectral signal to return: 'power' [default] |
-            'itpc' (intertrial phase clustering)
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail
 
-    do_tests Bool. Set=True to evaluate test results against expected values and
-            raise an error if they fail. Default: True
+    do_plots : bool, default: False
+        Set=True to plot test results
 
-    do_plots Bool. Set=True to plot test results. Default: False
+    plot_dir : str, default: None (don't save to file)
+        Full-path directory to save plots to. Set=None to not save plots.
 
-    plot_dir String. Full-path directory to save plots to. Set=None [default] to not save plots.
-
-    seed    Int. Random generator seed for repeatable results.
-            Set=None for fully random numbers. Default: 1 (reproducible random numbers)
-
+    seed : int, default: 1 (reproducible random numbers)
+        Random generator seed for repeatable results. Set=None for fully random numbers.
+        
     - Following args set param's for sim, may be overridden by <test_values> depending on test -
     amp     Scalar. Simulated oscillation amplitude (a.u.) if test != 'amplitude'. Default: 5.0
     freq    Scalar. Simulated oscillation frequency (Hz) if test != 'frequency'. Default: 32
@@ -89,18 +93,19 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     time_range Scalar. Full time range to simulate oscillation over (s). Default: 1.0
     smp_rate Int. Sampling rate for simulated data (Hz). Default: 1000
 
-    **kwargs All other keyword args passed to spectral estimation function given by <method>.
+    **kwargs :
+        All other keyword args passed to spectral estimation function
 
-    RETURNS
-    means   (n_freqs,n_timepts,n_values) ndarray. Estimated mean spectrogram for each tested value.
+    Returns
+    -------
+    means : ndarray, shape=(n_freqs,n_timepts,n_values)
+        Estimated mean spectrogram for each tested value.
 
-    sems    (n_freqs,n_timepts,n_values) ndarray. SEM of mean spectrogram for each tested value.
+    sems : ndarray, shape=(n_freqs,n_timepts,n_values)
+        SEM of mean spectrogram for each tested value.
 
-    passed  Bool. True if all tests produce expected values; otherwise False.
-
-    ACTION
-    If do_tests is True, raises an error if any estimated value is too far from expected value
-    If do_plots is True, also generates a plot summarizing expected vs estimated power
+    passed : bool
+        True if all tests produce expected values; otherwise False.
     """
     method = method.lower()
     test = test.lower()
@@ -399,27 +404,21 @@ def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
                        tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),
                        do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given oscillatory power computation methods
+    Run a battery of given tests on given oscillatory power computation methods
 
-    power_test_battery(methods=('wavelet','multitaper','bandfilter'),
-                       tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),
-                       do_tests=True,**kwargs)
+    Parameters
+    ----------
+    methods : array-like of str, default: ('wavelet','multitaper','bandfilter') (all supported)
+        List of power computation methods to test.
+                
+    tests : array-like of str, default: ('frequency','amplitude','phase','phase_sd','n','burst_rate')
+        List of tests to run.
 
-    ARGS
-    methods     Array-like. List of power computation methods to test.
-                Default: ('wavelet','multitaper','bandfilter') (all supported methods)
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail.
 
-    tests       Array-like. List of tests to run.
-                Default: ('frequency','amplitude','phase','phase_sd','n','burst_rate')
-                (all supported tests)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
-                raise an error if they fail. Default: True
-
-    kwargs      Any other keyword args passed directly to test_power()
-
-    ACTION
-    Throws an error if any estimated power value for any (method,test) is too far from expected
+    **kwargs :
+        Any other keyword args passed directly to test_power()
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
@@ -444,29 +443,25 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
                       tests=('frequency','amplitude','phase','phase_sd','n'),
                       itpc_methods=('PLV','Z','PPC'), do_tests=True, **kwargs):
     """
-    Runs a battery of given tests on given intertrial phase clustering computation methods
+    Run a battery of given tests on given intertrial phase clustering computation methods
 
-    itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
-                      tests=('frequency','amplitude','phase','phase_sd','n'),
-                      do_tests=True,**kwargs)
+    Parameters
+    ----------
+    methods : array-like, default: ('wavelet','multitaper','bandfilter') (all supported methods)
+        List of power computation methods to test.
+                
 
-    ARGS
-    methods     Array-like. List of power computation methods to test.
-                Default: ('wavelet','multitaper','bandfilter') (all supported methods)
+    tests : array-like, default: ('frequency','amplitude','phase','phase_sd','n') (all supported)
+        List of tests to run.                
 
-    tests       Array-like. List of tests to run.
-                Default: ('frequency','amplitude','phase','phase_sd','n') (all supported tests)
+    itpc_method : array-like, default: ('PLV','Z','PPC') (all supported options)
+        List of methods to use for computing intertrial phase clustering
+                
+    do_tests : bool, default: True
+        Set=True to evaluate test results against expected values and raise an error if they fail.
 
-    itpc_method Array-like. List of methods to use for computing intertrial phase clustering
-                Default: ('PLV','Z','PPC') (all supported options)
-
-    do_tests    Bool. Set=True to evaluate test results against expected values and
-                raise an error if they fail. Default: True
-
-    kwargs      Any other keyword args passed directly to test_power()
-
-    ACTION
-    Throws an error if any estimated power value for any (method,test) is too far from expected
+    **kwargs :
+        Any other keyword args passed directly to test_power()
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
