@@ -181,7 +181,7 @@ def remove_dc(data, axis=None):
 
     Parameters
     ----------
-    data : ndarray, shape=(...,n_samples,...)
+    data : ndarray, shape=(...,n_timepoints,...)
         Raw data to remove DC component of.
         Can be any arbitary shape, with time sampling along `axis`
 
@@ -190,75 +190,106 @@ def remove_dc(data, axis=None):
 
     Returns
     -------
-    data : ndarray, shape=(...,n_samples,...)
+    data : ndarray, shape=(...,n_timepoints,...)
         Data with DC component removed (same shape as input)
     """
-    return data - data.mean(axis=axis,keepdims=True)
+    return data - data.mean(axis=axis, keepdims=True)
 
 
-def remove_evoked(data, axis=0, method='mean', design=None):
+def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False):
     """
     Remove estimate of evoked potentials phase-locked to trial events,
     returning data with (in theory) only non-phase-locked induced components
 
     Parameters
     ----------
-    data : ndarray, shape=(...,n_samples,...)
+    data : ndarray, shape=(...,n_obs,...)
         Raw data to remove evoked components from.
         Can be any arbitary shape, with observations (trials) along `axis`.
 
     axis : int, default: 0 (1st axis)
         Data axis corresponding to distinct observations/trials
 
-    method : {'mean','groupMean','regress'}, default: 'mean'
+    method : {'mean','groupmean','regress'}, default: 'mean'
         Method to use for estimating evoked potentials:
 
         - 'mean'      : Grand mean signal across all observations (trials)
-        - 'groupMean' : Mean signal across observations with each group in `design`
+        - 'groupmean' : Mean signal across observations with each group in `design`
         - 'regress'   : OLS regresion fit of design matrix `design` to data
 
-    design : array-like, shape=(n_samples,...), optional
+    design : array-like, shape=(n_obs,...), optional
         Design matrix to fit to data (`method` == 'regress')
-        or group/condition labels for each observation (`method` == 'groupMean').
+        or group/condition labels for each observation (`method` == 'groupmean').
         Not used for `method` == 'mean'.
+
+    return_evoked : bool, default: False
+        If True, also returns second output = estimated evoked potential on each trial.
 
     Returns
     -------
-    data : ndarray, shape=(...,n_samples,...)
-        Data with estimated evoked component removed. Same shape as input `data`.
+    data_induced : ndarray, shape=(...,n_obs,...)
+        Data with estimated evoked component removed, leaving only non-phase-locked
+        "induced" component. Same shape as input `data`.
+
+    evoked : ndarray, shape=(...,n_obs,...), optional
+        Evoked potential for each trial, estimated with given method. Same shape as `data`.
+        Only returned if `return_evoked` is True.
     """
+    assert axis is not None, "<axis> should correspond to data trials/observations dimension"
+    
+    method = method.lower()
     design = np.asarray(design)
 
+    data = data.copy()  # Copy input data to avoid overwriting it in caller
+    
     # Subtract off grand mean potential across all trials
-    if method.lower() == 'mean':
-        return data - np.mean(data,axis=axis,keepdims=True)
+    if method in ['mean','grandmean']:
+        evoked_grandmean = np.mean(data, axis=axis, keepdims=True)
+        data -= evoked_grandmean
+        
+        # Expand grand-mean evoked potential to n_trials if returning evoked
+        if return_evoked:
+            reps = np.ones((data.ndim,),dtype=int)
+            reps[axis] = data.shape[axis]
+            evoked = np.tile(evoked_grandmean, reps)
 
     # Subtract off mean potential across all trials within each group/condition
     # todo  can we do this with an xarray or pandas groupby() instead??
-    elif method.lower() == 'groupmean':
+    elif method == 'groupmean':
         assert (design.ndim == 1) or ((design.ndim == 2) and (design.shape[1] == 1)), \
             "Design matrix <design> must be vector-like (1d or 2d w/ shape[1]=1)"
 
-        data, data_shape = standardize_array(data, axis=axis, target_axis=0)
-
         groups = np.unique(design)
+
+        data, data_shape = standardize_array(data, axis=axis, target_axis=0)
+        if return_evoked: evoked = np.empty_like(data)
+        
         for group in groups:
             idxs = design == group
-            data[idxs,...] -= np.mean(data[idxs,...],axis=0,keepdims=True)
+            evoked_group = np.mean(data[idxs,...], axis=0, keepdims=True)
+            data[idxs,...] -= evoked_group
+            if return_evoked: evoked[idxs,...] = evoked_group
 
         data = undo_standardize_array(data, data_shape, axis=axis, target_axis=0)
+        if return_evoked:
+            evoked = undo_standardize_array(evoked, data_shape, axis=axis, target_axis=0)
 
     # Regress data on given design matrix and return residuals
-    elif method.lower() == 'regress':
+    elif method == 'regress':
         assert design.ndim in [1,2], \
             "Design matrix <design> must be matrix-like (2d) or vector-like (1d)"
 
+        model = LinearRegression()
+
         data, data_shape = standardize_array(data, axis=axis, target_axis=0)
 
-        model = LinearRegression()
-        data -= model.fit(design,data).predict(design)
+        evoked = model.fit(design,data).predict(design)
+        data -= evoked
 
         data = undo_standardize_array(data, data_shape, axis=axis, target_axis=0)
+        if return_evoked:
+            evoked = undo_standardize_array(evoked, data_shape, axis=axis, target_axis=0)
 
-    return data
+    if return_evoked:   return data, evoked
+    else:               return data
 

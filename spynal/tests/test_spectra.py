@@ -7,8 +7,9 @@ import xarray as xr
 from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
                                        oscillatory_data, MISSING_ARG_ERRS
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
-from spynal.spectra.preprocess import cut_trials, realign_data
+from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
 from spynal.spectra.postprocess import pool_freq_bands, pool_time_epochs
+from spynal.spectra.utils import power
 
 
 # =============================================================================
@@ -280,6 +281,10 @@ def test_cut_trials(oscillation):
     assert cut_data.shape == data.shape
     assert (cut_data == data).all()
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=0, foo=None)
+
 
 def test_realign_data(oscillation):
     """ Unit tests for realign_data function """
@@ -308,7 +313,76 @@ def test_realign_data(oscillation):
     assert realigned.shape == data.T.shape
     assert (realigned == data.T).all()
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        realigned = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
+                                 timepts=timepts, time_axis=0, trial_axis=-1, foo=None)
 
+
+@pytest.mark.parametrize('axis', [0, None])
+def test_remove_dc(oscillation, axis):
+    """ Unit tests for remove_dc() function """
+    data = oscillation
+    data_orig = data.copy()
+    
+    # Test that DC-removed data does have mean=0
+    data_no_dc = remove_dc(data, axis=axis)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data_no_dc.shape, data.shape)
+    if axis == None:    assert np.isclose(data_no_dc.sum(), 0)
+    else:               assert np.allclose(data_no_dc.sum(axis=axis), 0)
+
+    # Test for consistency with transposed data
+    axis_T = 1 if axis == 0 else None
+    data_no_dc = remove_dc(data.T, axis=axis_T)
+    assert np.array_equal(data_no_dc.shape, data.T.shape)
+    if axis == None:    assert np.isclose(data_no_dc.sum(), 0)
+    else:               assert np.allclose(data_no_dc.sum(axis=axis_T), 0)
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        data_no_dc = remove_dc(data, axis=axis, foo=None)
+        
+  
+@pytest.mark.parametrize('method, result, result2',
+                         [('mean',      13.3, 0.31),
+                          ('groupmean', 0.49, 13.13),
+                          ('regress',   0.49, 13.13)])
+def test_remove_evoked(oscillation, method, result, result2):
+    """ Unit tests for remove_evoked() function """
+    data = oscillation
+    data[:,2:] = np.roll(data[:,2:], shift=15, axis=0)  # Shift last 2 simulated trials by ~180 deg
+    data_orig = data.copy()
+
+    if method == 'mean':        design = None
+    elif method == 'groupmean': design = [0,0,1,1]
+    elif method == 'regress':   design = np.vstack(([0,0,0,0], [-1,-1,1,1])).T
+                
+    # Basic test of function
+    data_no_evoked, evoked = remove_evoked(data, axis=1, method=method, design=design, return_evoked=True)
+    print(np.round(power(data_no_evoked).mean(),2), np.round(power(evoked).mean(),2))
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data_no_evoked.shape, data.shape)
+    assert np.array_equal(evoked.shape, data.shape)
+    assert np.isclose(power(data_no_evoked).mean(), result, rtol=1e-2, atol=1e-2)
+    assert np.isclose(power(evoked).mean(), result2, rtol=1e-2, atol=1e-2)
+
+    # Test for consistency with not returning evoked potential
+    data_no_evoked = remove_evoked(data, axis=1, method=method, design=design, return_evoked=False)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data_no_evoked.shape, data.shape)
+    assert np.isclose(power(data_no_evoked).mean(), result, rtol=1e-2, atol=1e-2)
+
+    # Test for consistency with transposed data
+    data_no_evoked = remove_evoked(data.T, axis=0, method=method, design=design)
+    assert np.array_equal(data_no_evoked.shape, data.T.shape)
+    assert np.isclose(power(data_no_evoked).mean(), result, rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        data_no_evoked = remove_evoked(data, axis=0, method=method, foo=None)
+
+             
 @pytest.mark.parametrize('variable_type, pooler, result',
                          [('numpy',   'mean',   43.5538),
                           ('numpy',   'sum',    300.0944),
@@ -492,7 +566,8 @@ def test_plot_spectrogram(oscillation, method):
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        img, _ = plot_spectrogram(freqs, spec, foo=None)
+        img, _ = plot_spectrogram(timepts, freqs, spec, foo=None)
+
 
 def test_imports():
     """ Test different import methods for spectra module """

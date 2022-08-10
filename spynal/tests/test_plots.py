@@ -5,6 +5,10 @@ import numpy as np
 from spynal.tests.data_fixtures import oscillation, MISSING_ARG_ERRS
 from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
 
+
+# =============================================================================
+# Unit tests for plotting functions
+# =============================================================================
 def test_plot_line_with_error_fill(oscillation):
     """ Unit tests for plot_lineseries function """
     data = oscillation.T

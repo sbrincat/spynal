@@ -103,7 +103,7 @@ def test_savemat(version):
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises(MISSING_ARG_ERRS):
-            data = savemat(filename, variables, version=_version, foo=None)
+            savemat(filename, variables, version=_version, foo=None)
             
                 
 def test_imports():

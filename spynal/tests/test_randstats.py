@@ -258,6 +258,7 @@ def test_two_sample_test(two_sample_data, stat, method, result_p, result_obs, re
         p, stat_obs, stat_resmp = test_func(data1, data2, axis=0, method=method, seed=1,
                                             n_resamples=n_resamples, return_stats=True, foo=None)
 
+
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
                          [('permutation', 0.05, 11.50, 0.41)])
 def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
