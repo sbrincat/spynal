@@ -4,11 +4,12 @@ import pytest
 import numpy as np
 import xarray as xr
 
+from spynal.utils import iarange
 from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
                                        oscillatory_data, MISSING_ARG_ERRS
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
 from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
-from spynal.spectra.postprocess import pool_freq_bands, pool_time_epochs
+from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs
 from spynal.spectra.utils import power
 
 
@@ -263,7 +264,7 @@ def test_itpc(oscillation, itpc_method, method, result):
 
 
 # =============================================================================
-# Unit tests for preprocessing/postprocessing/utility functions
+# Unit tests for spectral/LFP preprocessing functions
 # =============================================================================
 def test_cut_trials(oscillation):
     """ Unit tests for cut_trials function """
@@ -381,6 +382,37 @@ def test_remove_evoked(oscillation, method, result, result2):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         data_no_evoked = remove_evoked(data, axis=0, method=method, foo=None)
+
+
+# =============================================================================
+# Unit tests for spectral/LFP postprocessing functions
+# =============================================================================
+def test_one_over_f_norm():
+    """ Unit tests for one_over_f_norm() function """    
+    # Generate idealized 1/f spectrogam ~ (n_freqs,n_trials) = (100,4)
+    f = iarange(1,100)
+    data = np.tile((1.0/f)[:,np.newaxis], (1,4))
+    data_orig = data.copy()
+
+    # Basic test of function
+    data_corrected = one_over_f_norm(data, axis=0, freqs=f, exponent=1.0)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data_corrected.shape, data.shape)
+    assert np.allclose(data_corrected.std(axis=0), 0)
+    
+    # Test for consistency for transposed data
+    data_corrected = one_over_f_norm(data.T, axis=1, freqs=f, exponent=1.0)
+    assert np.array_equal(data_corrected.shape, data.T.shape)
+    assert np.allclose(data_corrected.std(axis=1), 0)
+
+    # Test for expected output for higher exponent
+    data = np.tile((1.0/f**2)[:,np.newaxis], (1,4))    
+    data_corrected = one_over_f_norm(data, axis=0, freqs=f, exponent=2.0)
+    assert np.allclose(data_corrected.std(axis=0), 0)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        data_corrected = one_over_f_norm(data, axis=0, freqs=f, foo=None)
 
              
 @pytest.mark.parametrize('variable_type, pooler, result',
@@ -519,7 +551,7 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
 
 
 # =============================================================================
-# Unit tests for plotting functions
+# Unit tests for spectral plotting functions
 # =============================================================================
 @pytest.mark.parametrize('method', [('multitaper'), ('wavelet'), ('bandfilter')])
 def test_plot_spectrum(oscillation, method):

@@ -8,10 +8,11 @@ from spynal.tests.data_fixtures import one_sample_data, two_sample_data, two_way
                                        MISSING_ARG_ERRS
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
-                         correlation, rank_correlation, set_random_seed, \
+                         set_random_seed, interp1, setup_sliding_windows, \
+                         correlation, rank_correlation, \
                          gaussian, gaussian_2d, gaussian_nd, is_symmetric, is_positive_definite, \
                          index_axis, standardize_array, undo_standardize_array, \
-                         iarange, unsorted_unique, isarraylike, isnumeric, setup_sliding_windows, \
+                         iarange, unsorted_unique, isarraylike, isnumeric, isunix, ismac, ispc, \
                          object_array_equal, object_array_compare, concatenate_object_array
 
 
@@ -246,6 +247,44 @@ def test_set_random_seed(rand_func):
     assert seeded == seeded2
     assert seeded != unseeded
 
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        rand_func(foo=None)
+        
+
+def test_interp1():
+    """ Unit tests for interp1() function """
+    x = iarange(0,1,0.1)
+    y = np.cos(2*pi*4*x)
+    xinterp = iarange(0,1,0.01)
+    n_interp = len(xinterp)
+    
+    y_orig = y.copy()
+    result = 0.0099
+    
+    # Test basic function
+    yinterp = interp1(x, y, xinterp)
+    print(yinterp.shape, np.round(yinterp.mean(),4))
+    assert np.array_equal(y,y_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(yinterp.shape, (n_interp,))
+    assert np.isclose(yinterp.mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test function w/ 2d array data
+    Y = np.tile(y[:,np.newaxis], (1,4))
+    Yinterp = interp1(x, Y, xinterp, axis=0)
+    assert np.array_equal(Yinterp.shape, (n_interp,4))
+    assert np.allclose(Yinterp.mean(axis=0), result, rtol=1e-4, atol=1e-4)
+
+    # Test function w/ transposed data
+    print(x.shape, Y.T.shape)
+    Yinterp = interp1(x, Y.T, xinterp, axis=-1)
+    assert np.array_equal(Yinterp.shape, (4,n_interp))
+    assert np.allclose(Yinterp.mean(axis=-1), result, rtol=1e-4, atol=1e-4)
+                      
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        yinterp = interp1(x, y, xinterp, foo=None)
+            
 
 @pytest.mark.parametrize('func, result, result2',
                          [(gaussian,    0.9783, 2.3780),
@@ -452,6 +491,12 @@ def test_isnumeric(dtype, result):
         _ = isnumeric(x, foo=None)
 
 
+def test_isplatform():
+    """ Unit tests for isunix(), ismac(), ispc() functions """
+    # Ensure we identify 1 and only 1 platform/OS
+    assert np.sum([isunix(), ismac(), ispc()]) == 1
+    
+    
 def test_setup_sliding_windows():
     """ Unit tests for setup_sliding_windows() function """
     # Test for expected output with different argument sets

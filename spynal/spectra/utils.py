@@ -14,7 +14,7 @@ def next_power_of_2(n):
     return 1 if n == 0 else 2**ceil(log2(n))
 
 
-def get_freq_sampling(smp_rate,n_fft,freq_range=None,two_sided=False):
+def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
     """
     Return frequency sampling vector (axis) for a given FFT-based computation
 

@@ -200,10 +200,10 @@ def one_over_f_norm(data, axis=None, freqs=None, exponent=1.0):
 
     axis : int
         Data axis corresponding to frequency.
-        Only needed if `data` is not an xarray DataArray with dimension named 'freq'/'frequency'.
+        Needed if `data` is not an xarray DataArray with dimension named 'freq'/'frequency'.
 
     freqs : array-like, shape=(n_freqs,)
-        Frequency sampling in `data`. Only needed if `data` is not an xarray DataArray.
+        Frequency sampling in `data`. Needed if `data` is not an xarray DataArray.
 
     exponent : float, default: 1 (correct for 1/f, w/o exponent)
         Exponent ('alpha') to raise freqs to for normalization.

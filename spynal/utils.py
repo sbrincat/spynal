@@ -33,28 +33,32 @@ Basic statistics
 
 Numerical utility functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- set_random_seed :   Seed Python/Numpy random number generators with given seed
-- interp1 :           Interpolate 1d data vector at given index values
-- gaussian :          Evaluate parameterized 1D Gaussian function at given datapoint(s)
-- gaussian_2d :       Evaluate parameterized 2D Gaussian function at given datapoint(s)
-- gaussian_nd :       Evaluate parameterized N-D Gaussian function at given datapoint(s)
-- is_symmetric :      Test if matrix is symmetric
+- set_random_seed :     Seed Python/Numpy random number generators with given seed
+- interp1 :             Interpolate 1d data vector at given index values
+- gaussian :            Evaluate parameterized 1D Gaussian function at given datapoint(s)
+- gaussian_2d :         Evaluate parameterized 2D Gaussian function at given datapoint(s)
+- gaussian_nd :         Evaluate parameterized N-D Gaussian function at given datapoint(s)
+- is_symmetric :        Test if matrix is symmetric
 - is_positive_definite : Test if matrix is symmetric positive (semi)definite
+- setup_sliding_windows : Generates set of sliding windows using given parameters
 
 Data indexing and reshaping functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-- index_axis :        Dynamically index into arbitrary axis of ndarray
-- axis_index_slices : Generates list of slices for dynamic axis indexing
-- standardize_array : Reshapes array to 2D w/ axis relevant for analysis at start or end
+- index_axis :          Dynamically index into arbitrary axis of ndarray
+- axis_index_slices :   Generates list of slices for dynamic axis indexing
+- standardize_array :   Reshapes array to 2D w/ axis relevant for analysis at start or end
 - undo_standardize_array : Undoes effect of standardize_array after analysis
 
 Other utilities
 ^^^^^^^^^^^^^^^
-- iarange :           np.arange(), but with an inclusive endpoint
-- unsorted_unique :   np.unique(), but without sorting values
-- isarraylike :       Tests if variable is "array-like" (ndarray, list, or tuple)
-- isnumeric :         Tests if array dtype is numeric (int, float, or complex)
-- setup_sliding_windows :       Generates set of sliding windows using given parameters
+- iarange :             np.arange(), but with an inclusive endpoint
+- unsorted_unique :     np.unique(), but without sorting values
+- isarraylike :         Tests if variable is "array-like" (ndarray, list, or tuple)
+- isnumeric :           Tests if array dtype is numeric (int, float, or complex)
+- ispc:                 Tests if running on Windows OS
+- ismac:                Tests if running on MacOS
+- isunix:               Tests if running on Linux/UNIX (but not Mac OS)
+- object_array_equal :          Determine if two object arrays are equal
 - object_array_compare :        Compare each object within an object ndarray
 - concatenate_object_array :    Concatenates objects across one/more axes of object ndarray
 
@@ -64,7 +68,8 @@ Function reference
 # Created on Fri Apr  9 13:28:15 2021
 #
 # @author: sbrincat
-
+import os
+import platform
 import time
 import random
 from math import cos, sin, sqrt
@@ -852,23 +857,28 @@ def set_random_seed(seed=None):
     return seed
 
 
-def interp1(x, y, xinterp, **kwargs):
+def interp1(x, y, xinterp, axis=0, **kwargs):
     """
-    Interpolate 1d data vector to new sampling vector
+    Interpolate data over one dimension to new sampling vector
 
-    Convenience wrapper around scipy.interpolate.interp1d w/o weird call structure
+    Convenience wrapper around :func:`scipy.interpolate.interp1d` w/o weird call structure
 
     Parameters
     ----------
     x : array-like, shape=(n_orig,)
         Original 1d sampling vector
 
-    y : array-like, shape=(n_orig,)
-        Original 1d data sampled at values in `x`
+    y : array-like, shape=(...,n_orig,...)
+        Original data sampled at values in `x`. May contain multiple data vectors sampled
+        along same sampling vector `x`. The length of `y` along the interpolation axis
+        `axis` must be equal to the length of `x`.  
 
     xinterp : array-like, shape=(n_interp,)
-        Desired interpolated sampling vector
+        Desired interpolated sampling vector. Typically `n_interp` > `n_orig`.
 
+    axis : int, default: 0
+        Specifies the axis of `y` along which to interpolate. Defaults to 1st axis.
+ 
     **kwargs
         Any additional keyword args are passed as-is to scipy.interpolate.interp1d
 
@@ -877,7 +887,7 @@ def interp1(x, y, xinterp, **kwargs):
     yinterp : ndarray, shape=(n_interp,)
         Data in `y` interpolated to sampling in `xinterp`
     """
-    return interp1d(x,y,**kwargs).__call__(xinterp)
+    return interp1d(x, y, axis=axis, **kwargs).__call__(xinterp)
 
 
 def gaussian(points, center=0.0, width=1.0, amplitude=1.0, baseline=0.0):
@@ -1177,6 +1187,85 @@ def is_positive_definite(X, semi=False):
 
     except np.linalg.LinAlgError:
         return False
+
+
+def setup_sliding_windows(width, lims, step=None, reference=None,
+                          force_int=False, exclude_end=None):
+    """
+    Generate set of sliding windows using given parameters
+
+    Parameters
+    ----------
+    width : scalar
+        Full width of each window
+
+    lims : array-like, shape=(2,)
+        [start end] of full range of domain you want windows to sample
+
+    step : scalar, default: step = `width` (ie, perfectly non-overlapping windows)
+        Spacing between start of adjacent windows
+
+    reference : bool, dfault: None (just start at lim[0])
+        Optionally sets a reference value at which one window starts and the
+        rest of windows will be determined from there.
+        eg, set = 0 to have a window start at x=0, or set = -width/2 to have a
+        window centered at x=0
+
+    force_int : bool, default: False (don't round)
+        If True, rounds window starts,ends to integer values.
+
+    exclude_end : bool, default: True if force_int==True, otherwise False
+        If True, excludes the endpoint of each (integer-valued) sliding win from
+        the definition of that win, to prevent double-sampling
+        (eg, the range for a 100 ms window is [1,99], not [1,100])
+
+    Returns
+    -------
+    windows : ndarray, shape=(n_wins,2)
+        Sequence of sliding window [start,end]'s
+    """
+    # Default: step is same as window width (ie windows perfectly disjoint)
+    if step is None: step = width
+    # Default: Excluding win endpoint is default for integer-valued win's,
+    #  but not for continuous wins
+    if exclude_end is None:  exclude_end = True if force_int else False
+
+    if exclude_end:
+        # Determine if window params (and thus windows) are integer or float-valued
+        params = np.concatenate((lims,width,step))
+        is_int = np.allclose(np.round(params), params)
+        # Set window-end offset appropriately--1 for int, otherwise small float value
+        offset = 1 if is_int else 1e-12
+
+    # Standard sliding window generation
+    if reference is None:
+        if exclude_end: win_starts = iarange(lims[0], lims[-1]-width+offset, step)
+        else:           win_starts = iarange(lims[0], lims[-1]-width, step)
+
+    # Origin-anchored sliding window generation
+    #  One window set to start at given 'reference', position of rest of windows
+    #  is set around that window
+    else:
+        if exclude_end:
+            # Series of windows going backwards from ref point (flipped to proper order),
+            # followed by Series of windows going forwards from ref point
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
+                                         iarange(reference+step, lims[-1]-width+offset, step)))
+
+        else:
+            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
+                                         iarange(reference+step, lims[-1]-width, step)))
+
+    # Set end of each window
+    if exclude_end: win_ends = win_starts + width - offset
+    else:           win_ends = win_starts + width
+
+    # Round window starts,ends to nearest integer
+    if force_int:
+        win_starts = np.round(win_starts)
+        win_ends   = np.round(win_ends)
+
+    return np.stack((win_starts,win_ends),axis=1)
 
 
 # =============================================================================
@@ -1525,83 +1614,19 @@ def isnumeric(x):
     return np.issubdtype(np.asarray(x).dtype, np.number)
 
 
-def setup_sliding_windows(width, lims, step=None, reference=None,
-                          force_int=False, exclude_end=None):
-    """
-    Generate set of sliding windows using given parameters
+def isunix():
+    """ Return true iff current system OS is Linux/UNIX (but not Mac OS) """
+    return (os.name == 'posix') and (platform.system() == 'Linux')
 
-    Parameters
-    ----------
-    width : scalar
-        Full width of each window
 
-    lims : array-like, shape=(2,)
-        [start end] of full range of domain you want windows to sample
+def ismac():
+    """ Return true iff current system OS is Mac OS """
+    return (os.name == 'posix') and (platform.system() == 'Darwin')
 
-    step : scalar, default: step = `width` (ie, perfectly non-overlapping windows)
-        Spacing between start of adjacent windows
 
-    reference : bool, dfault: None (just start at lim[0])
-        Optionally sets a reference value at which one window starts and the
-        rest of windows will be determined from there.
-        eg, set = 0 to have a window start at x=0, or set = -width/2 to have a
-        window centered at x=0
-
-    force_int : bool, default: False (don't round)
-        If True, rounds window starts,ends to integer values.
-
-    exclude_end : bool, default: True if force_int==True, otherwise False
-        If True, excludes the endpoint of each (integer-valued) sliding win from
-        the definition of that win, to prevent double-sampling
-        (eg, the range for a 100 ms window is [1,99], not [1,100])
-
-    Returns
-    -------
-    windows : ndarray, shape=(n_wins,2)
-        Sequence of sliding window [start,end]'s
-    """
-    # Default: step is same as window width (ie windows perfectly disjoint)
-    if step is None: step = width
-    # Default: Excluding win endpoint is default for integer-valued win's,
-    #  but not for continuous wins
-    if exclude_end is None:  exclude_end = True if force_int else False
-
-    if exclude_end:
-        # Determine if window params (and thus windows) are integer or float-valued
-        params = np.concatenate((lims,width,step))
-        is_int = np.allclose(np.round(params), params)
-        # Set window-end offset appropriately--1 for int, otherwise small float value
-        offset = 1 if is_int else 1e-12
-
-    # Standard sliding window generation
-    if reference is None:
-        if exclude_end: win_starts = iarange(lims[0], lims[-1]-width+offset, step)
-        else:           win_starts = iarange(lims[0], lims[-1]-width, step)
-
-    # Origin-anchored sliding window generation
-    #  One window set to start at given 'reference', position of rest of windows
-    #  is set around that window
-    else:
-        if exclude_end:
-            # Series of windows going backwards from ref point (flipped to proper order),
-            # followed by Series of windows going forwards from ref point
-            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
-                                         iarange(reference+step, lims[-1]-width+offset, step)))
-
-        else:
-            win_starts = np.concatenate((np.flip(iarange(reference, lims[0], -1*step)),
-                                         iarange(reference+step, lims[-1]-width, step)))
-
-    # Set end of each window
-    if exclude_end: win_ends = win_starts + width - offset
-    else:           win_ends = win_starts + width
-
-    # Round window starts,ends to nearest integer
-    if force_int:
-        win_starts = np.round(win_starts)
-        win_ends   = np.round(win_ends)
-
-    return np.stack((win_starts,win_ends),axis=1)
+def ispc():
+    """ Return true iff current system OS is PC Windows """
+    return platform.system() == 'Windows'
 
 
 def object_array_equal(data1, data2, comp_func=np.array_equal, reduce_func=np.all):
