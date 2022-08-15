@@ -2,12 +2,10 @@
 import pytest
 import numpy as np
 
-from spynal.utils import data_labels_to_data_groups
-
 from spynal.tests.data_fixtures import one_sample_data, two_sample_data, \
                                        one_way_data, two_way_data, MISSING_ARG_ERRS
 from spynal.utils import one_sample_tstat, paired_tstat, two_sample_tstat, \
-                         one_way_fstat, two_way_fstat
+                         one_way_fstat, two_way_fstat, data_labels_to_data_groups
 from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_test_labels, \
                                        paired_sample_association_test, paired_sample_association_test_labels, \
                                        two_sample_test, two_sample_test_labels, \

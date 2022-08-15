@@ -4,14 +4,15 @@ import random
 from math import pi
 import numpy as np
 
-from spynal.tests.data_fixtures import one_sample_data, two_sample_data, two_way_data, \
-                                       MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import one_sample_data, two_sample_data, one_way_data, \
+                                       two_way_data, MISSING_ARG_ERRS
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                          set_random_seed, interp1, setup_sliding_windows, \
                          correlation, rank_correlation, \
                          gaussian, gaussian_2d, gaussian_nd, is_symmetric, is_positive_definite, \
                          index_axis, standardize_array, undo_standardize_array, \
+                         data_labels_to_data_groups, data_groups_to_data_labels, \
                          iarange, unsorted_unique, isarraylike, isnumeric, isunix, ismac, ispc, \
                          object_array_equal, object_array_compare, concatenate_object_array
 
@@ -250,7 +251,7 @@ def test_set_random_seed(rand_func):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         rand_func(foo=None)
-        
+
 
 def test_interp1():
     """ Unit tests for interp1() function """
@@ -258,14 +259,14 @@ def test_interp1():
     y = np.cos(2*pi*4*x)
     xinterp = iarange(0,1,0.01)
     n_interp = len(xinterp)
-    
+
     y_orig = y.copy()
     result = 0.0099
-    
+
     # Test basic function
     yinterp = interp1(x, y, xinterp)
     print(yinterp.shape, np.round(yinterp.mean(),4))
-    assert np.array_equal(y,y_orig)     # Ensure input data isn't altered by function    
+    assert np.array_equal(y,y_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(yinterp.shape, (n_interp,))
     assert np.isclose(yinterp.mean(), result, rtol=1e-4, atol=1e-4)
 
@@ -280,11 +281,11 @@ def test_interp1():
     Yinterp = interp1(x, Y.T, xinterp, axis=-1)
     assert np.array_equal(Yinterp.shape, (4,n_interp))
     assert np.allclose(Yinterp.mean(axis=-1), result, rtol=1e-4, atol=1e-4)
-                      
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         yinterp = interp1(x, y, xinterp, foo=None)
-            
+
 
 @pytest.mark.parametrize('func, result, result2',
                          [(gaussian,    0.9783, 2.3780),
@@ -420,6 +421,41 @@ def test_standardize_array(axis, target_axis):
         _,_ = undo_standardize_array(data2, data_shape, axis=axis, target_axis=target_axis, foo=None)
 
 
+def test_data_groups_to_data_labels(one_way_data):
+    data, labels = one_way_data
+    data_orig = data.copy()
+    labels_orig = labels.copy()
+
+    # Test basic function
+    data1, data2, data3 = data_labels_to_data_groups(data, labels, axis=0)
+    data1_orig = data1.copy()
+    assert np.array_equal(data, data_orig)      # Ensure input data isn't altered by function
+    assert np.array_equal(labels, labels_orig)
+
+    data_check, labels_check = data_groups_to_data_labels(data1, data2, data3, axis=0)
+    assert np.array_equal(data1, data1_orig)    # Ensure input data isn't altered by function
+    assert np.array_equal(data_check, data)
+    assert np.array_equal(labels_check, labels)
+
+    # Test for consistency with transposed data
+    data1, data2, data3 = data_labels_to_data_groups(data.T, labels, axis=-1)
+    data_check, labels_check = data_groups_to_data_labels(data1, data2, data3, axis=-1)
+    assert np.array_equal(data_check, data.T)
+    assert np.array_equal(labels_check, labels)
+
+    # Test for consistency with subgroup selection from data
+    data1, data2 = data_labels_to_data_groups(data, labels, axis=0, groups=(0,1))
+    data_check, labels_check = data_groups_to_data_labels(data1, data2, axis=0)
+    assert np.array_equal(data_check, data[:20,:])
+    assert np.array_equal(labels_check, labels[:20])
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        _,_,_ = data_labels_to_data_groups(data, labels, axis=0, foo=None)
+    with pytest.raises(MISSING_ARG_ERRS):
+        _,_ = data_groups_to_data_labels(data1, data2, data3, axis=0, foo=None)
+
+
 # =============================================================================
 # Other utility functions
 # =============================================================================
@@ -495,8 +531,8 @@ def test_isplatform():
     """ Unit tests for isunix(), ismac(), ispc() functions """
     # Ensure we identify 1 and only 1 platform/OS
     assert np.sum([isunix(), ismac(), ispc()]) == 1
-    
-    
+
+
 def test_setup_sliding_windows():
     """ Unit tests for setup_sliding_windows() function """
     # Test for expected output with different argument sets

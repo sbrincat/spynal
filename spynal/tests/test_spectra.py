@@ -10,7 +10,7 @@ from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
 from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs
-from spynal.spectra.utils import power
+from spynal.spectra.utils import get_freq_sampling, power
 
 
 # =============================================================================
@@ -599,6 +599,33 @@ def test_plot_spectrogram(oscillation, method):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         img, _ = plot_spectrogram(timepts, freqs, spec, foo=None)
+
+
+# =============================================================================
+# Unit tests for other spectral/LFP utility functions
+# =============================================================================
+def test_get_freq_sampling():
+    smp_rate = 1000
+    nfft = 1000
+    
+    # Basic test of function
+    f, fbool = get_freq_sampling(smp_rate, nfft)
+    print(f.shape, f[:10], f[-1])
+    assert np.array_equal(f, iarange(0,500))
+
+    # Test with different freq_range, nfft, smp_rate
+    f, fbool = get_freq_sampling(smp_rate, nfft, freq_range=(100,200))
+    assert np.array_equal(f, iarange(100,200))
+
+    f, fbool = get_freq_sampling(smp_rate, 500)
+    assert np.array_equal(f, iarange(0,500,2))
+
+    f, fbool = get_freq_sampling(smp_rate, nfft, two_sided=True)
+    assert np.array_equal(f, np.hstack((iarange(0,499), iarange(-500,-1))))
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        f, fbool = get_freq_sampling(smp_rate, nfft, foo=None)
 
 
 def test_imports():

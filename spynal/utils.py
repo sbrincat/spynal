@@ -48,6 +48,9 @@ Data indexing and reshaping functions
 - axis_index_slices :   Generates list of slices for dynamic axis indexing
 - standardize_array :   Reshapes array to 2D w/ axis relevant for analysis at start or end
 - undo_standardize_array : Undoes effect of standardize_array after analysis
+- data_labels_to_data_groups : Convert (data,labels) pair to tuple of (data_1,data_2,...,data_k)
+- data_groups_to_data_labels : Convert tuple of (data_1,data_2,...,data_k) to (data,labels) pair
+
 
 Other utilities
 ^^^^^^^^^^^^^^^
@@ -1494,6 +1497,9 @@ def data_groups_to_data_labels(*data, axis=0, groups=None):
     labels : array-like, shape=(N,)
         List of labels corresponding to each observation in data.
     """
+    if isinstance(data,tuple) and len(data) == 1:
+        raise TypeError("Seems you are missing dereferencer '*' for argument <data>")
+    
     n_groups = len(data)
     if groups is None: groups = np.arange(n_groups)
     n_per_group = [x.shape[axis] for x in data]

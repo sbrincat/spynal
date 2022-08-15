@@ -54,7 +54,7 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
         # Limit to positive frequencies
         else:
             if n_fft%2 == 0: n = (n_fft/2 + 1, n_fft/2 - 1)
-            else:           n = ((n_fft-1)/2, (n_fft-1)/2 + 1)
+            else:            n = ((n_fft-1)/2, (n_fft-1)/2 + 1)
             freq_bool = np.concatenate((np.ones((int(n[0]),),dtype=bool),
                                         np.zeros((int(n[1]),),dtype=bool)))
 
