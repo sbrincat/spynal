@@ -177,7 +177,7 @@ def one_sided_to_two_sided(data, freqs, smp_rate, axis=0):
 
     # If f=0 is not in data, numerically extrapolate values for it
     if not np.isclose(freqs,0).any():
-        f0 = interp1(freqs,data,0,axis=axis,kind='cubic',fill_value='extrapolate')
+        f0 = interp1(freqs, data, 0, axis=axis, kind='cubic', fill_value='extrapolate')
         f0 = np.expand_dims(f0,axis)
         data = np.concatenate((f0,data),axis=axis)
         freqs = np.concatenate(([0],freqs))

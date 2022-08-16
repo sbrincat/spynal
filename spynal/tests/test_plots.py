@@ -1,13 +1,18 @@
 """ Unit tests for plots.py module """
 import pytest
+import os
 import numpy as np
+import matplotlib.pyplot as plt
+
+import tempfile
 
 from spynal.tests.data_fixtures import oscillation, MISSING_ARG_ERRS
-from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap
+from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap, \
+                         full_figure, savefig, make_colormap, colorbar
 
 
 # =============================================================================
-# Unit tests for plotting functions
+# Unit tests for plot generating functions
 # =============================================================================
 def test_plot_line_with_error_fill(oscillation):
     """ Unit tests for plot_lineseries function """
@@ -68,7 +73,7 @@ def test_plot_lineseries(oscillation):
 
     max_val = np.abs(data).max()
     scaled_data = 1.5 * data / max_val
-    
+
     # Basic test that plotted data == input data
     lines, _ = plot_lineseries(timepts, channels, data)
     assert np.array_equal(data, data_orig) # Ensure input data isn't altered by function
@@ -89,7 +94,7 @@ def test_plot_lineseries(oscillation):
         assert np.allclose(lines[ch][0].get_ydata(), scaled_data[ch,:] + ch)
 
     # Test for consistent output with change in scale
-    scaled_data = 0.5 * data / max_val    
+    scaled_data = 0.5 * data / max_val
     lines, _ = plot_lineseries(timepts, channels, data, scale=0.5)
     for ch in range(n_chnls):
         assert np.allclose(lines[ch][0].get_xdata(), timepts)
@@ -101,7 +106,7 @@ def test_plot_lineseries(oscillation):
 
 
 def test_plot_heatmap(oscillation):
-    """ Unit tests for plot_heatmap function """
+    """ Unit tests for plot_heatmap() and colorbar() functions """
     data = oscillation.T
     data_orig = data.copy()
     n_chnls, n_timepts = data.shape
@@ -110,13 +115,66 @@ def test_plot_heatmap(oscillation):
     channels = np.arange(n_chnls)
 
     # Basic test that plotted data == input data
-    img, _ = plot_heatmap(timepts, channels, data)
+    img, ax = plot_heatmap(timepts, channels, data)
     assert np.array_equal(data, data_orig) # Ensure input data isn't altered by function
     assert np.allclose(img.get_array().data, data)
+
+    # Also test colorbar() function
+    cbar = colorbar(mappable=img, ax=ax, size=0.02, pad=0.02)
+    cbar = colorbar(mappable=img)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         img, _ = plot_heatmap(timepts, channels, data, foo=None)
+        cbar = colorbar(mappable=img, ax=ax, foo=None)
+
+
+# =============================================================================
+# Unit tests for plotting utility functions
+# =============================================================================
+def test_full_figure():
+    """ Unit tests for full_figure() function """
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        fig = full_figure(foo=None)
+
+    plt.close('all')
+
+
+def test_savefig():
+    """ Unit tests for savefig() function """
+
+    fig = plt.figure()
+
+    with tempfile.TemporaryDirectory() as temp_folder:
+        # Basic test of function
+        filename = os.path.join(temp_folder, 'test_file.png')
+        savefig(filename, fig=fig)
+
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        # HACK  Temporarily commeent this out
+        #       plt.savefig() doesn't check for unexpected kwargs now, but will for v3.5
+        # with pytest.raises(MISSING_ARG_ERRS):
+        #     savefig(filename, fig=fig, foo=None, asdfdssdf=True)
+
+    plt.close('all')
+
+
+def test_make_colormap():
+    """ Unit tests for make_colormap() function """
+    def _set_colors():
+        return [[1,0,0], [0,1,0], [0,0,1]]
+
+    # Baasic test of function
+    colors = _set_colors()
+    make_colormap('testmap', colors=colors)
+
+    # Test function with callable arg for `colors`
+    make_colormap('testmap', colors=_set_colors)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        make_colormap('testmap', colors=colors, foo=None)
 
 
 def test_imports():
@@ -130,3 +188,4 @@ def test_imports():
     # Import specific function from module
     from spynal.plots import full_figure
     full_figure
+

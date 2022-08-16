@@ -535,11 +535,11 @@ def make_colormap(name, colors=None, **kwargs):
     
     # If `colors` is dict, we assume it contains points to linearly interp colormap segments btwn
     if isinstance(colors_,dict):        
-        cmap = LinearSegmentedColormap(name=name, segmentdata=colors_)
+        cmap = LinearSegmentedColormap(name=name, segmentdata=colors_, **kwargs)
         
     # If `colors` is array/list, we assume it directly represents all colors in colormap    
     elif isarraylike(colors_):
-        cmap = ListedColormap(colors=colors_, name=name)
+        cmap = ListedColormap(colors=colors_, name=name, **kwargs)
     
     else:
         raise TypeError("Unsupported type <%s> set for `colors`" % type(colors_))
@@ -550,11 +550,11 @@ def make_colormap(name, colors=None, **kwargs):
     return cmap
 
 
-def colorbar(mappable=None, ax=None, size=0.05, pad=0.05):
+def colorbar(mappable=None, ax=None, size=0.05, pad=0.05, **kwargs):
     """
     Create a colorbar for given axis without messing up parent axis size (as plt.colorbar() does)
 
-    Wrapper around fig.colorbar
+    Wrapper around `fig.colorbar`
     
     Parameters
     ----------
@@ -570,6 +570,9 @@ def colorbar(mappable=None, ax=None, size=0.05, pad=0.05):
 
     pad : float, default: 0.05
         Distance of colorbar from parent axis, expressed as proportion of parent axis width
+
+    **kwargs :
+        Any other keyword args passed directly to `fig.colorbar`.
 
     Returns
     -------
@@ -601,7 +604,7 @@ def colorbar(mappable=None, ax=None, size=0.05, pad=0.05):
     # Add new axis of given position,size for colorbar
     cax = fig.add_axes([xpos, bounds[1], width, bounds[3]])
     # Create colorbar
-    return fig.colorbar(mappable, cax=cax)
+    return fig.colorbar(mappable, cax=cax, **kwargs)
 
 
 def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,

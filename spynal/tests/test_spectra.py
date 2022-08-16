@@ -10,7 +10,7 @@ from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
 from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs
-from spynal.spectra.utils import get_freq_sampling, power
+from spynal.spectra.utils import get_freq_sampling, one_sided_to_two_sided, power
 
 
 # =============================================================================
@@ -605,6 +605,7 @@ def test_plot_spectrogram(oscillation, method):
 # Unit tests for other spectral/LFP utility functions
 # =============================================================================
 def test_get_freq_sampling():
+    """ Unit tests for get_freq_sampling() function """
     smp_rate = 1000
     nfft = 1000
     
@@ -628,6 +629,27 @@ def test_get_freq_sampling():
         f, fbool = get_freq_sampling(smp_rate, nfft, foo=None)
 
 
+def test_one_sided_to_two_sided(oscillation):
+    """ Unit tests for one_sided_to_two_sided() function """
+    data = oscillation
+    smp_rate = 1000
+    n_trials = 4
+
+    # Basic test of shape, dtype, value of output.
+    # Test values averaged over all timepts, freqs for 1st trial for simplicity
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method='multitaper',
+                                       data_type='lfp', spec_type='complex')    
+    spec_orig = spec.copy()
+    
+    # TODO Set up some basic tests of function
+    spec2 = one_sided_to_two_sided(spec, freqs, smp_rate, axis=0)
+    assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        spec2 = one_sided_to_two_sided(spec, freqs, smp_rate, axis=0, foo=None)
+    
+    
 def test_imports():
     """ Test different import methods for spectra module """
     # Import entire package
