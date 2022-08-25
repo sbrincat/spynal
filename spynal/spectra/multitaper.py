@@ -97,8 +97,8 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Compute DPSS taper functions (if not precomputed)
     if tapers is None:
-        tapers = compute_tapers(smp_rate,time_width=n_timepts/smp_rate,
-                                freq_width=freq_width,n_tapers=n_tapers)
+        tapers = compute_tapers(smp_rate, time_width=n_timepts/smp_rate,
+                                freq_width=freq_width, n_tapers=n_tapers)
 
     # Reshape tapers to (n_timepts,n_tapers) (if not already)
     if (tapers.ndim == 2) and (tapers.shape[1] == n_timepts): tapers = tapers.T
@@ -148,7 +148,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Compute mean across tapers if requested
     if not keep_tapers:
-        if spec_type == 'phase':    spec = phase(np.exp(1j*spec).mean(axis=1))
+        if spec_type == 'phase':    spec = phase(np.exp(1j*spec).mean(axis=1)) # circular mean
         else:                       spec = spec.mean(axis=1)
 
     # If observation axis wasn't 0, permute (freq,tapers) back to original position
@@ -249,30 +249,31 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     if spacing is None: spacing = window
     # Compute DPSS taper functions (if not precomputed)
     if tapers is None:
-        tapers = compute_tapers(smp_rate,time_width=time_width,freq_width=freq_width,
+        tapers = compute_tapers(smp_rate, time_width=time_width, freq_width=freq_width,
                                 n_tapers=n_tapers)
 
     # Set up parameters for data time windows
     # Set window starts to range from time 0 to time n - window width
-    win_starts  = iarange(0,n_timepts/smp_rate - window,spacing)
+    win_starts  = iarange(0, n_timepts/smp_rate - window, spacing)
     # Set sampled timepoint vector = center of each window
     timepts     = win_starts + window/2.0
 
     # Extract time-windowed version of data -> (n_timepts_per_win,n_wins,n_dataseries)
-    data = _extract_triggered_data(data,smp_rate,win_starts,[0,window])
+    data = _extract_triggered_data(data, smp_rate, win_starts, [0,window])
 
-    if removeDC: data = remove_dc(data,axis=0)
+    if removeDC: data = remove_dc(data, axis=0)
 
     # Do multitaper analysis on windowed data
-    # Note: Set axis=0 and removeDC=False bc already dealt with above
-    spec, freqs = multitaper_spectrum(data,smp_rate,axis=0,data_type=data_type,spec_type=spec_type,
-                                      freq_range=freq_range,tapers=tapers,pad=pad,
-                                      removeDC=False,keep_tapers=keep_tapers,**kwargs)
+    # Note: Set axis=0 and removeDC=False bc already dealt with above.
+    # Note: Input values for `freq_width`,`n_tapers` are implicitly propagated here via `tapers`
+    spec, freqs = multitaper_spectrum(data, smp_rate, axis=0, data_type=data_type,
+                                      spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+                                      pad=pad, removeDC=False, keep_tapers=keep_tapers, **kwargs)
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
     if axis != 0:
-        if keep_tapers: spec = np.moveaxis(spec,[0,1,2],[axis,axis+1,axis+2])
-        else:           spec = np.moveaxis(spec,[0,1],[axis,axis+1])
+        if keep_tapers: spec = np.moveaxis(spec, [0,1,2], [axis,axis+1,axis+2])
+        else:           spec = np.moveaxis(spec, [0,1], [axis,axis+1])
 
     return spec, freqs, timepts
 

@@ -167,7 +167,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     elif method == 'bandfilter':
         if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
 
-    if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
+    if ('buffer' not in kwargs) and (method != 'multitaper'): kwargs['buffer'] = 1.0
 
     if do_itpc:
         if 'itpc_method' not in kwargs: kwargs['itpc_method'] = 'PLV'
@@ -284,7 +284,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
         #     else:
         #         ax.set_xticklabels([])
         #         plt.yticks(freq_ticks,[])
-        #     plt.title(np.round(value,decimal=2))
+        #     plt.title(np.round(value,decimals=2))
         #     plt.colorbar()
         # plt.show()
         # if plot_dir is not None:

@@ -313,7 +313,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
         #         else:
         #             ax.set_xticklabels([])
         #             plt.yticks(freq_ticks,[])
-        #         plt.title(np.round(value,decimal=2))
+        #         plt.title(np.round(value,decimals=2))
         #         plt.colorbar()
         #     plt.show()
         # if plot_dir is not None:

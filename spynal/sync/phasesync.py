@@ -288,19 +288,19 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
         if axis > taper_axis: axis -= 1
 
     data_ndim = lfpdata.ndim
-    # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,n_trials)
+    # Move time and observations/trials axes to end of arrays -> (...,n_timepts,n_obs)
     if not ((time_axis == data_ndim-2) and (axis == data_ndim-1)):
         lfpdata = np.moveaxis(lfpdata,time_axis,-1)
         lfpdata = np.moveaxis(lfpdata,axis,-1)
         spkdata = np.moveaxis(spkdata,time_axis,-1)
         spkdata = np.moveaxis(spkdata,axis,-1)
     data_shape = lfpdata.shape   # Cache data shape after axes shift
-    n_timepts,n_trials = data_shape[-2], data_shape[-1]
+    n_timepts,n_obs = data_shape[-2], data_shape[-1] # n_obs = n_trials[*n_tapers]
 
-    # Unwrap all other axes (incl. frequency) -> (n_data_series,n_timepts,n_trials)
+    # Unwrap all other axes (incl. frequency) -> (n_data_series,n_timepts,n_obs)
     if data_ndim > 2:
-        lfpdata = np.reshape(lfpdata, (-1,n_timepts,n_trials))
-        spkdata = np.reshape(spkdata, (-1,n_timepts,n_trials))
+        lfpdata = np.reshape(lfpdata, (-1,n_timepts,n_obs))
+        spkdata = np.reshape(spkdata, (-1,n_timepts,n_obs))
 
     # Normalize LFP spectrum/spectrogram so data is all unit-length complex vectors
     lfpdata = lfpdata / np.abs(lfpdata)
@@ -369,7 +369,7 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     # Reshape axes (incl. frequency) to original data shape
     if data_ndim > 2:
         vector_mean = np.reshape(vector_mean, (*data_shape[:-2],n_timepts_out,1))
-    # Move time and trials/observations axes to end of data arrays -> (...,n_timepts,1)
+    # Move time and trials/observations axes to original locations
     if not ((time_axis == data_ndim-2) and (axis == data_ndim-1)):
         vector_mean = np.moveaxis(vector_mean,-1,axis)
         vector_mean = np.moveaxis(vector_mean,-1,time_axis)
@@ -381,8 +381,15 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
         slicer[time_axis] = slice(None)         # Set <time_axis> element to slice as if set=':'
         if not keepdims: del slicer[axis]       # Remove trial axis if not keeping singleton
         n = n[tuple(slicer)]                    # Expand n to match dimensionality of PLV
-
-    if not keepdims: vector_mean = vector_mean.squeeze(axis=axis)
+    
+    if not keepdims:
+        vector_mean = vector_mean.squeeze(axis=axis)
+        
+    # Insert singleton axis corresponding to former location of tapers, for dimensional consistency    
+    elif spec_method == 'multitaper':
+        slicer = [slice(None)]*vector_mean.ndim
+        slicer = slicer[:time_axis] + [np.newaxis] + slicer[time_axis:]
+        vector_mean = vector_mean[tuple(slicer)]
 
     # Compute absolute value of complex vector mean = mean resultant = PLV
     # and optionally the mean phase angle as well. Also return spike counts.

@@ -860,6 +860,31 @@ def set_random_seed(seed=None):
     return seed
 
 
+def randperm(n, k=None):
+    """
+    Generates a random permutation of the integers 0 : n-1, or selects a length-k random subset.
+
+    Emulates Matlab randperm().
+
+    Parameters
+    ----------
+    n : int
+        Length of sequence to permute / subsample from
+
+    k : int, default: `n` (generate random permutation of 0:n-1)
+        Length of subset to select. Default generates random permutation w/o sub-selection.
+        
+    Returns
+    -------
+    perm : ndarray, shape=(k,), dtype=int
+        Length-k random subset/permutation of integers 0:n-1 
+    """
+    assert (k is None) or (k <= n), "<k> must be an integer <= <n> (or None)"
+    
+    if k is None:   return np.random.permutation(n)
+    else:           return np.random.permutation(n)[:k]
+        
+
 def interp1(x, y, xinterp, axis=0, **kwargs):
     """
     Interpolate data over one dimension to new sampling vector
@@ -874,14 +899,14 @@ def interp1(x, y, xinterp, axis=0, **kwargs):
     y : array-like, shape=(...,n_orig,...)
         Original data sampled at values in `x`. May contain multiple data vectors sampled
         along same sampling vector `x`. The length of `y` along the interpolation axis
-        `axis` must be equal to the length of `x`.  
+        `axis` must be equal to the length of `x`.
 
     xinterp : array-like, shape=(n_interp,)
         Desired interpolated sampling vector. Typically `n_interp` > `n_orig`.
 
     axis : int, default: 0
         Specifies the axis of `y` along which to interpolate. Defaults to 1st axis.
- 
+
     **kwargs
         Any additional keyword args are passed as-is to scipy.interpolate.interp1d
 
@@ -1499,7 +1524,7 @@ def data_groups_to_data_labels(*data, axis=0, groups=None):
     """
     if isinstance(data,tuple) and len(data) == 1:
         raise TypeError("Seems you are missing dereferencer '*' for argument <data>")
-    
+
     n_groups = len(data)
     if groups is None: groups = np.arange(n_groups)
     n_per_group = [x.shape[axis] for x in data]
