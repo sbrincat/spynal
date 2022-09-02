@@ -702,7 +702,7 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     handles = []
     for value in values:
         if isinstance(value,float) or isinstance(value,int): value = [value]
-        value = np.asarray(value)
+        value = np.atleast_1d(value)
         if value.shape[0] == 0: continue
 
         # Iterate thru axes (if > 1) to plot markers on
