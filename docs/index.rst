@@ -43,11 +43,10 @@ Table of contents
     :maxdepth: 2
     
     quickstart
+    installation
     API_reference
     layout
     modules
-
-# TODO installation
 
 Indices and tables
 ==================
