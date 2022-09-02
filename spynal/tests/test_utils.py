@@ -8,7 +8,7 @@ from spynal.tests.data_fixtures import one_sample_data, two_sample_data, one_way
                                        two_way_data, MISSING_ARG_ERRS
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
-                         set_random_seed, interp1, setup_sliding_windows, \
+                         set_random_seed, randperm, interp1, setup_sliding_windows, \
                          correlation, rank_correlation, \
                          gaussian, gaussian_2d, gaussian_nd, is_symmetric, is_positive_definite, \
                          index_axis, standardize_array, undo_standardize_array, \
@@ -253,6 +253,22 @@ def test_set_random_seed(rand_func):
         rand_func(foo=None)
 
 
+def test_randperm():
+    """ Unit test for randperm() function """
+    n,k = 4,4
+    set_random_seed(1)
+    out = randperm(n,k)
+    assert np.array_equal(out, [3,2,0,1])
+    
+    n,k = 4,2
+    set_random_seed(1)
+    out = randperm(n,k)
+    assert np.array_equal(out, [3,2])
+    
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        randperm(n, k, foo=None)
+            
 def test_interp1():
     """ Unit tests for interp1() function """
     x = iarange(0,1,0.1)
