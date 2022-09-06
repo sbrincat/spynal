@@ -731,8 +731,8 @@ def isi_stats(ISIs, stat='Fano', axis='each', **kwargs):
 
     References
     ----------
-    Holt et al. (1996) Journal of Neurophysiology https://doi.org/10.1152/jn.1996.75.5.1806
-    Shinomoto et al. (2009) PLoS Computational Biology https://doi.org/10.1371/journal.pcbi.1000433
+    - Holt et al. (1996) Journal of Neurophysiology https://doi.org/10.1152/jn.1996.75.5.1806
+    - Shinomoto et al. (2009) PLoS Computational Biology https://doi.org/10.1371/journal.pcbi.1000433
     """
     stat = stat.lower()
 

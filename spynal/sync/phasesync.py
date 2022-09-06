@@ -21,12 +21,12 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
     PLV is a measure of phase synchrony that ignores signals amplitudes.
 
     PLV is the mean resultant length (magnitude of the vector mean) of phase
-    differences dphi btwn phases of data1 and data2:
+    differences dphi btwn phases of data1 and data2::
 
         dphi = phase(data1) - phase(data2)
         PLV  = abs( trial_mean(exp(i*dphi)) )
 
-    Only parameters differing from :func:`.synchrony` are described here.
+    Only parameters differing from :func:`synchrony` are described here.
 
     Parameters
     ----------
