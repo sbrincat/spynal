@@ -1,21 +1,20 @@
 # spynal
-Simple Python Neural Analysis Library, the backbone of your neural data analysis pipeline.
+Simple Python Neural Analysis Library, the backbone of your neural data analysis pipeline.  
 
 Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python  
 
 Covers typical preprocessing and basic analysis steps in neural analysis workflows.
 Intended users are anyone doing analysis of neurophysiology data, but we particularly aim to be
 accessible and easy-to-use for people migrating to Python from Matlab or other similar
-programming languages
+programming languages.  
 
 ### Features include:
 **Simplicity**: easy-to-use interface; no OOP or complicated data/params structures  
 **Consistency**: consistent function signature ~ analysis(data, axis, extra_param=default)  
 **Modularity**: can use specific functionality w/o requiring an entire processing chain  
-**Flexibility**: detailed parameterization allows customized analysis  
-**Foolproof**: extensive documentation and checks for proper inputs
-**Flexibility**: detailed parameterization allows customization of analysis to users' needs
-**Vectorized mass-univariate analysis**: runs in parallel across all channels, no for loops needed  
+**Foolproof**: extensive documentation and checks for proper inputs  
+**Flexibility**: detailed parameterization allows customization of analysis to users' needs  
+**Vectorized mass-univariate analysis**: runs in parallel across all channels, no loops needed  
 
 ### Package includes the following modules:
 **matIO** -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
@@ -25,7 +24,7 @@ programming languages
 **info** -- Measures of neural information about task/behavior variables  
 **randstats** -- Nonparametric randomization, permutation, and bootstrap statistics  
 **plots** -- Generation of common plot types; plotting utilities  
-**utils** -- Numerical and general purpose utilities
+**utils** -- Numerical and general purpose utilities  
 
 
 ## Download & installation instructions
