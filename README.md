@@ -9,12 +9,12 @@ accessible and easy-to-use for people migrating to Python from Matlab or other s
 programming languages.  
 
 ### Features include:
-**Simplicity**: easy-to-use interface; no OOP or complicated data/params structures  
-**Consistency**: consistent function signature ~ analysis(data, axis, extra_param=default)  
-**Modularity**: can use specific functionality w/o requiring an entire processing chain  
-**Foolproof**: extensive documentation and checks for proper inputs  
-**Flexibility**: detailed parameterization allows customization of analysis to users' needs  
-**Vectorized mass-univariate analysis**: runs in parallel across all channels, no loops needed  
+**Simplicity**: Easy-to-use interface; no OOP or complicated data/params structures  
+**Consistency**: Consistent function signature ~ analysis(data, labels, axis, extra_param=value)  
+**Modularity**: Can use specific functionality without buy-in to an entire processing chain  
+**Foolproof**: Extensive documentation and checking for proper function inputs  
+**Flexibility**: Detailed parameterization allows customization of analysis to users' needs  
+**Vectorized analysis**: Runs in parallel across all channels, no loops or data reshaping needed  
 
 ### Package includes the following modules:
 **matIO** -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
@@ -25,6 +25,8 @@ programming languages.
 **randstats** -- Nonparametric randomization, permutation, and bootstrap statistics  
 **plots** -- Generation of common plot types; plotting utilities  
 **utils** -- Numerical and general purpose utilities  
+
+Full documentation can be found at: https://readthedocs.org/projects/spynal/  
 
 
 ## Download & installation instructions
