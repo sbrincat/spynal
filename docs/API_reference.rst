@@ -14,17 +14,20 @@ with a data array, and typically one or more appropriate parameters:
 
 ``analysis(data, labels, ...)``
 
-We strive to give our functions and variables succint but intuitive names.
+We strive to give our functions and variables intuitively obvious but succint names.
 
 Data types & Parameters
 -----------------------
-The basic data type used in Spynal is the simple Numpy ndarray (a multi-dimensional array type
-similar to Matlab arrays). No specialized variable types, and no complicated parameter structures
-are needed. To set options for analysis functions, we employ the standard Python keyword argument
-syntax: ``param=value``. Parameters are set to default values typical for the given analysis, but
-these can be overriden with custom values to meet users' needs:
+The basic data type used in Spynal is the simple `Numpy ndarray <https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html>`_
+(a multi-dimensional array type similar to Matlab arrays). No specialized variable types, and no
+complicated parameter structures are needed. To set options for analysis functions, we employ the
+standard Python keyword argument syntax: ``param=value``. Parameters are set to default values
+typical for the given analysis, but these can be overriden with custom values to meet users' needs:
 
 ``analysis(data, labels, extra_param1=value1, extra_param2=value2, ...)``
+
+In some cases, the parameter values can even be a user-provided *function*, to be used as a drop-in
+alternative to preset analysis methods (eg the statistic to compute for randomization stats).
 
 Flexible vectorized analysis
 ----------------------------
@@ -32,7 +35,7 @@ Data from different sources often has different dimensionality and dimensional o
 Often this means data arrays need to be transposed/reshaped to fit assumptions of an analysis
 library, then reshaped back afterward.
 
-Neural data analysis is often performed in "mass-univariate" fashion, with the same analysis
+Neural data analysis is also often performed in "mass-univariate" fashion, with the same analysis
 applied to multiple data channels, trials, time points, frequencies, etc. Often this requires
 writing a series of nested `for` loops for every analysis, like this::
 
@@ -63,7 +66,7 @@ for spiking data analysis) or class of analyses (eg `info` for neural informatio
 Some modules are further divided into submodules (eg `spectra.wavelet` and `spectra.multitaper`
 for wavelet and multitaper spectral analysis, respectively). Spynal is set up so that submodule
 functionality can be accessed by users at the module level without needing to know the exact
-location of functions in the code (eg calling `spectra.wavelet_spectrogram` insteaad of
+location of functions in the code (eg calling `spectra.wavelet_spectrogram` instead of
 `spectra.wavelet.wavelet_spectrogram`).
 
 Many functions themselves also have a hierarchical organization. A top-level function provides

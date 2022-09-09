@@ -9,13 +9,15 @@ statistict, inter-spike intervals and their statistics, and spike data preproces
 
 Most functions expect one of two formats of spiking data:
 
-- bool : Binary spike trains where 1's label times of spikes and 0's = no spike in a
-    Numpy ndarray of dtype=bool, where one axis corresponds to time, but otherwise can have any
-    arbitrary dimensionality (including other optional axes corresponding to trials, units, etc.)
+- **bool**
+    Binary spike trains where 1's label times of spikes and 0's = no spike, in a Numpy ndarray
+    of dtype=bool, where one axis corresponds to time, but otherwise can have any arbitrary
+    dimensionality (including other optional axes corresponding to trials, units, etc.)
 
-- timestamp : Explicit spike timestamps in a Numpy ndarray of dtype=object. This is a "ragged
-    nested sequence" (array of lists/sub-arrays of different length), analogous to Matlab cell
-    arrays. Each object element is a variable-length list-like 1D subarray of spike timestamps
+- **timestamp**
+    Explicit spike timestamps in a Numpy ndarray of dtype=object. This is a "ragged nested
+    sequence" (array of lists/sub-arrays of different length), analogous to Matlab cell arrays.
+    Each object element is a variable-length list-like 1D subarray of spike timestamps
     (of dtype float or int), and the container object array can have any arbitrary dimensionality
     (including optional axes corresponding to trials, units, etc.).
 
@@ -66,8 +68,8 @@ Plotting
 
 Synthetic data generation
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-- simulate_spike_rates :  Generate sythetic Poisson rates
-- simulate_spike_trains : Generate sythetic Poisson process spike trains
+- simulate_spike_rates :  Generate synthetic rates from Poisson distribution
+- simulate_spike_trains : Generate synthetic spike trains from Poisson process
 
 Function reference
 ------------------

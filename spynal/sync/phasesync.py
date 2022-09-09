@@ -151,7 +151,7 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
     phase observed in one trial is to the relative phase observed in another trial
 
     PPC is also an debiased estimator of the square of the mean resultant length (PLV^2),
-    and can be expressed (and computed efficiently) in terms of PLV and n:
+    and can be expressed (and computed efficiently) in terms of PLV and n::
 
         PPC = (n*PLV^2 - 1) / (n-1)
 
@@ -472,5 +472,9 @@ spike_field_pairwise_phase_consistency = spike_field_ppc
 # Helper functions
 # =============================================================================
 def plv_to_ppc(PLV, n):
-    """ Convert PLV to PPC as PPC = (n*PLV^2 - 1)/(n-1) """
+    """
+    Convert PLV to PPC as::
+    
+        PPC = (n*PLV^2 - 1)/(n-1)
+    """
     return (n*PLV**2 - 1) / (n - 1)

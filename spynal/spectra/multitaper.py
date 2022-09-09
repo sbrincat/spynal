@@ -71,8 +71,8 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     References
     ----------
-    Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
-    Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
+    - Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
+    - Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
     if axis < 0: axis = data.ndim + axis
 
@@ -229,8 +229,8 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     References
     ----------
-    Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
-    Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
+    - Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
+    - Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
     if axis < 0: axis = data.ndim + axis
 

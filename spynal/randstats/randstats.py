@@ -10,9 +10,9 @@ distribution for the null hypothesis, and does not rely on any specific assumpti
 the form of the data distribution(s).
 
 Users interested in *non-randomization* (eg rank-based) nonparametric methods are encouraged
-to look at the statsmodels package (https://www.statsmodels.org/). Users interested in traditional
-parametric methods are encouraged to look at the scipy.stats submodule
-(https://docs.scipy.org/doc/scipy/reference/stats.html).
+to look at the `statsmodels <https://www.statsmodels.org/>`_ package. Users interested in traditional
+parametric methods are encouraged to look at the `scipy.stats
+<https://docs.scipy.org/doc/scipy/reference/stats.html>`_ submodule.
 
 Includes tests/confints for several common data schemes:
 
@@ -29,7 +29,7 @@ All functions can compute tests/confints based on random resampling of a default
 for given data scheme (eg t-statistic, F-statistic) or on any custom user-input statistic.
 
 For data not conforming to the above schemes, there is also direct access to low-level functions
-for generating samples for permutation or bootstraps in your own code.
+for generating samples for permutations or bootstraps in your own code.
 
 Most functions perform operations in a mass-univariate manner. This means that
 rather than embedding function calls in for loops over channels, timepoints, etc., like this::

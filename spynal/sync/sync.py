@@ -13,9 +13,9 @@ continuous signals (LFPs/EEGs/etc.) or between pairs of spiking and continuous s
 
 Currently two types of synchrony methods, based on different theoretical frameworks, are available.
 Coherence is based on the theory of linear stochastic processes, and is a frequency-domain analog
-of standard (Pearson) correlation. Phase-based methods (Phase-locking value, pairwise phase consistency)
-are based on circular statistics, and are closely-related to the length of the vector average of the
-relative phases of a signal pair (eg spike-triggered LFP phase or phase difference between LFP pair).
+of standard (Pearson) correlation. Phase-based methods (phase-locking value, pairwise phase consistency)
+are based on circular statistics, and are closely related to the length of the vector average of the
+relative phases of a signal pair (eg phase difference between LFP pair or spike-triggered LFP phase).
 
 Input data (for most functions) can either be raw data or data already spectrally-transformed
 (using either functionality in the `spynal.spectra` module or users' own custom code). In either

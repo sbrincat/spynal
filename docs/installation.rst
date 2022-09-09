@@ -32,7 +32,7 @@ Usage
 -----
 
 Once the package is installed, you should now be able to directly import spynal and
-its modules/functions in your code/notebooks like so:
+its modules/functions in your code/notebooks in any of the standard Python ways:
 
 .. code-block:: python
 

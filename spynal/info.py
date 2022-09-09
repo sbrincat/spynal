@@ -22,8 +22,8 @@ assumptions about distribution of neural activity and task->activity encoding mo
     any specific data distributions.
     Can only handle two-sample data (ie contrasts between two categorical task conditions).
 
-- **mutual information** : Mutual information between neural activity and task variable
-    (roughly, how much knowing the neural activity reduces uncertainty about the task variable).
+- **mutual information** : Mutual information between neural activity and task variable.
+    Reflects how much knowing the neural activity reduces uncertainty about the task variable.
     Makes NO assumptions about data distribution or encoding model.
     But, as a result, requires more data to reliably estimate.
     Can only handle two-sample data (ie contrasts between two categorical task conditions).
@@ -64,7 +64,7 @@ Specific information measures
 - decode :      Compute accuracy of decoding task conds from neural activity
 - mutual_info : Compute Shannon mutual information btwn response and task conds
 - auroc :       Compute area under Receiver Operating Curve
-- dprime :      Compute d-prime (Cohen's d) -- difference in means/pooled SD
+- dprime :      Compute d-prime (Cohen's d) -- difference in means/pooledSD
 - pev :         Compute percent explained variance by task conds (with optional stats)
     - anova1 :      Compute PEV and stats using 1-way ANOVA
     - anova2 :      Compute PEV and stats using 2-way ANOVA
