@@ -26,7 +26,7 @@ programming languages.
 **plots** -- Generation of common plot types; plotting utilities  
 **utils** -- Numerical and general purpose utilities  
 
-Full documentation can be found at: https://readthedocs.org/projects/spynal/  
+Full documentation can be found at: https://spynal.readthedocs.io/en/latest/  
 
 
 ## Download & installation instructions
