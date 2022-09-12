@@ -12,6 +12,7 @@ requirements = [
         'scipy',
         'pandas',
         'h5py',
+        'hdf5storage',
         'patsy',
         'sklearn',
         'matplotlib',        
@@ -20,7 +21,7 @@ requirements = [
 
 setuptools.setup(
       name='spynal',
-      version='0.1.0',
+      version='0.1.1',
       description='Simple Python Neural Analysis Library',
       long_description=long_description,
       long_description_content_type='text/markdown',
