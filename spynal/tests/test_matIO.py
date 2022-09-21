@@ -125,7 +125,7 @@ def test_imports():
     
     
 # =============================================================================
-# Hepler functions for unit tests
+# Helper functions for unit tests
 # ============================================================================= 
 def _set_filename(version):
     """ Set filename for test file independent of current dir """

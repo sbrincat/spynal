@@ -97,7 +97,8 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         Random generator seed for repeatable results. Set=None for fully random numbers.
 
     **kwargs :
-        All other keyword args passed to statistic computation function
+        All other keyword args passed as-is to `simulate_dataset` or statistic computation
+        function, as appropriate
 
     Returns
     -------
@@ -126,7 +127,6 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     if stat == 'two_way':       n_conds = 4         # Simulate 2-way design w/ 4 conds (2x2)
     elif stat == 'one_sample':  n_conds = 1
     else:                       n_conds = 2
@@ -140,6 +140,9 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
                     distribution=distribution, correlation=0, seed=None)
+    # Override defaults with any simulation-related params passed to function
+    for arg in kwargs:
+        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -435,7 +438,8 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
         Random generator seed for repeatable results. Set=None for fully random numbers.
 
     **kwargs :
-        All other keyword args passed to confinf computation function
+        All other keyword args passed as-is to `simulate_dataset` or confint computation
+        function, as appropriate
 
     Returns
     -------
@@ -464,7 +468,6 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     if stat == 'two_way':       n_conds = 4         # Simulate 2-way design w/ 4 conds (2x2)
     elif stat == 'one_sample':  n_conds = 1
     else:                       n_conds = 2
@@ -477,6 +480,10 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
         gain_pattern = 1
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
                     distribution=distribution, seed=None)
+    # Override defaults with any simulation-related params passed to function
+    for arg in kwargs:
+        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values

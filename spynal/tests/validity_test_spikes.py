@@ -107,7 +107,6 @@ def test_rate(method, test='rate', test_values=None, data_type='timestamp', n_tr
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     sim_args = dict(offset=10, gain=0.0, data_type='timestamp', n_conds=1, n_trials=n_trials, seed=seed)
 
     if test in ['rate','mean']:
@@ -305,7 +304,8 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
         Random generator seed for repeatable results. Set=None for fully random numbers.
 
     **kwargs :
-        All other keyword args passed to `rate_stats` function
+        All other keyword args passed as-is to `simulate_dataset` or `rate_stats` functions,
+        as appropriate
 
     Returns
     -------
@@ -330,9 +330,11 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     sim_args = dict(gain=5.0, offset=0.0, spreads=5.0, n_conds=1, n=n_trials,
                     distribution=distribution, seed=None)
+    # Override defaults with any simulation-related params passed to function
+    for arg in kwargs:
+        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
 
     if test in ['mean','rate','gain']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -380,7 +382,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
     if test == 'mean':
         if distribution == 'normal':
             evals = [((np.diff(stat_means) <= 0).all(),
-                      "%s does not deccrease monotonically with increase in mean" % stat)]
+                      "%s does not decrease monotonically with increase in mean" % stat)]
         elif distribution == 'poisson':
             evals = [(stat_means.ptp() < stat_sds.max(),
                       "%s has larger than expected range for increase in mean of Poisson data"
@@ -497,7 +499,8 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
         Random generator seed for repeatable results. Set=None for fully random numbers.
 
     **kwargs :
-        All other keyword args passed to `isi_stats` function
+        All other keyword args passed as-is to `simulate_spike_trains` or `isi_stats` functions,
+        as appropriate
 
     Returns
     -------
@@ -519,9 +522,11 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
     # Set defaults for tested values and set up data generator function depending on <test>
     # Set up to run simulation for 10 s to get good estimates, and for n_reps separate trials
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     sim_args = dict(gain=0.0, offset=5.0, n_conds=1, n_trials=n_reps, time_range=10.0, seed=None)
-
+    # Override defaults with any simulation-related params passed to function
+    for arg in kwargs:
+        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+        
     if test in ['mean','rate','gain']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
         del sim_args['offset']              # Delete preset arg so it uses argument to lambda below

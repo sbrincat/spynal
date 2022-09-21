@@ -667,7 +667,7 @@ def rate_stats(rates, stat='Fano', axis=None, **kwargs):
     Returns
     -------
     stats : float or ndarray, shape=(...,1,...)
-        Rate statistic(s) computed on data.
+        Rate statistic computed on data.
         For 1d data or axis=None, a single scalar value is returned.
         Otherwise, it's an array w/ same shape as `rates`, but with `axis`
         reduced to length 1.

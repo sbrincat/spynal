@@ -89,7 +89,8 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
         Random generator seed for repeatable results. Set=None for fully random numbers.
 
     **kwargs :
-        All other keyword args passed to information estimation function
+        All other keyword args passed as-is to `simulate_dataset` or information estimation
+        function, as appropriate
                 
     Returns
     -------
@@ -117,9 +118,11 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 
     # Set defaults for tested values and set up data generator function depending on <test>
     # Note: Only set random seed once above, don't reset in data generator function calls
-    # todo Should we move some/all of these into function arguments, instead of hard-coding?
     sim_args = dict(gain=5.0, offset=5.0, spreads=5.0, n_conds=2, n=500,
                     distribution=distribution, seed=None)
+    # Override defaults with any simulation-related params passed to function
+    for arg in kwargs:
+        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values

@@ -32,10 +32,13 @@ Full documentation can be found at: https://spynal.readthedocs.io/en/latest/
 ## Download & installation instructions
 
 ### pip install
+Recommended for users who prefer a simple installation and don't require the latest updates
+
     - Open a terminal window, navigate to folder you want repository to live under (cd "parent directory")
     - Run: pip install spynal
 
 ### Install from source (Github)
+Recommended for developers and for users that would like access to the latest updates
 
 #### Download repository
     - Open a terminal window, navigate to folder you want repository to live under (cd "parent directory")
