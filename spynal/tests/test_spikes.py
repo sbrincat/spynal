@@ -5,9 +5,10 @@ import numpy as np
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.utils import setup_sliding_windows, unsorted_unique, \
                          object_array_equal, concatenate_object_array
-from spynal.spikes import simulate_spike_trains, times_to_bool, bool_to_times, \
+from spynal.spikes import simulate_spike_trains, simulate_spike_waveforms, \
+                          times_to_bool, bool_to_times, \
                           cut_trials, realign_data, pool_electrode_units, \
-                          rate, rate_stats, isi, isi_stats, \
+                          rate, rate_stats, isi, isi_stats, waveform_stats, \
                           plot_mean_waveforms, plot_waveform_heatmap
 from spynal.spectra.multitaper import compute_tapers
 
@@ -114,6 +115,32 @@ def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
     """
     return {'spike_timestamp': spike_timestamp_trial_uncut,
             'spike_bool': spike_bool_trial_uncut}
+
+
+@pytest.fixture(scope='session')
+def spike_waveform(spike_timestamp):
+    """
+    Fixture simulates spike waveforms of set of spike trains to use for all unit tests
+
+    RETURNS
+    data    (10,2) ndarray of (n_timepts,n_spikes) objects. Simulated spike waveforms
+            (eg simulating 10 trials x 2 units)
+            
+    timepts (49,) ndarray of float. Time sampling vector for waveform data (in s).            
+    """
+    spike_timestamp = spike_timestamp[0]
+    n_trials,n_units = spike_timestamp.shape
+    
+    spike_waves = np.empty((n_trials,n_units), dtype=object)
+    for i_trial in range(n_trials):
+        for i_unit in range(n_units):
+            n_spikes = len(spike_timestamp[i_trial,i_unit])
+            if n_spikes != 0:
+                spike_waves[i_trial,i_unit],timepts = simulate_spike_waveforms(n_spikes=n_spikes)
+            else:
+                spike_waves[i_trial,i_unit] = np.asarray([])
+            
+    return spike_waves, timepts
 
 
 # =============================================================================
@@ -261,7 +288,7 @@ def test_density(spike_data, data_type, kernel, result):
 
 
 # =============================================================================
-# Unit tests for rate and ISI stats functions
+# Unit tests for spike rate, ISI, and waveform stats functions
 # =============================================================================
 @pytest.mark.parametrize('data_type, stat, result',
                          [('spike_timestamp', 'Fano', 42.0),
@@ -354,6 +381,50 @@ def test_isi_stats(spike_data, data_type, stat, result):
         stats = isi_stats(ISIs, stat=stat, axis=axis, foo=None)
 
 
+@pytest.mark.parametrize('stat, result',
+                         [('width',         433.33),
+                          ('repolarization',200.00),
+                          ('trough_width',  166.67),
+                          ('amp_ratio',     1.55)])
+def test_waveform_stats(spike_waveform, stat, result):
+    """ Unit tests for waveform_stats function for computing spike waveform statistics """
+    # Extract given data type from data dict
+    data,timepts = spike_waveform
+    n_trials,n_units = data.shape
+    n_timepts,n_spikes0 = data[0,0].shape
+    data_orig = data.copy()
+
+    extra_args = dict(smp_rate=30e3) if stat != 'amp_ratio' else {}
+    result_mult = 1 if stat == 'amp_ratio' else 1e6 # Convert temporal stats from s -> us
+    
+    # Basic test of shape, value of output
+    # Test value of 1st trial/channel as exemplar
+    stats = waveform_stats(data, stat=stat, axis=0, **extra_args)
+    print(stats[0,0].shape, np.round(stats[0,0][0,0]*result_mult,2))
+    assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
+    assert stats.shape == (n_trials,n_units)
+    assert stats[0,0].shape == (1,n_spikes0)
+    assert np.isclose(stats[0,0][0,0]*result_mult, result, rtol=1e-2, atol=1e-2)
+
+    # Test for consistent output with non-object array inputs (just ndarray for single trial,unit)
+    trial_data = data[0,0]
+    trial_data_orig = trial_data.copy()
+    stats = waveform_stats(trial_data, stat=stat, axis=0, **extra_args)
+    assert np.array_equal(trial_data,trial_data_orig)     # Ensure input data not altered by func
+    assert stats.shape == (1, n_spikes0)
+    assert np.isclose(stats[0,0]*result_mult, result, rtol=1e-2, atol=1e-2)
+
+    # Test for consistent output with transposed data dimensionality
+    stats = waveform_stats(trial_data.T, stat=stat, axis=-1, **extra_args)
+    assert np.array_equal(trial_data,trial_data_orig)     # Ensure input data not altered by func
+    assert stats.shape == (n_spikes0, 1)
+    assert np.isclose(stats[0,0]*result_mult, result, rtol=1e-2, atol=1e-2)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        stats = waveform_stats(data, stat=stat, axis=0, foo=None)
+
+  
 # =============================================================================
 # Unit tests for rate preprocessing/utility functions
 # =============================================================================

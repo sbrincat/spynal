@@ -90,7 +90,7 @@ from scipy.stats import poisson, expon
 from spynal.utils import set_random_seed, unsorted_unique, iarange, index_axis, \
                          standardize_array, undo_standardize_array, \
                          setup_sliding_windows, concatenate_object_array, \
-                         fano, cv, cv2, lv
+                         fano, cv, cv2, lv, gaussian_1d
 from spynal.helpers import _isbinary, _merge_dicts, _check_window_lengths, \
                            _enclose_in_object_array
 from spynal.plots import plot_line_with_error_fill, plot_heatmap
@@ -635,7 +635,7 @@ interspike_interval = isi
 
 
 #==============================================================================
-# Rate and inter-spike interval statistics functions
+# Spike rate and inter-spike interval statistics functions
 #==============================================================================
 def rate_stats(rates, stat='Fano', axis=None, **kwargs):
     """
@@ -805,6 +805,252 @@ def burst_fract(ISIs, crit=0.020):
         Fraction of all spikes that are within spike bursts
     """
     return (ISIs < crit).sum() / ISIs.size
+
+
+#==============================================================================
+# Spike waveform statistics functions
+#==============================================================================
+def waveform_stats(spike_waves, stat='width', axis=0, **kwargs):
+    """
+    Compute given statistic on one or more spike waveforms of one or more spike trains
+
+    Parameters
+    ----------
+    spike_waves : ndarray, shape=(...,n_timepts,...), dtype=float or
+        ndarray, shape=Any, dtype=object (elem's are (...,n_timepts,...) arrays)
+        Spike waveform data, given in one of two formats:
+        
+        (1) a single ndarray of waveform data with one or more waveforms. Shape is arbitrary,
+            but `axis` should correspond to time samples of waveform(s).
+        (2) an object ndarray where each element contains waveform data like format (1)
+            for one unit, trial, etc. Time axis and time sampling must be the same for all
+            elements, but other dimensions need not be (ie there can be different numbers
+            of spikes aacross trials, units, etc.)            
+
+    stat : str, default: 'width'
+        Spike waveform statistic to compute. Options:
+
+        - 'width' :   Temporal width (s) btwn largest depol trough and subsequent hyperpol peak,
+                      using :func:`trough_to_peak_width`
+        - 'repolarization' : Time from hyperpol peak to subsequent inflection or percent decrease,
+                        using :func:`repolarization_time`
+        - 'trough_width' : Full with at half-height of depol trough, using :func:`trough_width`
+        - 'amp_ratio' : Ratio of amplitude of depol trough / hyperpol peak, using :func:`amp_ratio`
+
+    axis : int, default: 0
+        Axis of `spike_waves` to compute stat along, corresponding to waveform timepoints.
+        For object array data ((2) above), this should be the axis of each object array *element*
+        that corresponds to time.
+
+    Returns
+    -------
+    stats : float or ndarray, shape=(...,1,...) or
+        ndarray, shape=Any, dtype=object (elem's are (n_timepts,n_spikes) arrays)
+        Given spike waveform stat, computed on each waveform in `spike_waves`.
+        For 1d data (single waveform), a single scalar value is returned.
+        Otherwise, it's an array w/ same shape as `spike_waves`, but with `axis`
+        reduced to length 1.        
+    """
+    if axis < 0: axis = spike_waves.ndim + axis
+    stat = stat.lower()
+
+    if stat in ['width','t2p','trough_to_peak_width']:
+        stat_func = trough_to_peak_width
+    elif stat in ['repol','repolarization','repolarization_time']:
+        stat_func = repolarization_time
+    elif stat in ['trough_width','trough']:
+        stat_func = trough_width
+    elif stat in ['trough_peak_amp_ratio','amp_ratio']:
+        stat_func = trough_peak_amp_ratio
+    else:
+        raise ValueError("Unsupported value '%s' for <stat>." % stat)
+
+    # If data is not an object array, its assumed to be a single spike train
+    single_train = isinstance(spike_waves,list) or (spike_waves.dtype != object)
+
+    # Enclose in object array to simplify computations; removed at end
+    if single_train: spike_waves = _enclose_in_object_array(np.asarray(spike_waves))
+
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    spike_waves_flat = spike_waves.flat
+
+    stats = np.empty_like(spike_waves,dtype=object)
+
+    for _ in range(spike_waves.size):
+        # Multidim coordinates into data array
+        coords = spike_waves_flat.coords
+
+        cur_waves = spike_waves[coords]
+        multi_dim = cur_waves.ndim > 1
+        do_reshape = (axis != 0) or (spike_waves.ndim > 2)
+
+        if do_reshape:
+            cur_waves,shape = standardize_array(cur_waves, axis=axis, target_axis=0)
+
+        # Compute waveform stat for all waveform(s) in current data cell (unit/trial/etc.)
+        if not multi_dim:
+            cur_stats = stat_func(cur_waves, **kwargs)
+        else:
+            n_spikes = cur_waves.shape[1]
+            cur_stats = np.empty((1,n_spikes))
+            for i_spike in range(n_spikes):
+                cur_stats[0,i_spike] = stat_func(cur_waves[:,i_spike], **kwargs)
+
+        if do_reshape:
+            cur_stats = undo_standardize_array(cur_stats, shape, axis=axis, target_axis=0)
+
+        stats[coords] = cur_stats
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(spike_waves_flat)
+
+    # If only a single spike train was input, extract single element from object array
+    if single_train: stats = stats[0]
+
+    return stats
+
+
+def trough_to_peak_width(spike_wave, smp_rate):
+    """
+    Compute time difference between largest spike waveform trough (depolarization) and
+    subsequent peak (after-hyperpolarization) for a single spike waveform
+
+    Parameters
+    ----------
+    spike_wave : ndarray, shape=(n_timepts,)
+        Spike waveform to compute stat on
+
+    smp_rate : float
+        Sampling rate of spike waveform (Hz)
+
+    Returns
+    -------
+    stat : float
+        Temporal width of waveform (in s), from trough to after-hyperpolarization peak
+    """
+    assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
+        "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
+        
+    # Find largest trough (depolarization) in waveform
+    trough_idx = np.argmin(spike_wave)
+
+    # Find largest peak (hyperpolarization) after trough
+    peak_idx = trough_idx + np.argmax(spike_wave[trough_idx:])
+
+    return (peak_idx - trough_idx) / smp_rate
+
+
+def trough_width(spike_wave, smp_rate):
+    """
+    Compute full width at half-height of spike waveform trough (depolarization phase)
+
+    Parameters
+    ----------
+    spike_wave : ndarray, shape=(n_timepts,)
+        Spike waveform to compute stat on
+
+    smp_rate : float
+        Sampling rate of spike waveform (Hz)
+
+    Returns
+    -------
+    stat : float
+        Temporal width (FWHM) of waveform depolarization trough (in s)
+    """
+    assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
+        "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
+    
+    # Find amplitude of largest trough (depolarization) in waveform
+    trough_idx = np.argmin(spike_wave)
+    trough_amp = spike_wave[trough_idx]
+
+    criterion = trough_amp/2
+    # Find last point after trough still > half max amplitude
+    half_amp_end_idx = trough_idx + np.where(spike_wave[trough_idx:] > criterion)[0][0] - 1
+    # Find first point before trough still > half max amplitude
+    half_amp_start_idx = trough_idx - np.where(spike_wave[trough_idx::-1] > criterion)[0][0] + 1
+
+    return (half_amp_end_idx - half_amp_start_idx) / smp_rate
+
+
+def repolarization_time(spike_wave, smp_rate, criterion=0.75):
+    """
+    Compute time of repolarization of after-hyperpolarization peak of single spike waveform --
+    time difference from 1st peak after global trough to when it has decayed
+
+    Parameters
+    ----------
+    spike_wave : ndarray, shape=(n_timepts,)
+        Spike waveform to compute stat on
+
+    smp_rate : float
+        Sampling rate of spike waveform data (Hz)
+
+    criterion : float or 'inflection', default: 0.75
+        What criterion is used to determine time of repolaration (decay to baseline) of peak:
+
+        - float : Use the point where amplitude has decayed to given proportion of its peak value
+            eg, for criterion=0.75, use point where amplitude is <= 75% of peak.
+        - 'inflection' : Use the inflection point (change in sign of the 2nd derivative)
+
+    Returns
+    -------
+    stat : float
+        Repolarization time (in s) of spike waveform
+    """
+    assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
+        "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
+    
+    # Find largest trough (depolarization) in waveform
+    trough_idx = np.argmin(spike_wave)
+
+    # Find largest peak (hyperpolarization) after trough
+    peak_idx = trough_idx + np.argmax(spike_wave[trough_idx:])
+
+    # Find timepoint when waveform crosses criterion percentage of peak amplitude
+    if isinstance(criterion,float):
+        assert (criterion > 0) and (criterion < 1), "Criterion must be in range (0,1)"
+        repol_idx = np.where(spike_wave[peak_idx:] <= criterion*spike_wave[peak_idx])[0]
+    # Find inflection point (change in sign of 2nd derivative) after peak
+    elif criterion == 'inflection':
+        repol_idx = np.where(np.diff(np.sign(np.gradient(np.gradient(spike_wave[peak_idx:])))))[0]
+    else:
+        raise ValueError("Unsupported value '%s' given for <criterion>" % criterion)
+
+    repol_idx = peak_idx + repol_idx[0] if len(repol_idx) > 0 else np.nan
+
+    return (repol_idx - peak_idx) / smp_rate
+
+
+def trough_peak_amp_ratio(spike_wave):
+    """
+    Compute ratio of amplitudes (height) of largest spike waveform trough (depolarization)
+    and subsequent peak (after-hyperpolarization) for a single spike waveform
+
+    Parameters
+    ----------
+    spike_wave : ndarray, shape=(n_timepts,)
+        Spike waveform to compute stat on
+
+    Returns
+    -------
+    stat : float
+        Amplitude ratio of waveform trough/peak
+    """
+    assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
+        "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
+    
+    # Find largest trough (depolarization) in waveform
+    trough_idx = np.argmin(spike_wave)
+
+    # Find largest peak (hyperpolarization) after trough
+    peak_idx = trough_idx + np.argmax(spike_wave[trough_idx:])
+
+    trough_amp = spike_wave[trough_idx]
+    peak_amp =  spike_wave[peak_idx]
+
+    return np.abs(trough_amp) / peak_amp
 
 
 # =============================================================================
@@ -1550,6 +1796,67 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
             trains[i_trial,idxs] = True
 
     return trains, labels
+
+
+def simulate_spike_waveforms(trough_time=0.3e-3, peak_time=0.75e-3, trough_amp=0.4, peak_amp=0.25,
+                             trough_width=0.2e-3, peak_width=0.4e-3, time_range=(-0.2e-3,1.4e-3),
+                             smp_rate=30e3, noise=0.01, n_spikes=100, seed=None):
+    """
+    Simulate set of spike waveforms with given shape and amplitude parameters
+
+    Parameters
+    ----------
+    trough_time,peak_time : float, default: 0.5 ms, 1 ms
+        Time of waveform depolarization trough, after-hyperpolarization peak
+        (in s relative to t=0 at simulated trigger time)
+
+    trough_amp,peak_amp : float, default: 0.4, 0.25
+        Absolute amplitude of waveform depolarization trough, after-hyperpolarization peak (in mV)
+
+    trough_width,peak_width : float, default: 0.25 ms, 0.5 ms
+        Width (2*Gaussian SD in s) of waveform depolarization trough, after-hyperpolarization peak
+
+    time_range : array-like, shape=(2,), default: (-0.5 ms, 1.5 ms)
+        Full time range that spike waveforms are sampled on ((start,end) relative to trigger in s)
+
+    smp_rate : float, default: 30 kHz
+        Sampling rate of spike waveforms (in Hz)
+
+    noise : float, default: 0.01
+        Amplitude of additive Gaussian noise (in mV)
+
+    n_spikes : int, default: 100
+        Total number of spike waveforms to simulate
+
+    seed  : int, default: None
+        Random generator seed for repeatable results. Set=None for unseeded random numbers.
+
+    Returns
+    -------
+    spike_waves : ndarray, shape=(n_timepts,n_spikes)
+        Set of simulated spike waveforms, based on given parameters + noise
+        
+    timepts : ndarray, shape=(n_timepts)
+        Time sampling vector for all simulated waveforms (in s)        
+    """
+    if seed is not None: set_random_seed(seed)
+
+    dt = 1/smp_rate
+    timepts = iarange(time_range[0], time_range[1], dt)
+    n_timepts = len(timepts)
+
+    # Depolarization trough
+    trough_waveform = gaussian_1d(timepts, center=trough_time, width=trough_width/2, amplitude=trough_amp)
+    # After-hyperpolarization peak
+    peak_waveform = gaussian_1d(timepts, center=peak_time, width=peak_width/2, amplitude=peak_amp)
+    # Mean overall spike waveform = linear superposition of trough + peak
+    mean_waveform = -trough_waveform + peak_waveform
+
+    # Replicate mean waveform to desired number of spikes and add in random Gaussian noise
+    waveforms = (np.tile(mean_waveform[:,np.newaxis], (1,n_spikes)) +
+                 noise * np.random.randn(n_timepts, n_spikes))
+    
+    return waveforms, timepts
 
 
 #==============================================================================
