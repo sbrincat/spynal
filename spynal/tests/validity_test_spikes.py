@@ -10,13 +10,16 @@ Plots results and runs assertions that basic expected results are reproduced
 Function list
 -------------
 - test_rate :               Tests of spike rate estimation functions
-- rate_test_battery :       Runs standard battery of tests of rate functions
+- rate_test_battery :       Run standard battery of tests of rate functions
 
 - test_rate_stats :         Tests of spike rate statistic estimation functions
-- rate_stat_test_battery :  Runs standard battery of tests of rate stat functions
+- rate_stat_test_battery :  Run standard battery of tests of rate stat functions
 
 - test_isi_stats :          Tests of inter-spike interval statistic estimation functions
-- isi_stat_test_battery :   Runs standard battery of tests of ISI stat functions
+- isi_stat_test_battery :   Run standard battery of tests of ISI stat functions
+
+- test_waveform_stats :         Tests of spike waveform statistic estimation functions
+- waveform_stat_test_battery :  Run standard battery of tests of spike waveform stat functions
 """
 import os
 import time
@@ -613,9 +616,9 @@ def isi_stat_test_battery(stats=('Fano','CV','CV2','LV','burst_fract'), tests=('
 # =============================================================================
 # Tests for spike waveform stats functions
 # =============================================================================
-def validity_test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
-                                 n_reps=100, do_tests=True, do_plots=False, plot_dir=None,
-                                 seed=1, **kwargs):
+def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
+                        n_reps=100, do_tests=True, do_plots=False, plot_dir=None,
+                        seed=1, **kwargs):
     """
     Basic testing for functions estimating spike waveform statistics
 
@@ -829,7 +832,7 @@ def waveform_stat_test_battery(stats=('width','trough_width','repol','amp_ratio'
         Set=True to evaluate test results against expected values and raise an error if they fail.
 
     **kwargs :
-        Any other kwargs passed directly to validity_test_waveform_stats()
+        Any other kwargs passed directly to test_waveform_stats()
     """
     if isinstance(stats,str): stats = [stats]
     if isinstance(tests,str): tests = [tests]
@@ -840,7 +843,7 @@ def waveform_stat_test_battery(stats=('width','trough_width','repol','amp_ratio'
 
             t1 = time.time()
 
-            _,_,passed = validity_test_waveform_stats(stat, test=test, do_tests=do_tests, **kwargs)
+            _,_,passed = test_waveform_stats(stat, test=test, do_tests=do_tests, **kwargs)
 
             print('%s (test ran in %.1f s)' %
                     ('PASSED' if passed else 'FAILED', time.time()-t1))
@@ -848,7 +851,7 @@ def waveform_stat_test_battery(stats=('width','trough_width','repol','amp_ratio'
 
 
 # =============================================================================
-# Tests for plots functions
+# Tests for plotting functions
 # =============================================================================
 def test_plot_mean_waveforms(plot_dir=None):
     """

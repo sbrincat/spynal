@@ -242,6 +242,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
         bins = setup_sliding_windows(width,lims,step=step)
     else:
         bins = np.asarray(bins)
+        if (bins.ndim == 1) and (len(bins) == 2): bins = bins[np.newaxis,:]
 
     assert (bins.ndim == 2) and (bins.shape[1] == 2), \
         ValueError("bins must be given as (n_bins,2) array of bin [start,end] times")
@@ -250,7 +251,8 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     widths  = np.diff(bins,axis=1).squeeze()
 
     # Are bins "standard"? : equal-width, with start of each bin = end of previous bin
-    std_bins = np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1])
+    std_bins = (n_bins == 1) or \
+               (np.allclose(widths,widths[0]) and np.allclose(bins[1:,0],bins[:-1,1]))
 
     def _histogram_count(data, bins):
         """ Count spikes in equal-width, disjoint bins """

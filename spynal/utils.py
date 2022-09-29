@@ -131,11 +131,11 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     data : ndarray, shape=(...,n_obs,...)
         Z-scored data. Same shape as input `data`.
 
-    mean : ndarray, shape=(...,n_obs,...), optional
+    mean : ndarray, shape=(...,1,...), optional
         Computed means for z-score. Only returned if `return_stats` is True.
         Same as input `data` with 'axis`reduced to length 1.
 
-    sd : ndarray, shape=(...,n_obs,...), optional
+    sd : ndarray, shape=(...,1,...), optional
         Computed standard deviations for z-score. Only returned if `return_stats` is True.
         Same as input `data` with 'axis`reduced to length 1.
 

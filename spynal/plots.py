@@ -654,8 +654,6 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     if ax is None: ax = plt.gca()
     if xlim is None: xlim = ax.get_xlim()
     if ylim is None: ylim = ax.get_ylim()
-    xlim = np.reshape(xlim,(2,1))
-    ylim = np.reshape(ylim,(2,1))
 
     axis = axis.lower()
     assert axis in ['x','y','both'], ValueError("axis must be 'x'|'y'|'both'")
@@ -665,9 +663,9 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     def plot_single_line(value, axis):
         """ Plot scalar value as single line extending the length of the opposing axis """
         if axis == 'x':
-            lines = ax.plot(np.tile(value,(2,1)), ylim, '-', color=linecolor, linewidth=linewidth)
+            lines = ax.plot([value]*2, ylim, '-', color=linecolor, linewidth=linewidth)
         elif axis == 'y':
-            lines = ax.plot(xlim, np.tile(value,(2,1)), '-', color=linecolor, linewidth=linewidth)
+            lines = ax.plot(xlim, [value]*2, '-', color=linecolor, linewidth=linewidth)
 
         return lines
 
@@ -687,13 +685,13 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
         """ Plot 3-tuple as 3 lines (dash,solid,dash) extending length of the opposing axis """
         lines = [None]*3
         if axis == 'x':
-            lines[0] = ax.plot(np.tile(value[0],(2,1)), ylim, '--', color=linecolor, linewidth=linewidth)
-            lines[1] = ax.plot(np.tile(value[1],(2,1)), ylim, '-', color=linecolor, linewidth=linewidth)
-            lines[2] = ax.plot(np.tile(value[2],(2,1)), ylim, '--', color=linecolor, linewidth=linewidth)
+            lines[0] = ax.plot([value[0]]*2, ylim, '--', color=linecolor, linewidth=linewidth)
+            lines[1] = ax.plot([value[1]]*2, ylim, '-', color=linecolor, linewidth=linewidth)
+            lines[2] = ax.plot([value[2]]*2, ylim, '--', color=linecolor, linewidth=linewidth)
         elif axis == 'y':
-            lines[0] = ax.plot(xlim, np.tile(value[0],(2,1)), '--', color=linecolor, linewidth=linewidth)
-            lines[1] = ax.plot(xlim, np.tile(value[1],(2,1)), '-', color=linecolor, linewidth=linewidth)
-            lines[2] = ax.plot(xlim, np.tile(value[2],(2,1)), '--', color=linecolor, linewidth=linewidth)
+            lines[0] = ax.plot(xlim, [value[0]]*2, '--', color=linecolor, linewidth=linewidth)
+            lines[1] = ax.plot(xlim, [value[1]]*2, '-', color=linecolor, linewidth=linewidth)
+            lines[2] = ax.plot(xlim, [value[2]]*2, '--', color=linecolor, linewidth=linewidth)
 
         return lines
 
