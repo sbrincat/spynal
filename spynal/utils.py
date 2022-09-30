@@ -1767,22 +1767,27 @@ def object_array_compare(data1, data2, comp_func=np.equal, reduce_func=None):
     return out
 
 
-def concatenate_object_array(data, axis=None, sort=False):
+def concatenate_object_array(data, axis=None, elem_axis=0, sort=False):
     """
     Concatenate objects across one or more axes of an object array.
-    Useful for concatenating spike timestamps across trials, units, etc.
+    Useful for concatenating spike timestamp or waveform data across trials, units, etc.
 
     Parameters
     ----------
     data : ndarray, shape=Any, dtype=object (containing 1d lists/arrays)
 
     axis : int or list of int or None, default: None
-        Axis(s) to concatenate object array across.
+        Axis(s) *of object array* to concatenate object array elements across.
         Set = list of ints to concatenate across multiple axes.
         Set = None to concatenate across *all* axes in data.
+        
+    elem_axis : int, default: 0
+        Axis of *each element* of object array to concatenate along.
+        Note: This is the axis of the contained elements that are being concatenated,
+        as opposed to the axis of object array container to concatenate along (which is `axis`).
 
     sort : bool, default: False
-        If True, sorts items in concatenated list objects
+        If True, resorts items (eg spike timestamps) in concatenated object array elements.
 
     Returns
     -------
@@ -1817,7 +1822,7 @@ def concatenate_object_array(data, axis=None, sort=False):
         for ax in axis_:
             # Only need to sort for final concatenation axis
             sort_ = sort if ax == axis_[-1] else False
-            data = concatenate_object_array(data,axis=ax,sort=sort_)
+            data = concatenate_object_array(data, axis=ax, elem_axis=elem_axis, sort=sort_)
 
         # Extract single object if we concatenated across all axes (axis=None)
         if axis is None: data = data.item()
@@ -1836,7 +1841,7 @@ def concatenate_object_array(data, axis=None, sort=False):
 
     for j in range(n_series):
         # Concatenate objects across all entries
-        data_concat[0,j] = np.concatenate([values for values in data[:,j]])
+        data_concat[0,j] = np.concatenate([values for values in data[:,j]], axis=elem_axis)
         # Sort items in concatenated object, if requested
         if sort: data_concat[0,j].sort()
 
