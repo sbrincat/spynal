@@ -58,11 +58,16 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
 
     # Setup actual function call for any transform to compute on raw coherence values
     if (transform is None) or callable(transform):
-        transform_ = transform
-    elif transform.lower() in ['z','ztransform']:
-        transform_ = lambda coh: ztransform_coherence(coh, df)
+        pass
+    elif isinstance(transform,str):
+        transform = transform.lower()    
+        if transform in ['z','ztransform']:
+            transform = lambda coh: ztransform_coherence(coh, df)
+        else:
+            raise ValueError("Unsupported value '%s' set for <transform>" % transform)
     else:
-        raise ValueError("Unsupported value '%s' set for <transform>" % transform)
+        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None" \
+                        % type(transform))
 
     # Compute cross-spectrum and auto-spectrum of each channel
     auto_spec1 = data1*data1.conj()
@@ -95,7 +100,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     # Standard across-trial coherence estimator
     if single_trial is None:
         coh, dphi = _cross_auto_to_coh(cross_spec, auto_spec1, auto_spec2, reduce_axes,
-                                        return_phase, transform_, keepdims)
+                                        return_phase, transform, keepdims)
 
     # Single-trial coherence estimator using jackknife resampling method
     else:
@@ -103,7 +108,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
         # Note: Allow for reduction along taper axis within resampled stat function, but only
         #       resample across trial axis--want sync estimates for single-trials, not tapers
         jackfunc = lambda s12,s1,s2: _cross_auto_to_coh(s12, s1, s2, reduce_axes,
-                                                        False, transform_, True)[0]
+                                                        False, transform, True)[0]
         coh_shape = list(cross_spec.shape)
         if spec_method == 'multitaper': coh_shape[taper_axis] = 1
         n_jack = coh_shape[axis]

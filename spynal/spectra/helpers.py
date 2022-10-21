@@ -161,11 +161,13 @@ def _frequency_plot_settings(freqs):
 def _str_to_pool_func(func):
     """ Convert string specifier to callable pooling function """
     # If it's already a callable, return as-is
-    if callable(func):      return func
-    else:
-        assert isinstance(func,str), "'func' must be a string or callable function"
+    if callable(func): return func
 
-        if func == 'mean':  return lambda x: np.mean(x, axis=0)
-        elif func == 'sum': return lambda x: np.sum(x, axis=0)
-        else:
-            raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)
+    assert isinstance(func,str), \
+        TypeError("Unsupported type '%s' for <func>. Use string or function" % type(func))
+
+    func = func.lower()
+    if func == 'mean':  return lambda x: np.mean(x, axis=0)
+    elif func == 'sum': return lambda x: np.sum(x, axis=0)
+    else:
+        raise ValueError("Unsupported value '%s' for func. Set='mean'|'sum'" % func)

@@ -52,6 +52,14 @@ Rate and inter-spike interval stats
 - rate_stats :        Compute given statistic on spike rate data
 - isi_stats :         Compute given statistic on inter-spike interval data
 
+Spike waveform-shape stats
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+- waveform_stats :    Compute given statistic on spike waveform data
+- width :             Trough-to-peak temporal width of waveform
+- repolarization :    Time for waveform to decay after peak
+- trough_width :      Width of waveform trough
+- amp_ratio :         Ratio of trough/peak amplitude
+
 Preprocessing
 ^^^^^^^^^^^^^
 - times_to_bool :     Convert spike timestamps to binary spike trains
@@ -373,7 +381,8 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         - 'hanning' : Hanning kernel
 
         Alternatively, can input any arbitrary kernel as an array of float values
-        or as a custom function that takes `width` argument and returns an array.
+        or as a custom function that can take any additional kwargs as arguments
+        and return an array.
 
     buffer : float, default: (kernel-dependent, approximates length of kernel's edge effects)
         Length (in s) of symmetric buffer to add to each end of time dimension
@@ -412,7 +421,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         step = 1000/downsmp
         warn("<downsmp> argument has been deprecated. Please use <step> argument instead (see docs).")
 
-    kernel = kernel.lower()
+    if isinstance(kernel,str): kernel = kernel.lower()
     data_type = _spike_data_type(data)
     if axis < 0: axis = data.ndim + axis
 
@@ -499,34 +508,35 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
     ### Set up convolution kernel for spike density computation ###
     n_smps_width = width*smp_rate # convert width to 1 kHz samples
 
-    # Kernel is a function/callable -- call it with width in samples
-    if callable(kernel):
-        kernel_ = kernel(n_smps_width, **kwargs)
+    # Kernel is already a (custom) array of values -- do nothing
+    if isinstance(kernel,np.ndarray):
+        pass
 
-    # Convert kernel specifier to actual kernel (window) function
+    # Kernel is a function/callable -- call it to get kernel values
+    elif callable(kernel):
+        kernel = kernel(**kwargs)
+
+    # Kernel is a string specifier -- call appropriate kernel-generating function
+    elif isinstance(kernel,str):
+        if kernel in ['hann','hanning']:
+            kernel = hann(int(round(n_smps_width*2.0)), **kwargs)
+        elif kernel in ['gaussian','normal']:
+            kernel = gaussian(int(round(n_smps_width*6.0)), n_smps_width, **kwargs)
+        else:
+            raise ValueError("Unsupported value '%s' given for kernel. \
+                              Should be 'hanning'|'gaussian'" % kernel)
+
     else:
-        assert len(kwargs) == 0, \
-            TypeError("Incorrect or misspelled variable(s) in keyword args: " +
-                      ', '.join(kwargs.keys()))
+        raise TypeError("Unsupported type '%s' for <kernel>. Use string, function, \
+                         or explicit array of values" % type(kernel))
 
-        # Kernel is already a (custom) array of values
-        if isinstance(kernel,np.ndarray):
-            kernel_ = kernel
-
-        # Kernel is a string specifier -- call appropriate kernel-generating function
-        elif isinstance(kernel,str):
-            kernel = kernel.lower()
-
-            if kernel in ['hann','hanning']:
-                kernel_ = hann(int(round(n_smps_width*2.0)))
-            elif kernel in ['gaussian','normal']:
-                kernel_ = gaussian(int(round(n_smps_width*6.0)),n_smps_width)
-            else:
-                raise ValueError("Unsupported value '%s' given for kernel. \
-                                Should be 'hanning'|'gaussian'" % kernel)
+        # DELETE
+        # assert len(kwargs) == 0, \
+        #     TypeError("Incorrect or misspelled variable(s) in keyword args: " +
+        #               ', '.join(kwargs.keys()))
 
     # Normalize kernel to integrate to 1
-    kernel_ = kernel_ / (kernel_.sum()/smp_rate)
+    kernel = kernel / (kernel.sum()/smp_rate)
 
 
     ### Compute spike density and reshape data back to desired form ###
@@ -535,7 +545,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
 
     # Compute density as convolution of spike trains with kernel
     # Note: 1d kernel implies 1d convolution across multi-d array data
-    rates = convolve(data, kernel_[slicer], mode='same')
+    rates = convolve(data, kernel[slicer], mode='same')
 
     # Remove any time buffer from spike density and time sampling vector
     if buffer != 0:
@@ -821,13 +831,13 @@ def waveform_stats(spike_waves, stat='width', axis=0, **kwargs):
     spike_waves : ndarray, shape=(...,n_timepts,...), dtype=float or
         ndarray, shape=Any, dtype=object (elem's are (...,n_timepts,...) arrays)
         Spike waveform data, given in one of two formats:
-        
+
         (1) a single ndarray of waveform data with one or more waveforms. Shape is arbitrary,
             but `axis` should correspond to time samples of waveform(s).
         (2) an object ndarray where each element contains waveform data like format (1)
             for one unit, trial, etc. Time axis and time sampling must be the same for all
             elements, but other dimensions need not be (ie there can be different numbers
-            of spikes aacross trials, units, etc.)            
+            of spikes aacross trials, units, etc.)
 
     stat : str, default: 'width'
         Spike waveform statistic to compute. Options:
@@ -851,7 +861,7 @@ def waveform_stats(spike_waves, stat='width', axis=0, **kwargs):
         Given spike waveform stat, computed on each waveform in `spike_waves`.
         For 1d data (single waveform), a single scalar value is returned.
         Otherwise, it's an array w/ same shape as `spike_waves`, but with `axis`
-        reduced to length 1.        
+        reduced to length 1.
     """
     if axis < 0: axis = spike_waves.ndim + axis
     stat = stat.lower()
@@ -933,7 +943,7 @@ def trough_to_peak_width(spike_wave, smp_rate):
     """
     assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
         "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
-        
+
     # Find largest trough (depolarization) in waveform
     trough_idx = np.argmin(spike_wave)
 
@@ -962,7 +972,7 @@ def trough_width(spike_wave, smp_rate):
     """
     assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
         "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
-    
+
     # Find amplitude of largest trough (depolarization) in waveform
     trough_idx = np.argmin(spike_wave)
     trough_amp = spike_wave[trough_idx]
@@ -1003,7 +1013,7 @@ def repolarization_time(spike_wave, smp_rate, criterion=0.75):
     """
     assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
         "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
-    
+
     # Find largest trough (depolarization) in waveform
     trough_idx = np.argmin(spike_wave)
 
@@ -1042,7 +1052,7 @@ def trough_peak_amp_ratio(spike_wave):
     """
     assert (spike_wave.ndim == 1) and not (spike_wave.dtype == object), \
         "This only accepts a single spike waveform. For >1 spikes, use wrapper waveform_stats()"
-    
+
     # Find largest trough (depolarization) in waveform
     trough_idx = np.argmin(spike_wave)
 
@@ -1837,9 +1847,9 @@ def simulate_spike_waveforms(trough_time=0.3e-3, peak_time=0.75e-3, trough_amp=0
     -------
     spike_waves : ndarray, shape=(n_timepts,n_spikes)
         Set of simulated spike waveforms, based on given parameters + noise
-        
+
     timepts : ndarray, shape=(n_timepts)
-        Time sampling vector for all simulated waveforms (in s)        
+        Time sampling vector for all simulated waveforms (in s)
     """
     if seed is not None: set_random_seed(seed)
 
@@ -1857,7 +1867,7 @@ def simulate_spike_waveforms(trough_time=0.3e-3, peak_time=0.75e-3, trough_amp=0
     # Replicate mean waveform to desired number of spikes and add in random Gaussian noise
     waveforms = (np.tile(mean_waveform[:,np.newaxis], (1,n_spikes)) +
                  noise * np.random.randn(n_timepts, n_spikes))
-    
+
     return waveforms, timepts
 
 

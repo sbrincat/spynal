@@ -181,7 +181,7 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
 
     # Plot event markers (if input)
     if events is not None:
-        if callable(events):    events
+        if callable(events):    events()
         else:                   plot_markers(events, axis='x', ax=ax,
                                              xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
@@ -295,7 +295,7 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
 
     # Plot event markers (if input)
     if events is not None:
-        if callable(events):    events
+        if callable(events):    events()
         else:                   plot_markers(events, axis='x', ax=ax,
                                              xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
@@ -396,7 +396,7 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
 
     # Plot event markers (if input)
     if events is not None:
-        if callable(events):    events
+        if callable(events):    events()
         else:                   plot_markers(events, axis='x', ax=ax,
                                              xlim=axes_args['xlim'], ylim=axes_args['ylim'])
 
@@ -531,18 +531,18 @@ def make_colormap(name, colors=None, **kwargs):
     https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.ListedColormap.html
     """
     # If `colors` input as callable, run it to generate actual colors for colormap
-    colors_ = colors() if callable(colors) else colors
+    colors = colors() if callable(colors) else colors
     
     # If `colors` is dict, we assume it contains points to linearly interp colormap segments btwn
-    if isinstance(colors_,dict):        
-        cmap = LinearSegmentedColormap(name=name, segmentdata=colors_, **kwargs)
+    if isinstance(colors,dict):        
+        cmap = LinearSegmentedColormap(name=name, segmentdata=colors, **kwargs)
         
     # If `colors` is array/list, we assume it directly represents all colors in colormap    
-    elif isarraylike(colors_):
-        cmap = ListedColormap(colors=colors_, name=name, **kwargs)
+    elif isarraylike(colors):
+        cmap = ListedColormap(colors=colors, name=name, **kwargs)
     
     else:
-        raise TypeError("Unsupported type <%s> set for `colors`" % type(colors_))
+        raise TypeError("Unsupported type <%s> set for `colors`" % type(colors))
     
     # Register colormap name for later use        
     plt.register_cmap(cmap=cmap)

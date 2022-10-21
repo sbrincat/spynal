@@ -63,12 +63,16 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
 
     # Setup actual function call for any transform to compute on raw PLV values
     if (transform is None) or callable(transform):
-        transform_ = transform
-    else:
-        if transform.lower() == 'ppc':
-            transform_ = lambda PLV: plv_to_ppc(PLV, n)
+        pass
+    elif isinstance(transform,str):
+        transform = transform.lower()
+        if transform == 'ppc':
+            transform = lambda PLV: plv_to_ppc(PLV, n)
         else:
             raise ValueError("Unsupported value '%s' set for <transform>" % transform)
+    else:
+        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None" \
+                        % type(transform))
 
     # Compute normalized cross-spectrum btwn the two channels
     # Cross-spectrum-based method adapted from FieldTrip ft_conectivity_ppc()
@@ -96,14 +100,14 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
 
     # Standard across-trial PLV estimator
     if single_trial is None:
-        PLV, dphi = _cross_to_plv(cross_spec, reduce_axes, return_phase, transform_, keepdims)
+        PLV, dphi = _cross_to_plv(cross_spec, reduce_axes, return_phase, transform, keepdims)
 
     # Single-trial PLV estimator using jackknife resampling method
     else:
         # Jackknife resampling of PLV statistic (this is the 'richter' estimator)
         # Note: Allow for reduction along taper axis within resampled stat function, but only
         #       resample across trial axis--want sync estimates for single-trials, not tapers
-        jackfunc = lambda s12: _cross_to_plv(s12, reduce_axes, False, transform_, True)[0]
+        jackfunc = lambda s12: _cross_to_plv(s12, reduce_axes, False, transform, True)[0]
         plv_shape = list(data1.shape)
         if spec_method == 'multitaper': plv_shape[taper_axis] = 1
         n_jack = plv_shape[axis]
@@ -381,11 +385,11 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
         slicer[time_axis] = slice(None)         # Set <time_axis> element to slice as if set=':'
         if not keepdims: del slicer[axis]       # Remove trial axis if not keeping singleton
         n = n[tuple(slicer)]                    # Expand n to match dimensionality of PLV
-    
+
     if not keepdims:
         vector_mean = vector_mean.squeeze(axis=axis)
-        
-    # Insert singleton axis corresponding to former location of tapers, for dimensional consistency    
+
+    # Insert singleton axis corresponding to former location of tapers, for dimensional consistency
     elif spec_method == 'multitaper':
         slicer = [slice(None)]*vector_mean.ndim
         slicer = slicer[:time_axis] + [np.newaxis] + slicer[time_axis:]
@@ -474,7 +478,7 @@ spike_field_pairwise_phase_consistency = spike_field_ppc
 def plv_to_ppc(PLV, n):
     """
     Convert PLV to PPC as::
-    
+
         PPC = (n*PLV^2 - 1)/(n-1)
     """
     return (n*PLV**2 - 1) / (n - 1)

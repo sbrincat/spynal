@@ -44,8 +44,7 @@ def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
     p : ndarray, shape=(...,1,...)
         p values from resampling test. Same size as `stat_obs`.
     """
-    if callable(tail):  compare_func = tail
-    else:               compare_func = _tail_to_compare(tail)
+    compare_func = _tail_to_compare(tail)           
 
     n_resamples = stat_resmp.shape[axis]
 
