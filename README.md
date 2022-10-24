@@ -30,6 +30,8 @@ Full documentation can be found at: https://spynal.readthedocs.io/en/latest/
 
 
 ## Download & installation instructions
+Users can either install the most recent stable release using pip or
+install the latest updates from the Github repository
 
 ### pip install
 Recommended for users who prefer a simple installation and don't require the latest updates

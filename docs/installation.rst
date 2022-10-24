@@ -1,7 +1,7 @@
 Installation
 ============
 
-Users can install the most recent stable release using pip or the install the latest updates from the Github repository
+Users can install the most recent stable release using pip or install the latest updates from the Github repository
 
 pip install
 -----------

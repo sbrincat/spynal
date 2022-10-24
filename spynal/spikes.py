@@ -231,6 +231,9 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     """
     # Convert boolean spike train data to timestamps for easier computation
     data_type = _spike_data_type(data)
+    assert data_type in ['timestamp','bool'], \
+        ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
+        
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
@@ -421,9 +424,12 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         step = 1000/downsmp
         warn("<downsmp> argument has been deprecated. Please use <step> argument instead (see docs).")
 
-    if isinstance(kernel,str): kernel = kernel.lower()
     data_type = _spike_data_type(data)
+    if isinstance(kernel,str): kernel = kernel.lower()
     if axis < 0: axis = data.ndim + axis
+
+    assert data_type in ['timestamp','bool'], \
+        ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
 
     if data_type == 'bool':
         assert timepts is not None, \
@@ -609,6 +615,9 @@ def isi(data, axis=-1, timepts=None):
     """
     # Convert boolean spike train data to timestamps for easier computation
     data_type = _spike_data_type(data)
+    assert data_type in ['timestamp','bool'], \
+        ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
+    
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
@@ -685,8 +694,8 @@ def rate_stats(rates, stat='Fano', axis=None, **kwargs):
         reduced to length 1.
     """
     data_type = _spike_data_type(rates)
-    assert data_type not in ['timestamp','bool'], \
-        TypeError("Must input spike *rate* data for this function (eg use rate())")
+    assert data_type == 'rate', \
+        ValueError("Must input spike *rate* data for this function (eg use rate())")
 
     stat = stat.lower()
 
@@ -1887,7 +1896,7 @@ def _spike_data_type(data):
     if _isbinary(data):
         return 'bool'
     # Data is object array or monotonically-increasing 1D array/list -> 'timestamp'
-    elif (data.dtype == 'object') or ((data.ndim == 1) and ((data.sort() == data).all())):
+    elif (data.dtype == 'object') or ((data.ndim == 1) and (data[:-1] <= data[1:]).all()):
         return 'timestamp'
     # Otherwise (general numeric array) -> 'rate'
     elif np.issubdtype(data.dtype,np.number):
