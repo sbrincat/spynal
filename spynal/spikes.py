@@ -65,6 +65,7 @@ Preprocessing
 - times_to_bool :     Convert spike timestamps to binary spike trains
 - bool_to_times :     Convert binary spike train to timestamps
 - cut_trials :        Cut spiking data into trials
+- select_time_range : Select specific time range in spike data, deleting data outside range
 - realign_data :      Realign data to new within-trial times (new t=0)
 - pool_electrode_units : Pool all units on each electrode into a multi-unit
 
@@ -233,7 +234,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     data_type = _spike_data_type(data)
     assert data_type in ['timestamp','bool'], \
         ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
-        
+
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
@@ -617,7 +618,7 @@ def isi(data, axis=-1, timepts=None):
     data_type = _spike_data_type(data)
     assert data_type in ['timestamp','bool'], \
         ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
-    
+
     if data_type == 'bool':
         assert timepts is not None, \
             "For binary spike train data, a time sampling vector <timepts> MUST be given"
@@ -1245,6 +1246,71 @@ def cut_trials(data, trial_lims, smp_rate=None, axis=None, trial_refs=None):
 
     elif data_type == 'bool':
         return _cut_trials_spike_bool(data, trial_lims, smp_rate, axis=axis)
+
+    else:
+        raise ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
+
+
+def select_time_range(data, time_range, time_axis=None, timepts=None):
+    """
+    Extract spiking data from given time range, deleting any spikes/data outside this range
+
+    For example, you may have spiking data extending over several seconds per trial,
+    but only want spikes from t=0 to 1 s for analysis
+
+    Spiking data may be in form of spike timestamps or binary spike trains
+
+    Parameters
+    ----------
+    data : ndarray, shape=Any, dtype=object (elems=(n_spikes[trial,unit,etc.],) arrays)
+        or ndarray, shape=(...,n_timepts,...), dtype=bool
+
+        Spiking data, given in one of two formats:
+
+        - timestamp: Spike timestamps, usually in seconds referenced to some within-trial event
+        - bool: Binary (1/0) spike trains in bool array
+
+        Can be any arbitrary shape (including having multiple units), as long as `time_axis`
+        is given for bool data
+
+    time_range : array-like, shape=(2,)
+        Time range to select spiking data from, inclusive of endpoints.
+        ie, all data such that time_range[0] <= data or <= time_range[1] is retained in output,
+        and all other data is deleted.
+
+    time_axis : int
+        Axis of bool data corresponding to time samples.
+        Must input for bool data; not used for spike timestamps.
+
+    timepts : array-like, shape(n_timepts)
+        Time sampling vector for bool data (in s).
+        Must input for bool data; not used for spike timestamps.
+
+    Returns
+    -------
+    sel_data : ndarray, shape=Any, dtype=object (elems=(n_spikes[trial,unit,etc.],) arrays)
+        or ndarray, shape=(...,n_timepts_out,...), dtype=bool
+        Data with only spikes within given time range retained.
+        For timestamp data, this has same shape as input data.
+        For binary data, time axis is reduced to length implied by `time_range`, but
+        otherwise array has same shape as input data.
+        
+    sel_bool : ndarray, shape=Any, dtype=object (elems=(n_spikes[trial,unit,etc.],),dtype=bool arrays)
+        or ndarray, shape=(n_timepts,) dtype=bool
+        Boolean vector(s) used to select spikes. Useful for selecting same spikes out of a parallel
+        data structure, such as spike waveforms with the same trials/units/etc. as spike timestamp data.
+        For timestamp data, this has same shape as input data (but each object array
+        element has dtype bool).
+        For binary data, this has same shape as input data.
+    """
+    data_type = _spike_data_type(data)
+
+    if data_type == 'timestamp':
+        return _select_time_range_spike_times(data, time_range)
+
+    elif data_type == 'bool':
+        return _select_time_range_spike_bool(data, time_range,
+                                             time_axis=time_axis, timepts=timepts)
 
     else:
         raise ValueError("Unsupported spike data format. Must be timestamps or binary (0/1)")
@@ -2010,6 +2076,45 @@ def _cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
     return cut_data
 
 
+def _select_time_range_spike_times(data, time_range):
+    """ Selects given time range from spike timestamp data, deleting data outside range """
+    data = data.copy()
+    
+    # Create 1D flat iterator to iterate over arbitrary-shape data array
+    # Note: This always iterates in row-major/C-order regardless of data order, so all good
+    data_flat = data.flat
+
+    retain_idxs = np.empty_like(data, dtype=object)
+
+    for _ in range(data.size):
+        coords = data_flat.coords   # Multidim coordinates into data array
+        data_cell = data[coords]    # Timestamps for current array cell (unit,etc.)
+
+        # Extract only spikes within given time range
+        if data_cell.size >= 0:
+            cell_idxs = (time_range[0] <= data_cell) & (data_cell < time_range[1])
+            retain_idxs[coords] = cell_idxs
+            data[coords] = data_cell[cell_idxs]
+        else:
+            retain_idxs[coords] = []
+
+        # Iterate to next element (list of spike times for trial/unit/etc.) in data
+        next(data_flat)
+
+    return data, retain_idxs
+
+
+def _select_time_range_spike_bool(data, time_range, time_axis=None, timepts=None):
+    """ Selects given time range from binary spike data, deleting data outside range """
+    assert time_axis is not None, "Data time axis must be given in <time_axis>"
+    assert timepts is not None, "Data time sampling vector must be given in <timepts>"
+    timepts = np.asarray(timepts)
+
+    tbool = (time_range[0] <= timepts) & (timepts <= time_range[1])
+
+    return index_axis(data, time_axis, tbool), tbool
+
+
 def _realign_spike_times(spike_times, align_times, trial_axis):
     """ Realign trial-cut spike timestamps to new set of within-trial times """
     # Make copy of input data to avoid changing in caller
@@ -2031,9 +2136,10 @@ def _realign_spike_times(spike_times, align_times, trial_axis):
 def _realign_spike_bool(data, align_times, trial_axis,
                         time_axis=None, timepts=None, time_range=None):
     """ Realign trial-cut binary (1/0) spiking data to new set of within-trial times """
+    assert time_axis is not None, "Data time axis must be given in <time_axis>"
+    assert timepts is not None, "Data time sampling vector must be given in <timepts>"
     assert time_range is not None, \
         "Desired time range to extract from each trial must be given in  <time_range>"
-    assert timepts is not None, "Data time sampling vector must be given in <timepts>"
 
     timepts     = np.asarray(timepts)
     align_times = np.asarray(align_times)

@@ -3,11 +3,11 @@ import pytest
 import numpy as np
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
-from spynal.utils import setup_sliding_windows, unsorted_unique, \
+from spynal.utils import iarange, unsorted_unique, setup_sliding_windows, \
                          object_array_equal, concatenate_object_array
 from spynal.spikes import simulate_spike_trains, simulate_spike_waveforms, \
                           times_to_bool, bool_to_times, \
-                          cut_trials, realign_data, pool_electrode_units, \
+                          cut_trials, select_time_range, realign_data, pool_electrode_units, \
                           rate, rate_stats, isi, isi_stats, waveform_stats, \
                           plot_mean_waveforms, plot_waveform_heatmap
 from spynal.spectra.multitaper import compute_tapers
@@ -503,6 +503,72 @@ def test_cut_trials(spike_data_trial_uncut, spike_data, data_type):
             cut_data = cut_trials(uncut_data, trial_lims, smp_rate=1000, axis=1, foo=None).transpose((2,0,1))
 
     assert cut_data.shape == data.shape
+
+
+@pytest.mark.parametrize('data_type, result',
+                         [('spike_timestamp',   44),
+                          ('spike_bool',        44)])
+def test_select_time_range(spike_data, data_type, result):
+    """ Unit tests for select_time_range function """
+    data, timepts = spike_data[data_type]
+    data_orig = data.copy()
+    n_trials, n_units = data.shape[:2]
+    if data_type == 'spike_bool': n_timepts = data.shape[2]
+    time_range = (0.25,0.75)
+    n_timepts_out = len(iarange(250,750))
+
+    def check_results(sel_data, tbool):
+        if data_type == 'spike_timestamp':
+            n_spikes, n_spikes2 = 0, 0
+            for trial in range(n_trials):
+                for unit in range(n_units):
+                    n_spikes += len(sel_data[trial,unit])
+                    n_spikes2 += tbool[trial,unit].sum()
+                    assert np.all((sel_data[trial,unit] >= time_range[0]) &
+                                (sel_data[trial,unit] <= time_range[1]))
+            assert n_spikes == n_spikes2        
+    
+        else:
+            n_spikes = sel_data.sum()
+                    
+        return n_spikes
+        
+    # Realign timestamps, then realign back to original timebase and test if same
+    if data_type == 'spike_timestamp':
+        sel_data, tbool = select_time_range(data, time_range)
+        assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
+        assert sel_data.shape == data.shape
+        assert tbool.shape == data.shape
+        assert check_results(sel_data, tbool) == result
+                
+        # Test for consistent output with transposed data dimensionality
+        sel_data,tbool = select_time_range(data.T, time_range)
+        assert sel_data.shape == data.T.shape
+        assert tbool.shape == data.T.shape
+        assert check_results(sel_data.T, tbool.T) == result
+
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises(MISSING_ARG_ERRS):
+            sel_data, tbool = select_time_range(data, time_range, foo=None)
+
+    # For boolean data, realign to 2 distinct times, then concatenate together and test if same
+    else:
+        sel_data, tbool = select_time_range(data, time_range, time_axis=-1, timepts=timepts)
+        assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
+        assert sel_data.shape == (*(data.shape[:-1]), n_timepts_out)
+        assert tbool.shape == (n_timepts,)
+        assert check_results(sel_data, tbool) == result
+
+        # Test for consistent output with transposed data dimensionality
+        sel_data, tbool = select_time_range(data.T, time_range, time_axis=0, timepts=timepts)
+        assert object_array_equal(data,data_orig)     # Ensure input data not altered by func
+        assert sel_data.shape == (n_timepts_out, *(data.T.shape[1:]))
+        assert tbool.shape == (n_timepts,)
+        assert check_results(sel_data.T, tbool) == result
+
+        # Ensure that passing a nonexistent/misspelled kwarg raises an error
+        with pytest.raises(MISSING_ARG_ERRS):
+            sel_data, tbool = select_time_range(data, time_range, time_axis=-1, timepts=timepts, foo=None)
 
 
 @pytest.mark.parametrize('data_type',
