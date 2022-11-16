@@ -5,18 +5,17 @@ import numpy as np
 
 import scipy.io
 
-from spynal.matIO.helpers import _parse_typemap, _is_structured_array, \
-                                 _structuredarray_to_dict, _structuredarray_to_dataframe, \
-                                 _v7_matlab_type, _process_v7_object, DEBUG
+from spynal.matIO.helpers import _v7_matlab_type, _process_v7_object, \
+                                 _is_structured_array, _structuredarray_to_dict, \
+                                 _structuredarray_to_dataframe, DEBUG
 
 
-def _load7(filename, variables=None, typemap=None, order='Matlab'):
+
+def _load7(filename, variables=None, typemap=None, extract_items=None, order='Matlab'):
     """
     Load data variables from a version 7 (or older) Matlab MAT file
     Uses scipy.io.loadmat to load data
     """
-    typemap = _parse_typemap(typemap)
-
     # scipy.io returns arrays in column-major (Matlab/Fortran) order by default
     # Transpose/permute array axes if Python/C/row-major requested
     transpose = order.upper() in ['PYTHON','C','ROW','ROWMAJOR']
@@ -49,13 +48,20 @@ def _load7(filename, variables=None, typemap=None, order='Matlab'):
         # If specific variable name is listed in <typemap>, use given mapping
         python_vbl_type = typemap[vbl] if vbl in typemap else None
 
-        if DEBUG: print("'%s'" % vbl, matlab_vbl_type, python_vbl_type)
+        # If specific variable name is listed in <extract_items>, use associated value
+        if vbl in extract_items:                extract_item = extract_items[vbl]
+        # Otherwise, if variable type is listed in <extract_items>, use associated value
+        elif matlab_vbl_type in extract_items:  extract_item = extract_items[matlab_vbl_type]
+        # Otherwise, just use value for 'array' as generic value for all other (eg scalar) types        
+        else:                                   extract_item = extract_items['array']
+        if DEBUG: print("'%s'" % vbl, matlab_vbl_type, python_vbl_type, extract_item)
 
         # Process loaded object -- extract data, convert to appropriate Python type,
         # traversing down into object (cell elements/struct fields) with recursive calls as needed
         data[vbl] = _process_v7_object(data[vbl], matlab_vbl_type=matlab_vbl_type,
-                                       python_vbl_type=python_vbl_type, typemap=typemap,
-                                       transpose=transpose, level=0)
+                                       python_vbl_type=python_vbl_type, extract_item=extract_item,
+                                       typemap=typemap, extract_items=extract_items,
+                                       transpose=transpose, level=0, vbl=vbl)
 
     return data
 

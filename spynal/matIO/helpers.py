@@ -25,7 +25,8 @@ DEBUG = False
 # =============================================================================
 # General helper functions
 # =============================================================================
-def _structuredarray_to_dict(sarray, typemap=None, transpose=False, level=0):
+def _structuredarray_to_dict(sarray, typemap=None, extract_item=True, extract_items=None,
+                             transpose=False, level=0):
     """
     Convert Numpy structured array (which Matlab structs are initially
     imported as, using scipy.io.loadmat) to a dict, with type names as keys
@@ -45,17 +46,21 @@ def _structuredarray_to_dict(sarray, typemap=None, transpose=False, level=0):
         if DEBUG: print('\t'*level, "'%s'" % name)
         # Infer Matlab variable type of struct field
         matlab_vbl_type = _v7_matlab_type(dic[name])
-        # If specific field name is listed in <typemap>, use given mapping
+
+        # If specific field name is listed in <typemap>/<extract_items>, use given value
         python_vbl_type = typemap[name] if name in typemap else None
+        extract_item = extract_items[name] if name in extract_items else extract_item
 
         dic[name] = _process_v7_object(dic[name], matlab_vbl_type=matlab_vbl_type,
-                                       python_vbl_type=python_vbl_type,
-                                       typemap=typemap, transpose=transpose, level=level)
+                                       python_vbl_type=python_vbl_type, extract_item=extract_item,
+                                       typemap=typemap, extract_items=extract_items,
+                                       transpose=transpose, level=level)
 
     return dic
 
 
-def _structuredarray_to_dataframe(sarray, typemap=None, transpose=False, level=0):
+def _structuredarray_to_dataframe(sarray, typemap=None, extract_item=None, extract_items=None,
+                                  transpose=False, level=0):
     """
     Convert Numpy structured array (which Matlab structs are initially imported
     as, using scipy.io.loadmat) to a Pandas DataFrame, with type names as keys.
@@ -78,7 +83,8 @@ def _structuredarray_to_dataframe(sarray, typemap=None, transpose=False, level=0
     http://poquitopicante.blogspot.com/2014/05/loading-matlab-mat-file-into-pandas.html
     """
     # Convert structured array to dict {keys = sarray.dtype.names : values = sarray[key]}
-    dic = _structuredarray_to_dict(sarray, typemap=typemap, transpose=transpose, level=level)
+    dic = _structuredarray_to_dict(sarray, typemap=typemap, extract_item=extract_item,
+                                   extract_items=extract_items, transpose=transpose, level=level)
 
     # Convert dict to a Pandas DataFrame
     df = _dict_to_dataframe(dic)
@@ -169,8 +175,8 @@ def _dict_to_dataframe(dic):
 
         # If metadata is a structured array, convert it to dict
         if _is_structured_array(metadata):
-            metadata = _structuredarray_to_dict(metadata,
-                                                typemap={'struct':'dict'}, transpose=False)
+            metadata = _structuredarray_to_dict(metadata, typemap={'struct':'dict'},
+                                                extract_item=True, transpose=False)
     else:
         metadata = None
 
@@ -303,7 +309,7 @@ def _parse_typemap(typemap_in=None):
                    'struct':'dict', 'structarray':'dict'}
 
     # Modify defaults with any input values
-    if typemap_in is not None:
+    if isinstance(typemap_in,dict):
         for key in typemap_in.keys():
             # If key is in list of Matlab data types, standardize to lowercase
             # (otherwise keep as is, to match specific variable names)
@@ -314,7 +320,58 @@ def _parse_typemap(typemap_in=None):
             "'struct' must be mapped to 'dict' or 'dataframe' (set to %s)" \
             % typemap_out['struct']
 
+    else:
+        assert typemap_in is None, TypeError("If <typemap> is input, it must be given as a dict")
+
     return typemap_out
+
+
+def _parse_extract_items(extract_items_in=None):
+    """
+    Combine any input values for extract_items (which determines whether single items in
+    loaded Matlab variables are extracted from containing arrays or left as length-1 arrays)
+    with defaults
+
+    Parameters
+    ----------
+    extract_items_in : bool or dict, {str:bool}
+        Determines whether scalar-valued Matlab variables are loaded/returned as length-1
+        arrays (False) or are extracted from the containing arrays as their specific dtype (True).
+        Given as a single bool value to be used for *all* loaded variables or as a
+        dict that maps names of Matlab variable types or specific Matlab variable names to bools.
+        Matlab types: 'array' = numerical array, 'cell' = cell array, 'struct' = structure).
+
+    Returns
+    -------
+    extract_items_out : dict, {str:bool}, default: {'array':True, 'cell':False, 'struct':True}
+        Default mapping, overwritten with any input values.
+    """
+    # Set of Matlab data types to deal with here
+    vbl_types = {'array', 'cell', 'struct', 'structarray'}
+    # Set default values
+    extract_items_out = {'array':True, 'cell':False, 'struct':True, 'structarray':False}
+
+    # Modify defaults with any input values
+    # If input given as single bool value, set that value for all variable types
+    if _isbinary(extract_items_in):
+        extract_items_out = {vbl_type : extract_items_in for vbl_type in extract_items_out}
+
+    # If input given as dict, merge with default dict
+    elif isinstance(extract_items_in,dict):
+        for key in extract_items_in.keys():
+            assert _isbinary(extract_items_in[key]), \
+                ValueError("Values for <extract_items> must be boolean (0/1)")
+
+            # If key is in list of Matlab data types, standardize to lowercase
+            # (otherwise keep as is, to match specific variable names)
+            if key.lower() in vbl_types:  key = key.lower()
+            extract_items_out[key] = bool(extract_items_in[key])
+
+    else:
+        assert extract_items_in is None, \
+            TypeError("If <extract_items> is input, it must be given as a bool or str:bool dict")
+
+    return extract_items_out
 
 
 def _variables_to_mat(variables):
@@ -333,10 +390,10 @@ def _variables_to_mat(variables):
     -------
     variables : dict, {str : <vbl>}
        Same as input, but with variables converted to mat compatible types:
-        
+
         - xarray.DataArray -> Numpy ndarray + {string:*} dict with metadata
         attributes (stored in separate variable named <variable>_attr)
-        
+
         - strings, lists of strings -> Numpy object ndarray
     """
     new_vbl_dict = {}     # In case we need to create new variables in loop below
@@ -384,8 +441,8 @@ def _variables_to_mat(variables):
 # v7-specific helper functions
 # =============================================================================
 # NOTE: This function can't be nested in _load7 b/c _dict_to_dataframe() needs access
-def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
-                       typemap=None, transpose=False, level=0):
+def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None, extract_item=None,
+                       typemap=None, extract_items=None, transpose=False, level=0, vbl=None):
     """ Properly handles arbitrary objects loaded from v7 mat files in recursive fashion """
     level += 1
 
@@ -398,14 +455,17 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
     elif matlab_vbl_type == 'struct':
         if DEBUG: print('\t'*level, "struct")
         if python_vbl_type is None: python_vbl_type = typemap['struct']
+        if extract_item is None: extract_item = extract_items['struct']
 
         if python_vbl_type.lower() == 'dict':
-            converted = _structuredarray_to_dict(obj[0,0], typemap=typemap,
-                                                 transpose=transpose, level=level)
+            converted = _structuredarray_to_dict(obj[0,0], typemap=typemap, transpose=transpose,
+                                                 extract_item=extract_item,
+                                                 extract_items=extract_items, level=level)
 
         elif python_vbl_type.lower() == 'dataframe':
-            converted = _structuredarray_to_dataframe(obj[0,0], typemap=typemap,
-                                                      transpose=transpose, level=level)
+            converted = _structuredarray_to_dataframe(obj[0,0], typemap=typemap, transpose=transpose,
+                                                      extract_item=extract_item,
+                                                      extract_items=extract_items, level=level)
 
         else:
             converted = obj[0,0]
@@ -418,10 +478,12 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
     elif matlab_vbl_type == 'structarray':
         if DEBUG: print('\t'*level, "structarray")
         if python_vbl_type is None: python_vbl_type = typemap['structarray']
+        if extract_item is None: extract_item = extract_items['structarray']
 
         if python_vbl_type.lower() == 'dict':
-            converted = _structuredarray_to_dict(obj, typemap=typemap,
-                                                 transpose=transpose, level=level)
+            converted = _structuredarray_to_dict(obj, typemap=typemap, transpose=transpose,
+                                                 extract_item=extract_item,
+                                                 extract_items=extract_items, level=level)
 
         else:
             converted = obj
@@ -431,17 +493,22 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
 
     # Cell arrays are returned as object arrays. Squeeze out any singleton axes and
     # Permute axes of each cell's contents if 'PYTHON' order requested
-    elif matlab_vbl_type == 'cellarray':
-        if DEBUG: print('\t'*level, "cellarray")
+    elif matlab_vbl_type == 'cell':
+        if DEBUG: print('\t'*level, "cell")
+        if extract_item is None: extract_item = extract_items['cell']
+
         flatiter = obj.flat             # 1D iterator to iterate over arbitrary-shape array
         converted = np.ndarray(shape=obj.shape,dtype=object) # Create empty object array
         for _ in range(obj.size):
             coords = flatiter.coords    # Multidim coordinates into array
             # Infer Matlab variable type of cell array element
             matlab_elem_type = _v7_matlab_type(obj[coords])
-            converted[coords] = _process_v7_object(obj[coords], typemap=typemap,
-                                                   matlab_vbl_type=matlab_elem_type,
-                                                   transpose=transpose, level=level)
+            elem_c = _process_v7_object(obj[coords], typemap=typemap,
+                                        matlab_vbl_type=matlab_elem_type,
+                                        extract_item=extract_item, extract_items=extract_items,
+                                        transpose=transpose, level=level)
+            if not extract_item: elem_c = np.atleast_1d(elem_c)
+            converted[coords] = elem_c
             next(flatiter)              # Iterate to next element
 
     # General numerical/logical and cell arrays
@@ -459,6 +526,7 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
             if len(obj) == 0:   converted = str()
             # General strings: Convert to string type (from np.str_)
             else:               converted = str(obj[0])
+            if not extract_item: converted = np.asarray(converted, dtype=object)
 
         # General numerical array: Copy as-is
         else:
@@ -467,8 +535,10 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None,
 
     # Note: Only do the following for objects that remain output as ndarrays
     if isinstance(converted,np.ndarray):
-        # Length-1 arrays: Extract single item as type <dtype>
-        if (converted.shape == ()) or (converted.size == 1):
+        if extract_item is None: extract_item = extract_items['array']
+
+        # Length-1 arrays: Extract single item as type <dtype> (if <extract_item> is True)
+        if ((converted.shape == ()) or (converted.size == 1)) and extract_item:
             converted = converted.item()
 
         else:
@@ -491,11 +561,11 @@ def _v7_matlab_type(obj):
     elif _is_structured_array(obj) and (obj.size > 1):              return 'structarray'
     elif isinstance(obj,np.ndarray):
         # Cell arrays are returned as object arrays
-        if obj.dtype == object:                                     return 'cellarray'
+        if obj.dtype == object:                                         return 'cell'
         # Heuristically assume arrays with only 0/1 (but not all 0's) are logicals
-        elif _isbinary(obj) and not (obj == 0).all():               return 'logical'
+        elif _isbinary(obj) and len(obj) > 1 and not (obj == 0).all():  return 'logical'
         # General numeric array
-        else:                                                       return 'array'
+        else:                                                           return 'array'
     else:
         raise TypeError("Undetermined type of variable:", obj)
 
@@ -516,7 +586,6 @@ def _h5py_matlab_type(obj):
 def _convert_string(value, encoding='UTF-16'):
     """ Convert integer-encoded strings in HDF5 files to strings """
     return ''.join(value[:].tobytes().decode(encoding))    # time test ~ 700 ms
-    # DEL return ''.join(value[:].tostring().decode(encoding))    # time test ~ 700 ms
 
     # Note: Alternative methods that tested much slower:
     # return ''.join([chr(c) for c in value])               # time test ~ 7.2 s

@@ -20,7 +20,7 @@ cell array          Numpy ndarray of `object` dtype
 struct (table-like) dict or Pandas DataFrame (user's option)
 struct (general)    dict
 =================== =============================================
-    
+
 All "container" variables (structs, cell arrays) are loaded recursively, so each element
 (and sub-element, etc.) is processed appropriately.
 
@@ -28,7 +28,7 @@ Module also contains functionality for introspection into the contents of mat fi
 having to load them (`whomat`), and for saving variables back out to mat files with proper
 conversion to types encodable in mat files (`savemat`).
 
-    
+
 Function list
 -------------
 - loadmat : Loads variables from any Matlab MAT file. Also aliased as 'load'.
@@ -53,13 +53,15 @@ import pandas as pd
 
 from spynal.matIO.matIO_7 import _load7, _who7, _save7
 from spynal.matIO.matIO_73 import _load73, _who73, _save73
-from spynal.matIO.helpers import _parse_typemap, _get_matfile_version, _variables_to_mat
+from spynal.matIO.helpers import _parse_typemap, _parse_extract_items, _get_matfile_version, \
+                                 _variables_to_mat
 
 
 # =============================================================================
 # Matfile loading/introspection functions
 # =============================================================================
-def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab', verbose=True):
+def loadmat(filename, variables=None, typemap=None, asdict=False, extract_items=None,
+            order='Matlab', verbose=True):
     """
     Load variables from a given MAT file and return them in appropriate Python types
 
@@ -69,7 +71,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
     Variables returned individually or in a dict, where each variable maps to key/value pair
 
     Returned variable types are logical Python equivalents of Matlab types:
-    
+
     =================== ===============================================
     MATLAB              PYTHON
     =================== ===============================================
@@ -83,7 +85,8 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
     struct (general)    dict
     =================== ===============================================
 
-    Single-element Matlab arrays are converted to the contained item type (eg float/int/str)
+    Single-element Matlab arrays are converted to the contained item type (eg float/int/str) by
+    default (behavior can be changed using `extract_items` argument)
 
     NOTE: Some proprietary or custom Matlab variables cannot be loaded, including:
     table/timetable, datetime, categorical, function_handle, map container, any custom object class
@@ -104,6 +107,19 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
     asdict : bool, default: False
         If True, returns variables in a {'variable_name':value} dict.
         If False, returns variables separately (as tuple).
+
+    extract_items : bool or dict, {str:bool}, default: {'array':True, 'cell':False, 'struct':True}
+        All Matlab variables -- even scalar-valued ones -- are loaded as arrays. This argument
+        determines whether scalar-valued variables are returned as length-1 arrays (False) or
+        the single item is extracted from the array and returned as its specific dtype (True).
+        
+        Can be given as a single bool value to be used for *all* loaded variables or as a
+        dict that maps names of Matlab variable types or specific Matlab variable names to bools.
+        
+        Default: extract scalar items, except for loaded Matlab cell arrays / Python object arrays,
+        where it can break downstream code to have some array elements extracted, but others 
+        remaining contained in (sub)arrays (eg spike timestamp lists with a single spike for some
+        trials/units).
 
     order : str, default: 'Matlab'
         Dimension order of returned arrays. Determines how values are arranged when reshaped.
@@ -135,6 +151,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
 
     # Combine any input values for typemap with defaults
     typemap = _parse_typemap(typemap)
+    extract_items = _parse_extract_items(extract_items)
 
     assert order.upper() in ['MATLAB','F','COL','COLMAJOR','PYTHON','C','ROW','ROWMAJOR'], \
         "<order> must be 'Matlab' or 'Python' (%s given)" % order
@@ -142,10 +159,14 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, order='Matlab'
     version = _get_matfile_version(filename)
 
     # Use h5py to load v7.3 MAT-files (which are a type of hdf5 file)
-    if version == 7.3:  data = _load73(filename,variables,typemap,order)
+    if version == 7.3:
+        data = _load73(filename, variables=variables, typemap=typemap,
+                       extract_items=extract_items, order=order)
 
     # Use scipy.io.loadmat() to load v7 and older MAT-files
-    else:               data = _load7(filename,variables,typemap,order)
+    else:
+        data = _load7(filename, variables=variables, typemap=typemap,
+                      extract_items=extract_items, order=order)
 
     if variables is None: variables = list(data.keys())
 

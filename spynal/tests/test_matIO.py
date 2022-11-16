@@ -18,50 +18,59 @@ def test_loadmat(version):
     """ Unit tests for loadmat function in matIO module """
     filename = _set_filename(version)
     
-    print("PWD", os.getcwd())
     variables = ['integer','floating','boolean','string', 'num_array','cell_array',
                  'gen_struct','table_struct']
     # scipy.io returns v7 Matlab logicals as ints (not bools) and not much we can do about it
     bool_type = int if version == 'v7' else bool
+    
+    extra_args = dict(asdict=True, extract_items=True, verbose=False)
 
     # Test data is loaded correctly when all variables loaded into a dict
-    data = loadmat(filename, asdict=True, verbose=False)
+    data = loadmat(filename, **extra_args)
     # _print_data_summary(data)
-    _variable_tests(data, dict, bool_type)
+    _variable_tests(data, table_type=dict, bool_type=bool_type, extract_item=True)
 
     # Test function alias
-    data = load(filename, asdict=True, verbose=False)
-    _variable_tests(data, dict, bool_type)
+    data = load(filename, **extra_args)
+    _variable_tests(data, table_type=dict, extract_item=True, bool_type=bool_type)
+
+    # Test extract_item=False
+    extra_args['extract_items'] = False
+    data = load(filename, **extra_args)
+    _variable_tests(data, table_type=dict, extract_item=False, bool_type=bool_type)
+    extra_args['extract_items'] = True
     
     # Test data is loaded correctly when all variables loaded into separate variables
+    extra_args['asdict'] = False    
     integer, floating, boolean, string, num_array, cell_array, gen_struct, table_struct = \
-        loadmat(filename, variables=variables, asdict=False, verbose=False)
+        loadmat(filename, variables=variables, **extra_args)
     data = {'integer':integer, 'floating':floating, 'boolean':boolean, 'string':string,
             'num_array':num_array, 'cell_array':cell_array,
             'gen_struct':gen_struct, 'table_struct':table_struct}
-    _variable_tests(data, dict, bool_type)
+    _variable_tests(data, dict, bool_type=bool_type, extract_item=True)
+    extra_args['asdict'] = True    
 
     # Test for correct loading when variables to load are specified (as list or single name)
-    data = loadmat(filename, variables=['integer','string'], asdict=True, verbose=False)
+    data = loadmat(filename, variables=['integer','string'], **extra_args)
     assert list(data.keys()) == ['integer','string']
     assert isinstance(data['integer'], int)
     assert data['integer'] == 1
     assert isinstance(data['string'], str)
     assert data['string'] == 'abc'
 
-    data = loadmat(filename, variables='integer', asdict=True, verbose=False)
+    data = loadmat(filename, variables='integer', **extra_args)
     assert list(data.keys()) == ['integer']
     assert isinstance(data['integer'], int)
     assert data['integer'] == 1
 
     # Test for correct loading of table-like struct into Pandas DataFrame
-    data = loadmat(filename, typemap={'table_struct':'DataFrame'}, asdict=True, verbose=False)
+    data = loadmat(filename, typemap={'table_struct':'DataFrame'}, **extra_args)
     _variable_tests(data, pd.DataFrame, bool_type)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        data = loadmat(filename, asdict=True, verbose=False, foo=None)
-
+        data = loadmat(filename, **extra_args, foo=None)
+        
 
 @pytest.mark.parametrize('version', [('v7'), ('v73')])
 def test_whomat(version):
@@ -136,16 +145,16 @@ def _set_filename(version):
     return os.path.join(load_dir, 'testing_datafile_' + version + '.mat')
 
            
-def _variable_tests(data, table_type=dict, bool_type=bool):
+def _variable_tests(data, table_type=dict, bool_type=bool, extract_item=True):
     """ Set of tests to run on loadmat-loaded variables """
     assert isinstance(data, dict)
 
     # Test scalar and array variables
-    _scalar_tests(data, bool_type)
+    _scalar_tests(data, bool_type=bool_type, extract_item=extract_item)
     _array_tests(data)
 
     # Test generic struct variable -- loaded as dict
-    _scalar_tests(data['gen_struct'], bool_type)
+    _scalar_tests(data['gen_struct'], bool_type=bool_type, extract_item=extract_item)
     _array_tests(data['gen_struct'])
 
     # Test table-like struct variable -- loaded as dict or Pandas DataFrame
@@ -163,20 +172,35 @@ def _variable_tests(data, table_type=dict, bool_type=bool):
     assert (data['table_struct']['cell_array'] == np.asarray(['abc','def','gh','ij'])).all()
 
 
-def _scalar_tests(data, bool_type=bool):
+def _scalar_tests(data, bool_type=bool, extract_item=True):
     """ Tests for scalar variables """
-    assert isinstance(data['integer'], int)
-    assert data['integer'] == 1
+    if extract_item:
+        assert isinstance(data['integer'], int)
+        assert data['integer'] == 1
 
-    assert isinstance(data['floating'], float)
-    assert data['floating'] == 1.1
+        assert isinstance(data['floating'], float)
+        assert data['floating'] == 1.1
 
-    assert isinstance(data['boolean'], bool_type)
-    assert data['boolean'] == True
+        assert isinstance(data['boolean'], bool_type)
+        assert data['boolean'] == True
 
-    assert isinstance(data['string'], str)
-    assert data['string'] == 'abc'
+        assert isinstance(data['string'], str)
+        assert data['string'] == 'abc'
+    
+    else:
+        assert isinstance(data['integer'], np.ndarray) and np.issubdtype(data['integer'].dtype, np.integer)
+        assert np.array_equal(data['integer'], np.array(1, dtype=np.int16))
 
+        assert isinstance(data['floating'], np.ndarray) and np.issubdtype(data['floating'].dtype, float)
+        assert np.array_equal(data['floating'], np.array(1.1, dtype=float))
+
+        if bool_type == int: bool_type = np.integer 
+        assert isinstance(data['boolean'], np.ndarray) and np.issubdtype(data['boolean'].dtype, bool_type)
+        assert np.array_equal(data['boolean'], np.array(True, dtype=bool))
+        
+        assert isinstance(data['string'], np.ndarray) and np.issubdtype(data['string'].dtype, object)
+        assert np.array_equal(data['string'], np.array('abc', dtype=object))
+        
 
 def _array_tests(data):
     """ Tests for array variables """

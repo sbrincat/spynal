@@ -6,18 +6,15 @@ import numpy as np
 import h5py
 import hdf5storage
 
-from spynal.matIO.helpers import _parse_typemap, _dict_to_dataframe, \
-                                 _h5py_matlab_type, _convert_string, DEBUG
+from spynal.matIO.helpers import _dict_to_dataframe, _h5py_matlab_type, _convert_string, DEBUG
 
 
-def _load73(filename, variables=None, typemap=None, order='C'):
+def _load73(filename, variables=None, typemap=None, extract_items=None, order='C'):
     """
     Load data variables from a version 7.3 Matlab MAT file
 
     Uses h5py to load data, as v7.3 MAT files are a type of HDF5 file
     """
-    typemap = _parse_typemap(typemap)
-
     # h5py returns arrays in row-major (Python/C) order by default
     # Transpose/permute array axes if Matlab/Fortran/column-major requested
     transpose = order.upper() in ['MATLAB','F','COL','COLMAJOR']
@@ -42,14 +39,17 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                 ValueError("Variable '%s' not present in file %s" % (vbl,filename))
 
 
-    def _process_h5py_object(obj, file, matlab_vbl_type=None, python_vbl_type=None, level=0):
+    def _process_h5py_object(obj, file, matlab_vbl_type=None, python_vbl_type=None,
+                             extract_item=None, extract_items=None, level=0):
         """ Properly handles arbitrary objects loaded from HDF5 files in recursive fashion """
         level += 1
         # For h5py Dataset (contains Matlab array), extract and process array data
         if isinstance(obj, h5py.Dataset):
-            if DEBUG: print('\t'*level, "Dataset", matlab_vbl_type)
+            if DEBUG: print('\t'*level, "Dataset", matlab_vbl_type, extract_item)
             if matlab_vbl_type is None: matlab_vbl_type = _h5py_matlab_type(obj)
-            return _process_h5py_object(obj[()], file, matlab_vbl_type=matlab_vbl_type, level=level)
+            return _process_h5py_object(obj[()], file, matlab_vbl_type=matlab_vbl_type,
+                                        extract_item=extract_item, extract_items=extract_items,
+                                        level=level)
 
         # For h5py Group (Matlab struct), recurse thru fields and return as dict or DataFrame
         elif isinstance(obj, h5py.Group):
@@ -58,8 +58,11 @@ def _load73(filename, variables=None, typemap=None, order='C'):
             for key in obj.keys():
                 if DEBUG: print('\t'*level, "'%s'" % key)
                 matlab_elem_type = _h5py_matlab_type(obj[key])
+                if key in extract_items: extract_item = extract_items[key]
                 converted[key] = _process_h5py_object(obj[key], file,
-                                                      matlab_vbl_type=matlab_elem_type, level=level)
+                                                      matlab_vbl_type=matlab_elem_type,
+                                                      extract_item=extract_item,
+                                                      extract_items=extract_items, level=level)
 
             # If no specific output type requested for variable, default to type for structs
             if python_vbl_type is None: python_vbl_type = typemap['struct']
@@ -79,7 +82,7 @@ def _load73(filename, variables=None, typemap=None, order='C'):
 
         # For an ndarray (Matlab array)
         elif isinstance(obj,np.ndarray):
-            if DEBUG: print('\t'*level, "ndarray", matlab_vbl_type)
+            if DEBUG: print('\t'*level, "ndarray", matlab_vbl_type, extract_item)
 
             # BUGFIX For some reason, h5py seems to output empty cells in cell arrays as
             #        (2,) ndarrays == [n,0] (where n is n_rows of other cells).
@@ -95,15 +98,17 @@ def _load73(filename, variables=None, typemap=None, order='C'):
 
             # For length-1 ndarray, extract and process its single array element
             # (but don't do this for Matlab char arrays, which are treated as strings)
-            elif (obj.size == 1) and not (matlab_vbl_type == 'char'):
-                if DEBUG: print('\t'*level, "size 1")
+            elif (obj.size <= 1) and extract_item and not (matlab_vbl_type == 'char'):
+                if DEBUG: print('\t'*level, "size 1", extract_item)
                 converted = _process_h5py_object(obj.item(), file,
-                                                 matlab_vbl_type=matlab_vbl_type, level=level)
+                                                 matlab_vbl_type=matlab_vbl_type,
+                                                 extract_item=extract_item, level=level)
 
             # Matlab char arrays (strings) -- convert to Python string
             elif matlab_vbl_type == 'char':
                 if DEBUG: print('\t'*level, "char")
                 converted = _convert_string(obj)
+                if not extract_item: converted = np.array(converted, dtype=object)
 
             # Matlab logical arrays -- convert to Numpy ndarray of dtype bool
             elif matlab_vbl_type == 'logical':
@@ -122,13 +127,16 @@ def _load73(filename, variables=None, typemap=None, order='C'):
                         # print(row, col, len(elem))
                         matlab_elem_type = _h5py_matlab_type(file[elem[col]])
 
-                        converted[row,col] = \
-                            _process_h5py_object(file[elem[col]][()], file,
-                                                 matlab_vbl_type=matlab_elem_type, level=level)
+                        elem_c = _process_h5py_object(file[elem[col]][()], file,
+                                                      matlab_vbl_type=matlab_elem_type,
+                                                      extract_item=extract_item,
+                                                      extract_items=extract_items, level=level)
+                        if not extract_item: elem_c = np.atleast_1d(elem_c)
+                        converted[row,col] = elem_c    
 
             # Matlab numerical arrays -- straight copy to Numpy ndarray of appropriate dtype
             else:
-                if DEBUG: print('\t'*level, "numerical")
+                if DEBUG: print('\t'*level, "numerical", obj.size, extract_item)
                 converted = obj
 
             # Note: Only do the following for variables output as arrays (ie not strings/scalars)
@@ -166,15 +174,23 @@ def _load73(filename, variables=None, typemap=None, order='C'):
     for vbl in variables:
         # Extract Matlab variable type from h5py object attributes
         matlab_vbl_type = _h5py_matlab_type(file[vbl])
-        if DEBUG: print("'%s'" % vbl, matlab_vbl_type)
 
-        # If specific variable name is listed in <typemap>, use given mapping
+        # If specific variable name is listed in <typemap>/<extract_items>, use given value
         python_vbl_type = typemap[vbl] if vbl in typemap else None
+
+        # If specific variable name is listed in <extract_items>, use associated value
+        if vbl in extract_items:                extract_item = extract_items[vbl]
+        # Otherwise, if variable type is listed in <extract_items>, use associated value
+        elif matlab_vbl_type in extract_items:  extract_item = extract_items[matlab_vbl_type]
+        # Otherwise, just use value for 'array' as generic value for all other (eg scalar) types
+        else:                                   extract_item = extract_items['array']
+        if DEBUG: print("'%s'" % vbl, matlab_vbl_type, python_vbl_type, extract_item)
 
         # Process h5py object -- extract data, convert to appropriate Python type,
         # traversing down into object (cell elements/struct fields) with recursive calls as needed
         data[vbl] = _process_h5py_object(file[vbl], file, matlab_vbl_type=matlab_vbl_type,
-                                         python_vbl_type=python_vbl_type, level=0)
+                                         python_vbl_type=python_vbl_type, extract_item=extract_item,
+                                         extract_items=extract_items, level=0)
 
     file.close()
 
