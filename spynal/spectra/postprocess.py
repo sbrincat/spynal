@@ -74,8 +74,8 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
         coords = {dim : data.coords[dim].values for dim in data.coords}
         coords[freq_dim] = list(bands.keys())
         data_shape = (len(bands), *data.shape[1:])
-        band_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
-                                 dims=temp_dims, coords=coords)
+        band_data = xr.DataArray(np.empty(data_shape, dtype=data.dtype),
+                                 dims=temp_dims, coords=coords, attrs=data.attrs)
 
     else:
         assert axis is not None, \
@@ -86,7 +86,7 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
         if axis != 0: data = data.swapaxes(0,axis)
 
         data_shape= (len(bands), *data.shape[1:])
-        band_data = np.zeros(data_shape,dtype=data.dtype)
+        band_data = np.empty(data_shape, dtype=data.dtype)
 
     # Pool data over each frequency band
     for i_band,(_,frange) in enumerate(bands.items()):
@@ -159,8 +159,8 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
         coords = {dim : data.coords[dim].values for dim in data.coords}
         coords['time'] = list(epochs.keys())
         data_shape= (len(epochs), *data.shape[1:])
-        epoch_data = xr.DataArray(np.zeros(data_shape,dtype=data.dtype),
-                                  dims=temp_dims, coords=coords)
+        epoch_data = xr.DataArray(np.empty(data_shape, dtype=data.dtype),
+                                  dims=temp_dims, coords=coords, attrs=data.attrs)
 
     else:
         assert axis is not None, \
@@ -171,7 +171,7 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
         if axis != 0: data = data.swapaxes(0,axis)
 
         data_shape= (len(epochs), *data.shape[1:])
-        epoch_data = np.zeros(data_shape,dtype=data.dtype)
+        epoch_data = np.empty(data_shape, dtype=data.dtype)
 
     # Pool data over each time epoch
     for i_epoch,(_,trange) in enumerate(epochs.items()):

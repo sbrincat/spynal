@@ -33,20 +33,20 @@ Full documentation can be found at: https://spynal.readthedocs.io/en/latest/
 Users can either install the most recent stable release using pip or
 install the latest updates from the Github repository
 
-### pip install
+### Option 1: pip install
 Recommended for users who prefer a simple installation and don't require the latest updates
 
     - Open a terminal window, navigate to folder you want repository to live under (cd "parent directory")
     - Run: pip install spynal
 
-### Install from source (Github)
+### Option 2: Install from source (Github)
 Recommended for developers and for users that would like access to the latest updates
 
-#### Download repository
+#### 2a: Download repository
     - Open a terminal window, navigate to folder you want repository to live under (cd "parent directory")
     - Run: git clone https://github.com/sbrincat/spynal.git
 
-#### Install package
+#### 2b: Install package
     - Navigate into the newly-created spynal folder (cd "parent directory"/spynal)
     - For end users:  at command line, run: python setup.py install
     - For developers: at command line, run: python setup.py develop
