@@ -794,8 +794,9 @@ def _set_plot_colors(color, n_plot_objects):
             color = np.tile(color, (n_plot_objects,))
         else:
             assert len(color) == n_plot_objects, \
-                ValueError("color must have one value per plot obect (line/fill/etc)" \
-                           " or a single value that is used for all plot objects")
+                ValueError("Color must have one value per plot obect (line/fill/etc)" \
+                           " or a single value that is used for all plot objects" \
+                           " (%d colors/%d objects)" % (len(color),n_plot_objects))
 
     return color
 

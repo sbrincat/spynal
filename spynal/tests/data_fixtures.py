@@ -224,7 +224,7 @@ def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
     return dist_func(n, mean, spread)
 
 
-def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='normal',
+def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, n_chnls=1, distribution='normal',
                      spreads=1.0, correlation=0, seed=None):
     """
     Simulates random data across multiple conditions/groups with given condition effect size,
@@ -246,6 +246,9 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
     n_conds Int. Number of distinct conditions/groups to simulate. Default: 2
 
     n       Int. Number of trials/observations to simulate *per condition*. Default: 100
+    
+    n_chnls Int. Number of independent data channels to simulate (all channels currently
+            have same stochastic properties). Default: 1
 
     distribution    String. Name of distribution to simulation from.
                     Options: 'normal' [default] | 'poisson'
@@ -304,9 +307,9 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
 
     # Generate data for each condition and stack together -> (n_trials*n_conds,) array
     if correlation == 0:
-        data = np.hstack([simulate_data(distribution=distribution, mean=mean, spread=spread,
-                                        n=n, seed=None)
-                        for mean,spread in zip(means,spreads)])
+        n_ = n if n_chnls == 1 else (n,n_chnls)
+        data = np.concatenate([simulate_data(distribution=distribution, mean=mean, spread=spread, n=n_, seed=None)
+                               for mean,spread in zip(means,spreads)], axis=0)
 
     # Generate data for both condition using single multivariate normal distribution
     else:
@@ -317,7 +320,8 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, distribution='norma
         cov_mx = [[variances[0], var_pooled*correlation], [var_pooled*correlation, variances[1]]]
 
         # Generate multivariate normal data with given means and covariance matrix
-        data = np.random.multivariate_normal(means, cov_mx, (n,))
+        n_ = (n,) if n_chnls == 1 else (n,n_chnls)
+        data = np.random.multivariate_normal(means, cov_mx, size=n_)
         # Reshape (n,n_conds) -> (n*n_conds,)
         data = data.reshape((n*n_conds,), order='F')
 

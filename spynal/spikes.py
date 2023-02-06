@@ -1558,8 +1558,6 @@ def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
     if xlabel is not None:  plt.xlabel(xlabel)
     if ylabel is not None:  plt.ylabel(ylabel)
 
-    plt.show()
-
     return ax
 
 
