@@ -11,9 +11,8 @@ from spynal.spectra.helpers import fft, ifft, _FFTW_KWARGS_DEFAULT, \
                                    _extract_triggered_data, _undo_standardize_array_newaxis
 
 
-def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
-                     freqs=np.power(2.0,np.arange(1,7.5,0.25)), removeDC=True,
-                     wavelet='morlet', wavenumber=6, pad=False, buffer=0, **kwargs):
+def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
+                     removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0, **kwargs):
     """
     Compute continuous wavelet transform of data, then averages across timepoints to
     reduce it down to a frequency spectrum.
@@ -25,7 +24,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
     Parameters
     ----------
     freqs : array-like, shape=(n_freqs,), default: 2**np.arange(1,7.5,0.25)
-        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-152
         in 1/4 octaves, but log sampling is not required.
 
     wavelet : {'morlet'}, default: 'morlet'
@@ -49,6 +48,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
     freqs, ndarray, shape=(n_freqs,)
         List of frequencies in `spec` (in Hz)
     """
+    if freqs is None: freqs = 2.0**np.arange(1,7.5,0.25)
     if axis < 0: axis = data.ndim + axis
 
     spec, freqs, _ = wavelet_spectrogram(data, smp_rate, axis=axis, data_type=data_type,
@@ -60,9 +60,9 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
     return spec.mean(axis=axis+1), freqs
 
 
-def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
-                        freqs=np.power(2.0,np.arange(1,7.5,0.25)), removeDC=True,
-                        wavelet='morlet', wavenumber=6, pad=False, buffer=0, downsmp=1, **kwargs):
+def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
+                        removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0,
+                        downsmp=1, **kwargs):
     """
     Compute continuous time-frequency wavelet transform of data at given frequencies.
 
@@ -71,7 +71,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     Parameters
     ----------
     freqs : array-like, shape=(n_freqs,), default: 2**np.arange(1,7.5,0.25)
-        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-152
         in 1/4 octaves, but log sampling is not required.
 
     wavelet : {'morlet'}, default: 'morlet'
@@ -107,6 +107,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     ----------
     Torrence & Compo 1998 https://doi.org/10.1175/1520-0477(1998)079%3C0061:APGTWA%3E2.0.CO;2
     """
+    if freqs is None: freqs = 2.0**np.arange(1,7.5,0.25)
     if axis < 0: axis = data.ndim + axis
 
     # Convert spike timestamp data to boolean spike train format
@@ -165,8 +166,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     return spec, freqs, timepts
 
 
-def compute_wavelets(n, smp_rate, freqs=np.power(2.0,np.arange(1,7.5,0.25)),
-                     wavelet='morlet', wavenumber=6, do_fft=False):
+def compute_wavelets(n, smp_rate, freqs=None, wavelet='morlet', wavenumber=6, do_fft=False):
     """
     Compute set of (Fourier transformed) wavelets for use in wavelet spectral analysis
 
@@ -179,7 +179,7 @@ def compute_wavelets(n, smp_rate, freqs=np.power(2.0,np.arange(1,7.5,0.25)),
         Data sampling rate (Hz)
 
     freqs : array-like, shape=(n_freqs,), default: 2**np.arange(1,7.5,0.25)
-        Set of desired wavelet frequencies. Default value logarithmically samples from 2-128
+        Set of desired wavelet frequencies. Default value logarithmically samples from 2-152
         in 1/4 octaves, but log sampling is not required.
 
     wavelet : {'morlet'}, default: 'morlet'
@@ -203,7 +203,8 @@ def compute_wavelets(n, smp_rate, freqs=np.power(2.0,np.arange(1,7.5,0.25)),
     ----------
     Torrence & Compo 1998 https://doi.org/10.1175/1520-0477(1998)079%3C0061:APGTWA%3E2.0.CO;2
     """
-    freqs   = np.asarray(freqs)
+    if freqs is None:   freqs = 2.0**np.arange(1,7.5,0.25)
+    else:               freqs = np.asarray(freqs)
     wavelet = wavelet.lower()
     dt      = 1/smp_rate         # Convert sampling rate -> sampling interval
 
