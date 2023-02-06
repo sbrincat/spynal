@@ -13,6 +13,8 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../spynal'))
+autodoc_mock_imports = ['numpy','scipy','pandas','matplotlib','h5py','hdf5storage',
+                        'patsy','sklearn','pyfftw','xarray','spynal']
 
 
 # -- Project information -----------------------------------------------------
@@ -22,7 +24,7 @@ copyright = '2022, Scott Brincat'
 author = 'Scott Brincat'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.0'
+release = '0.1.2'
 
 
 # -- General configuration ---------------------------------------------------

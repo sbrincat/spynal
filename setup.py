@@ -11,11 +11,11 @@ requirements = [
         'numpy',
         'scipy',
         'pandas',
+        'matplotlib',
         'h5py',
         'hdf5storage',
         'patsy',
         'sklearn',
-        'matplotlib',        
         'pyfftw'
         ]
 
