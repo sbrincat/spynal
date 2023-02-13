@@ -264,8 +264,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     if clim is None: clim = (data.min(), data.max())
 
     # Find sampling intervals for x, y axes
-    dx      = np.diff(x).mean()
-    dy      = np.diff(y).mean()
+    dx = np.diff(x).mean() if len(x) > 1 else 1
+    dy = np.diff(y).mean() if len(y) > 1 else 1
     # Set default plotting extent for each axis = full sampling range +/- 1/2 sampling interval
     # This allows for viewing the entire cells at the edges of the plot, which sometimes makes
     # a difference for sparsely sampled dimensions
@@ -487,15 +487,15 @@ def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwa
     fig.savefig(filename, dpi=dpi, **kwargs)
 
 
-def make_colormap(name, colors=None, **kwargs):
+def make_colormap(name=None, colors=None, register=None, **kwargs):
     """
     Create a custom colormap and register its name for later convenient use
     
     Parameters
     ----------
     name : str
-        Name of colormap to create. Name will be registered as a matplotlib colormap,
-        so later you can invoke it using cmap=`name`.        
+        Name of colormap to create. If `register` is True, name will be registered as a
+        matplotlib colormap, so later you can invoke it using cmap=`name`.        
         
     colors : callable or dict or array-like
         Specifies the colors in custom colormap in one of three ways:
@@ -516,6 +516,10 @@ def make_colormap(name, colors=None, **kwargs):
             (n_colors,3=RGB) or (n_colors,4=RGBA) array. Specifies each color in entire 
             colormap. Colormap generated using :func:`matplotlib.colors.ListedColormap`.
 
+    register : bool, default: True if value given for `name`
+            If True, `name` is registered as matplotlib colormap, which can later be invoked
+            using cmap=`name`.
+            
     **kwargs :
         Any other keyword args passed directly to `LinearSegmentedColormap` or `ListedColormap`.
         
@@ -530,6 +534,8 @@ def make_colormap(name, colors=None, **kwargs):
     https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.LinearSegmentedColormap.html
     https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.ListedColormap.html
     """
+    if register is None: register = name is not None
+    
     # If `colors` input as callable, run it to generate actual colors for colormap
     colors = colors() if callable(colors) else colors
     
@@ -545,7 +551,7 @@ def make_colormap(name, colors=None, **kwargs):
         raise TypeError("Unsupported type <%s> set for `colors`" % type(colors))
     
     # Register colormap name for later use        
-    plt.register_cmap(cmap=cmap)
+    if register: plt.register_cmap(cmap=cmap)
     
     return cmap
 

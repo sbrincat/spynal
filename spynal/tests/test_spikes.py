@@ -9,7 +9,7 @@ from spynal.spikes import simulate_spike_trains, simulate_spike_waveforms, \
                           times_to_bool, bool_to_times, \
                           cut_trials, select_time_range, realign_data, pool_electrode_units, \
                           rate, rate_stats, isi, isi_stats, waveform_stats, \
-                          plot_mean_waveforms, plot_waveform_heatmap
+                          plot_raster, plot_mean_waveforms, plot_waveform_heatmap
 from spynal.spectra.multitaper import compute_tapers
 
 
@@ -125,12 +125,12 @@ def spike_waveform(spike_timestamp):
     RETURNS
     data    (10,2) ndarray of (n_timepts,n_spikes) objects. Simulated spike waveforms
             (eg simulating 10 trials x 2 units)
-            
-    timepts (49,) ndarray of float. Time sampling vector for waveform data (in s).            
+
+    timepts (49,) ndarray of float. Time sampling vector for waveform data (in s).
     """
     spike_timestamp = spike_timestamp[0]
     n_trials,n_units = spike_timestamp.shape
-    
+
     spike_waves = np.empty((n_trials,n_units), dtype=object)
     for i_trial in range(n_trials):
         for i_unit in range(n_units):
@@ -139,7 +139,7 @@ def spike_waveform(spike_timestamp):
                 spike_waves[i_trial,i_unit],timepts = simulate_spike_waveforms(n_spikes=n_spikes)
             else:
                 spike_waves[i_trial,i_unit] = np.asarray([])
-            
+
     return spike_waves, timepts
 
 
@@ -264,7 +264,6 @@ def test_density(spike_data, data_type, kernel, result):
     # Test for consistent output with transposed data dimensionality
     # Note: output dims are expected to be different for timestamp vs boolean data
     expected_shape = (1001, 2, 10) if data_type == 'spike_bool' else (2, 10, 1001)
-    print(data.shape, data.transpose().shape)
     rates, tout = rate(data.transpose(), method='density', kernel=kernel, width=width,
                        lims=[0,1], axis=0, timepts=timepts)
     print(rates.mean(), tout.shape, rates.shape)
@@ -396,7 +395,7 @@ def test_waveform_stats(spike_waveform, stat, result):
 
     extra_args = dict(smp_rate=30e3) if stat != 'amp_ratio' else {}
     result_mult = 1 if stat == 'amp_ratio' else 1e6 # Convert temporal stats from s -> us
-    
+
     # Basic test of shape, value of output
     # Test value of 1st trial/channel as exemplar
     stats = waveform_stats(data, stat=stat, axis=0, **extra_args)
@@ -424,7 +423,7 @@ def test_waveform_stats(spike_waveform, stat, result):
     with pytest.raises(MISSING_ARG_ERRS):
         stats = waveform_stats(data, stat=stat, axis=0, foo=None)
 
-  
+
 # =============================================================================
 # Unit tests for rate preprocessing/utility functions
 # =============================================================================
@@ -441,7 +440,7 @@ def test_bool_to_times(spike_timestamp, spike_bool):
     assert data_bool_to_timestamp.shape == data_timestamp.shape
     assert np.asarray([d1.shape == d2.shape for d1,d2
                        in zip(data_bool_to_timestamp.flatten(), data_timestamp.flatten())]).all()
-    assert np.asarray([np.allclose(d1, d2, rtol=1e-2, atol=1e-2) for d1,d2
+    assert np.asarray([np.allclose(d1, d2, rtol=1e-3, atol=1e-3) for d1,d2
                        in zip(data_bool_to_timestamp.flatten(), data_timestamp.flatten())]).all()
 
     # Test for correct handling of single spike trains
@@ -526,13 +525,13 @@ def test_select_time_range(spike_data, data_type, result):
                     n_spikes2 += tbool[trial,unit].sum()
                     assert np.all((sel_data[trial,unit] >= time_range[0]) &
                                 (sel_data[trial,unit] <= time_range[1]))
-            assert n_spikes == n_spikes2        
-    
+            assert n_spikes == n_spikes2
+
         else:
             n_spikes = sel_data.sum()
-                    
+
         return n_spikes
-        
+
     # Realign timestamps, then realign back to original timebase and test if same
     if data_type == 'spike_timestamp':
         sel_data, tbool = select_time_range(data, time_range)
@@ -540,7 +539,7 @@ def test_select_time_range(spike_data, data_type, result):
         assert sel_data.shape == data.shape
         assert tbool.shape == data.shape
         assert check_results(sel_data, tbool) == result
-                
+
         # Test for consistent output with transposed data dimensionality
         sel_data,tbool = select_time_range(data.T, time_range)
         assert sel_data.shape == data.T.shape
@@ -678,6 +677,42 @@ def test_pool_electrode_units(spike_data, data_type):
 # =============================================================================
 # Unit tests for plotting functions
 # =============================================================================
+@pytest.mark.parametrize('data_type, graphics',
+                         [('spike_timestamp',  'vector'),
+                          ('spike_timestamp',  'bitmap'),
+                          ('spike_bool',       'vector'),
+                          ('spike_bool',       'bitmap')])
+def test_plot_raster(spike_data, data_type, graphics):
+    """ Unit tests for plot_raster function """
+    # Extract given data type from data dict
+    data, timepts = spike_data[data_type]
+    data = data[:,0] if data_type == 'spike_timestamp' else data[:,0,:]
+    data_orig = data.copy()
+
+    data_checker = np.array_equal if data_type == 'bool' else object_array_equal
+
+    extra_args = dict(graphics=graphics)
+    if data_type == 'spike_bool':   extra_args.update(timepts=timepts)
+    else:                           extra_args.update(lims=(0,1))
+
+    # Basic test that call works
+    ax = plot_raster(data, **extra_args)
+    assert data_checker(data,data_orig)     # Ensure input data not altered by func
+
+    # Test that a few parameter tweaks work
+    ax = plot_raster(data, **extra_args, color=[0.25,0.25,0.25])
+    ax = plot_raster(data, **extra_args, color='tab:gray')
+    ax = plot_raster(data, **extra_args, height=0.75)
+    ax = plot_raster(data, **extra_args,
+                     events=[(100e-3,300e-3), 500e-3, (880e-3,900e-3,920e-3)])
+    # Test with data from only one spike train
+    ax = plot_raster(data=data[0] if data_type == 'spike_timestamp' else data[0,:], **extra_args)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        ax = plot_raster(data, **extra_args, foo=None)
+
+
 def test_plot_mean_waveforms():
     """ Unit tests for plot_mean_waveforms function """
     n_units = 3

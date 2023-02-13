@@ -88,13 +88,14 @@ Function reference
 # @author: sbrincat
 
 from warnings import warn
-from math import isclose, ceil
+from math import isclose, floor, ceil
 import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.signal import convolve
 from scipy.signal.windows import hann, gaussian
 from scipy.stats import poisson, expon
+from matplotlib.colors import to_rgb
 
 from spynal.utils import set_random_seed, unsorted_unique, iarange, index_axis, \
                          standardize_array, undo_standardize_array, \
@@ -102,7 +103,8 @@ from spynal.utils import set_random_seed, unsorted_unique, iarange, index_axis, 
                          fano, cv, cv2, lv, gaussian_1d
 from spynal.helpers import _isbinary, _merge_dicts, _check_window_lengths, \
                            _enclose_in_object_array
-from spynal.plots import plot_line_with_error_fill, plot_heatmap
+from spynal.plots import plot_line_with_error_fill, plot_heatmap, plot_markers, make_colormap, \
+                         _hash_kwargs, AXES_PARAMS
 
 
 # =============================================================================
@@ -119,12 +121,11 @@ def rate(data, method='bin', **kwargs):
     data : ndarray, shape=Any, dtype=object (each element = (n_spikes,) array) or
         ndarray, shape=(...,n_timepts,...), dtype=bool
 
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array
+        of any arbitrary shape.
         -or-
-        Binary/boolean representation of spike times, for either a single
-        or multiple spike trains.
+        Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     method : {'bin','density'}, default: 'bin'
         Spike rate estimation method:
@@ -178,12 +179,11 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     data : ndarray, shape=Any, dtype=object (each element = (n_spikes,) array)
         or ndarray, shape=(...,n_timepts,...), dtype=bool
 
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array
+        of any arbitrary shape.
         -or-
-        Binary/boolean representation of spike times, for either a single
-        or multiple spike trains.
+        Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     lims : array-like, shape=(2,)
         Full time range of analysis ([start,end] in s).
@@ -349,12 +349,11 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
     data : ndarray, shape=Any, dtype=object (each element = (n_spikes,) array)
         or ndarray, shape=(...,n_timepts,...), dtype=bool
 
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array
+        of any arbitrary shape.
         -or-
-        Binary/boolean representation of spike times, for either a single
-        or multiple spike trains.
+        Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     lims : array-like, shape=(2,)
         Desired time range of returned spike density ([start,end] in s).
@@ -537,11 +536,6 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         raise TypeError("Unsupported type '%s' for <kernel>. Use string, function, \
                          or explicit array of values" % type(kernel))
 
-        # DELETE
-        # assert len(kwargs) == 0, \
-        #     TypeError("Incorrect or misspelled variable(s) in keyword args: " +
-        #               ', '.join(kwargs.keys()))
-
     # Normalize kernel to integrate to 1
     kernel = kernel / (kernel.sum()/smp_rate)
 
@@ -591,12 +585,11 @@ def isi(data, axis=-1, timepts=None):
     ----------
     data : ndarray, shape=Any, dtype=object (each element = (n_spikes,) array)
         or ndarray, shape=(...,n_timepts,...), dtype=bool
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array
+        of any arbitrary shape.
         -or-
-        Binary/boolean representation of spike times, for either a single
-        or multiple spike trains.
+        Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     axis : int, default: -1 (last axis of array)
         Axis of binary data corresponding to time dimension. Not used for spike timestamp data.
@@ -1147,9 +1140,9 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
     ----------
     spike_times : ndarray, shape=Any, dtype=object (each element = (n_spikes,) array)
         or array-like, shape=(n_spikes,)
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array
+        of any arbitrary shape.
 
     lims : array-like, shape=(2,)
         Full time range of analysis ([start,end] in s).
@@ -1166,8 +1159,10 @@ def times_to_bool(spike_times, lims=None, width=1e-3, bins=None):
 
     Returns
     -------
-    spike_bool : ndarray, shape=(...,n_bins,...), dtype=bool
+    spike_bool : ndarray, shape=(...,n_bins), dtype=bool
         Binary spike trains, where 1 indicates >= 1 spike in time bin, 0 indicates no spikes
+        Same shape as `spike_times`, with time axis appended to end.
+        If only a single spike train is input, output is (n_bins,) vector.
 
     timepts : ndarray, shape(n_bins,)
         Time sampling vector (in s). Center of each time bin used to compute binary spike data
@@ -1294,7 +1289,7 @@ def select_time_range(data, time_range, time_axis=None, timepts=None):
         For timestamp data, this has same shape as input data.
         For binary data, time axis is reduced to length implied by `time_range`, but
         otherwise array has same shape as input data.
-        
+
     sel_bool : ndarray, shape=Any, dtype=object (elems=(n_spikes[trial,unit,etc.],),dtype=bool arrays)
         or ndarray, shape=(n_timepts,) dtype=bool
         Boolean vector(s) used to select spikes. Useful for selecting same spikes out of a parallel
@@ -1490,73 +1485,158 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
 #==============================================================================
 # Plotting functions
 #==============================================================================
-def plot_raster(spike_times, ax=None, xlim=None, color='0.25', height=1.0,
-                xlabel=None, ylabel=None):
+def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=None, **kwargs):
     """
     Generate raster plot of spike times
 
     Parameters
     ----------
-    data : array_like, shape=(n_spikes,) or ndarray, dtype=object (each elem = (n_spikes,) array)
-        List(s) of spike timestamps (in s).  Can be given for either a single
-        spike train, or for multiple spike trains (eg different trials,
-        units, etc.) within an object array of any arbitrary shape.
+    data : ndarray, shape=(n_spike_trains,), dtype=object (each element = (n_spikes,) array) or
+        ndarray, shape=(n_spike_trains,n_timepts), dtype=bool
 
-        NOTE: Unlike other functions, here object array must be 1d and
-        boolean spike trains are not supported
+        List(s) of spike timestamps (in s).  Can be given for either a single spike train,
+        or for multiple spike trains (eg different trials, units, etc.) within an object array.
+        -or-
+        Binary/boolean representation of spike times, for either a single or multiple spike trains.
+
+        Data is ultimately transformed to timestamp format for vector graphics plots, and to binary
+        format for bitmap/raster graphics plots. Therefore, if the "wrong" format is input for a
+        requested graphics type, you must also input additional keyword args required by the data
+        format transformation functions -- :func:`bool_to_times` requires a value `timepts`;
+        :func:`times_to_bool`) requires a value for either `lims` or `bins` (see functions
+        for details).
+
+        NOTE: Since raster plots are 2-dimensional (time x trials/units/etc.), data here has
+        stricter shape requirements than other functions -- it can have at most 1 dimension
+        other than time. That is, timestamp object arrays must be 1D (length=n_spike_trains);
+        binary spike data must be <= 2D (shape=n_spike_trains,n_timepts).
 
     ax : Pyplot Axis object, default: plt.gca()
         Axis to plot into
 
-    xlim : array-like, shape=(2,), default: (auto-set by matlplotlib)
-        x-axis limits of plot
+    graphics : {'bitmap','vector'}, default: 'bitmap' for binary data, 'vector' for timestamps
+        Type of graphics to use for plotting rasters:
 
-    color : Color specifier, default: '0.25' (dark gray)
+        - Vector graphics using :func:`plt.plot`. Individual spikes rendered as line objects
+        that are manipulatable in vector graphics software like Adobe Illustrator, but much slower.
+
+        - Bitmapped (aka raster) graphics using :func:plt.imshow. Full raster plot rendered as
+        single (unmanipulatable) image, but plots much faster. (Note: "raster graphics" is a
+        term from computer graphics that is unrelated to "raster plots" in electrophysiology.)
+        
+        NOTE: In some cases, a substantial number of spikes "disappear" from bitmap plots. This
+        seems to happen when plotting into smaller figures (eg inline/within-IDE plots or
+        default-size separate-window figures), and when these figures are save to bitmap-based
+        file formats (eg png, jpg). This problem doesn't seem to happen when you plot into
+        full-screen separate-window figures (see :func:`plots.full_figure`), when figures are saved
+        into vector-based file formats (eg pdf, eps), or when figures are saved to bitmap-based
+        formats (eg png) using our version of savefig() :func:`plots.savefig`.
+
+    color : Matplotlib color specifier, default: '0.25' (dark gray)
         Color to plot all spikes in
 
     height : float, default: 1.0 (each spike height is full range for its row in raster)
-        Height of each plotted spike (in fraction of distance btwn spike trains)
+        Height of each plotted spike (in fraction of distance btwn spike trains).
+        Only used for vector graphics version (height always 1 for bitmap/raster graphics).
 
-    xlabel,ylabel : str, default: (no label)
-        x,y-axis labels for plot
+    events : callable or array-like, shape=(n_events,)
+        List of event values (eg times) to plot as markers on x-axis
+        -or- callable function that will just plot the event markers itself.
+        See :func:`plots.plot_markers` for details.
 
     Returns
     -------
     ax : Pyplot Axis object
         Axis for plot
+
+    References
+    ----------
+    https://en.wikipedia.org/wiki/Vector_graphics
     """
     if ax is None: ax = plt.gca()
+    data_type = _spike_data_type(data)
+    if graphics is None:
+        graphics = 'bitmap' if data_type == 'bool' else 'vector'
 
-    def _plot_raster_line(spike_times, y=0, xlim=None, color='0.25', height=1.0):
-        """ Plots single line of raster plot """
-        # Extract only spike w/in plotting time window
-        if xlim is not None:
-            spike_times = spike_times[(spike_times >= xlim[0]) &
-                                      (spike_times <= xlim[1])]
+    assert data_type in ['bool','timestamp'], \
+        ValueError("Spiking data must be timestamps or binary spike trains")
+    assert graphics in ['bitmap','vector'], \
+        ValueError("Unsupported graphics type '%s'. Should be 'vector'|'bitmap'" % graphics)
 
-        y = np.asarray([[y+height/2.0], [y-height/2.0]])
+    # Hash kwargs into those related to spike data-type conversion vs matplotlib axes params
+    spike_conversion_params = ['timepts','axis','lims','width','bins']
+    axes_args, spike_conversion_args = _hash_kwargs(kwargs, [AXES_PARAMS,spike_conversion_params])
 
-        plt.plot(spike_times[np.newaxis,:]*np.ones((2,1)),
-                 y*np.ones((1,len(spike_times))), '-', color=color,linewidth=1)
+    # Vector graphics version -- plot each spike as a line
+    if graphics == 'vector':
+        # Convert spiking data to timestamps within object array
+        if data_type == 'bool': data = bool_to_times(data, **spike_conversion_args)
+        if data.dtype != object:  data = _enclose_in_object_array(data)
 
-    # Plotting multiple spike train (multiple trials or neurons)
-    # Plot each spike train as a separate line
-    if spike_times.dtype == object:
-        n_spike_trains = spike_times.shape[0]
-        for i_train,train in enumerate(spike_times):
-            if train != []:
-                _plot_raster_line(train,i_train,xlim=xlim,
-                                  color=color,height=height)
+        assert data.ndim == 1, \
+            ValueError("Spike data can have only 1 non-time dimension (data.ndim=%d)" % data.ndim)
 
-    # Plotting a single spike train
-    else:
-        n_spike_trains = 1
-        _plot_raster_line(spike_times,0,xlim=xlim,color=color,height=height)
+        n_spike_trains = data.shape[0]
 
-    plt.ylim((-0.5,n_spike_trains-0.5))
-    if xlim is not None:    plt.xlim(xlim)
-    if xlabel is not None:  plt.xlabel(xlabel)
-    if ylabel is not None:  plt.ylabel(ylabel)
+        xlim = axes_args['xlim'] if 'xlim' in axes_args else None
+
+        # Plot each spike train as a separate row in raster plot
+        for i_train,train in enumerate(data):
+            if len(train) == 0: continue        # Check if spike train is empty
+            # Extract only spikes w/in plotting time window
+            if xlim is not None:
+                train = train[(train >= xlim[0]) & (train <= xlim[1])]
+                if len(train) == 0: continue    # Check if spike train is empty now
+
+            y = np.asarray([[i_train+height/2.0], [i_train-height/2.0]])
+            plt.plot(train[np.newaxis,:]*np.ones((2,1)),
+                     y*np.ones((1,len(train))), '-', color=color, linewidth=1)
+
+        # If xlim not input, set to full range of spike timestamps (rounding to nearest 0.1)
+        if xlim is None:
+             min_vec = np.frompyfunc(min,1,1)
+             max_vec = np.frompyfunc(max,1,1)
+             xlim = (floor(10.0*np.min(min_vec(data)))/10.0, ceil(10.0*np.max(max_vec(data)))/10.0)
+
+        # Merge any input parameters with default values and set axis parameters
+        axes_args = _merge_dicts(dict(xlim=xlim, ylim=(-0.5,n_spike_trains-0.5)), axes_args)
+        ax.set(**axes_args)
+
+        if events is not None:
+            if callable(events):    events()
+            else:                   plot_markers(events, axis='x', ax=ax)
+
+    # Raster graphics version -- plot full raster plot as a single bitmapped image
+    elif graphics == 'bitmap':
+        if data_type == 'timestamp':
+            timepts = spike_conversion_args.pop('timepts',None)
+            # Convert time sampling vector to list bins of form [start,end]
+            if timepts is not None:
+                timepts = np.asarray(timepts)[:,np.newaxis]
+                dt = np.diff(timepts,axis=0).mean()
+                bins = np.hstack((timepts-dt/2, timepts+dt/2))
+                spike_conversion_args['bins'] = bins
+
+            if data.dtype != object:  data = _enclose_in_object_array(data)
+            data, timepts = times_to_bool(data, **spike_conversion_args)
+
+        else:
+            assert 'timepts' in spike_conversion_params, \
+                NameError("For binary spike data, time sampling vector must be given in <timepts>")
+            timepts = spike_conversion_args['timepts']
+            if data.ndim == 1: data = data[np.newaxis,:]    # Prepend dummy spike-trains axis
+
+        assert data.ndim == 2, \
+            ValueError("Spike data can have only 1 non-time dimension (data.ndim=%d)" % data.ndim)
+
+        n_spike_trains = data.shape[0]
+
+        # Make binary colormap with white=no spikes and <color>=spike. Pass as arg to plot_heatmap().
+        if 'cmap' not in axes_args:
+            axes_args['cmap'] = make_colormap(colors=[to_rgb('w'), to_rgb(color)], register=False)
+
+        plot_heatmap(timepts, np.arange(n_spike_trains), data, ax=ax, clim=(0,1),
+                     events=events, **axes_args)
 
     return ax
 
@@ -2077,7 +2157,7 @@ def _cut_trials_spike_bool(data, trial_lims, smp_rate=None, axis=0):
 def _select_time_range_spike_times(data, time_range):
     """ Selects given time range from spike timestamp data, deleting data outside range """
     data = data.copy()
-    
+
     # Create 1D flat iterator to iterate over arbitrary-shape data array
     # Note: This always iterates in row-major/C-order regardless of data order, so all good
     data_flat = data.flat
