@@ -37,9 +37,11 @@ Function reference
 #
 # @author: sbrincat
 import os
+from warnings import warn
 import numpy as np
 import matplotlib.pyplot as plt
 
+from matplotlib import get_backend
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
@@ -811,7 +813,19 @@ def _maximize_figure():
     """
     Maximize size of current Pyplot figure to fill full screen
 
-    REFERENCE  gist.github.com/smidm/d26d34946af1f59446f0
+    References
+    ----------
+    https://stackoverflow.com/a/32428266
     """
-    fig_manager = plt.get_current_fig_manager()
-    if hasattr(fig_manager, 'window'): fig_manager.window.showMaximized()
+    manager = plt.get_current_fig_manager()
+    
+    # Method depends on which Matplotlib backend you are using
+    backend = get_backend()    
+    if 'qt' in backend.lower():     # QT backend
+        manager.resize(manager.window.maximumWidth(), manager.window.maximumHeight())
+    elif 'tk' in backend.lower():   # TkAgg backend
+        manager.resize(*manager.window.maxsize())
+    elif 'wx' in backend.lower():   # WX backend
+        manager.frame.Maximize(True)
+    else:
+        warn("Unsupported Matplotlib backend '%s'. Could not maximize figure." % backend)
