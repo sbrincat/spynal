@@ -99,10 +99,10 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     data : array-like, shape=(...,n_obs,...)
         Data to z-score. Arbitrary dimensionality.
 
-    axis : int, default: None (compute z-score across entire data array)
-        Array axis to compute mean/SD along for z-scoring (usually corresponding to
-        distict trials/observations). If None, computes mean/SD across entire
-        array (analogous to np.mean/std).
+    axis : int or tuple of ints or None, default: None (compute z-score across entire data array)
+        Array axis(s) to compute mean/SD along for z-scoring (usually corresponding to
+        distict trials/observations). If tuple given, mean/SD are computed along all axes listed
+        in tuple. If None, computes mean/SD across entire array (analogous to np.mean/std).
 
     time_range : array-like, shape=(2,), default: None (compute mean/SD over all time points)
         Optionally allows for computing mean/SD within a given time window, then using
@@ -175,7 +175,10 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     else:
         zero_points = np.isclose(sd,0,rtol=zerotol)
         tiling = [1]*data.ndim
-        tiling[axis] = data.shape[axis]
+        if np.isscalar(axis):
+            tiling[axis] = data.shape[axis]
+        else:
+            for ax in axis: tiling[ax] = data.shape[ax]
         if time_range is not None: tiling[time_axis] = data.shape[time_axis]
         data[np.tile(zero_points,tiling)] = np.nan
 
@@ -1145,12 +1148,12 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
         # Note: empirically, this algorithm is faster for small n, other is faster for large n
         # todo Must be more efficient way to do this???
         if n_datapoints < 10000:
-            f_x = np.diagonal(d @ np.linalg.pinv(covariance) @ d.T)
+            f_x = np.diagonal(d @ np.linalg.pinv(covariance,hermitian=True) @ d.T)
         else:
             f_x = np.empty((n_datapoints,))
             for j in range(n_datapoints):
                 d_j = d[j,:]
-                f_x[j] = d_j @ np.linalg.pinv(covariance) @ d_j.T
+                f_x[j] = d_j @ np.linalg.pinv(covariance,hermitian=True) @ d_j.T
 
     # Compute exp(-1/2*z**2), scale by amplitude and add in any baseline
     f_x = amplitude*np.exp(-f_x/2) + baseline

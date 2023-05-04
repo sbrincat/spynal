@@ -266,7 +266,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, n_chnls=1, distribu
             Set=None [default] for unseeded random numbers.
 
     RETURNS
-    data    (n*n_conds,). Simulated data for multiple repetitions of one/more conditions.
+    data    (n*n_conds,n_chnls). Simulated data for multiple repetitions of one/more conditions.
 
     labels  (n*n_conds,) of int. Condition/group labels for each trial.
             Sorted in group order to simplify visualization.

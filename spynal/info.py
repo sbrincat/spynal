@@ -246,7 +246,8 @@ def neural_info_ngroups(*args, axis=0, method='pev', keepdims=True, **kwargs):
 
 
 def _string_to_info_func(method):
-    """ Converts string specifier to function for computing neural information """
+    """ Convert string specifier to function for computing neural information """
+    method = method.lower()
     if method == 'pev':                                     return pev
     elif method in ['dprime','d','cohensd']:                return dprime
     elif method in ['auroc','roc','aucroc','auc']:          return auroc
@@ -375,9 +376,12 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     - https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
     - https://scikit-learn.org/stable/modules/generated/sklearn.svm.SVC.html
     """
-    labels = np.asarray(labels)
     data = np.asarray(data)
-
+    labels = np.asarray(labels)
+    # FIX sklearn doesn't like when object arrays actually contain int values, so fix that
+    if (labels.dtype == object) and np.all([isinstance(label,int) for label in labels]):
+        
+        labels = labels.astype(int)
     if axis < 0:            axis = data.ndim + axis
     if feature_axis < 0:    feature_axis = data.ndim + feature_axis
 
@@ -427,7 +431,7 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
         elif decoder in ['logistic','logisticregression']:
             # If not specified otherwise, set uniform prior
-            if 'penalty' not in kwargs: kwargs['penalty'] = 'none'
+            if 'penalty' not in kwargs: kwargs['penalty'] = 'none' # TODO Need to change to None due to deprecation
             decoder = LogisticRegression(**kwargs)
 
         elif decoder in ['svm','svc']:
@@ -449,20 +453,9 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     # Convert string specifier to scikit cross-validation object, including default
     if isinstance(cv,str):
-        cv = cv.lower()
-        # Default <cv>: shuffled 5-fold StratifiedKFold
-        if cv in ['default','auto','stratifiedkfold']:
-            cv = StratifiedKFold(n_splits=5,shuffle=True,random_state=seed)
-        elif cv == 'none':
-            cv = None
-        else:
-            raise ValueError("Unsupported value '%s' given for cv" % cv)
-
+        cv = _string_to_cv_object(cv, seed=seed)
     else:
-        # Ensure we actually have an sklearn(-like) cross-validator object
-        assert _has_method(cv,'split') or (cv is None), \
-            TypeError("Unsupported type (%s) for cv. Use string | scikit model_selection object"
-                        % type(cv))
+        _check_cv_object(cv)
 
     if return_stats:
         stats = {stat:None for stat in stats}
@@ -515,7 +508,7 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     if as_pct: accuracy = 100.0*accuracy
 
-    # Insert 2 singleton axis as 1st axes of array to replace trial,channel axes
+    # Insert two singleton axes as 1st axes of array to replace trial,feature/channel axes
     accuracy = accuracy[np.newaxis,np.newaxis,...]
 
     # Reshape "data series" axis back to original dimensionality
@@ -555,6 +548,24 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     if return_stats:    return accuracy, stats
     else:               return accuracy
 
+
+def _string_to_cv_object(cv, seed=None):
+    """ Convert string specifier to scikit cross-validation "Splitter" object """
+    cv = cv.lower()
+    # Default <cv>: shuffled 5-fold StratifiedKFold
+    if cv in ['default','auto','stratifiedkfold']:
+        return StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
+    elif cv == 'none':
+        return None
+    else:
+        raise ValueError("Unsupported value '%s' given for cv" % cv)
+   
+def _check_cv_object(cv):
+    """ Ensure we actually have an sklearn(-like) cross-validator object """
+    assert _has_method(cv,'split') or (cv is None), \
+        TypeError("Unsupported type (%s) for cv. Use string | scikit model_selection Splitter object"
+                    % type(cv))
+    
 
 # =============================================================================
 # Mutual information analysis
