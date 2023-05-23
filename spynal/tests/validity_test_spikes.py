@@ -336,8 +336,8 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
     sim_args = dict(gain=5.0, offset=0.0, spreads=5.0, n_conds=1, n=n_trials,
                     distribution=distribution, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)    
 
     if test in ['mean','rate','gain']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -527,8 +527,8 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
     # Note: Only set random seed once above, don't reset in data generator function calls
     sim_args = dict(gain=0.0, offset=5.0, n_conds=1, n_trials=n_reps, time_range=10.0, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test in ['mean','rate','gain']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -690,8 +690,8 @@ def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
                     trough_width=0.2e-3, peak_width=0.4e-3, time_range=(-0.2e-3,1.4e-3),
                     smp_rate=30e3, noise=0.01, n_spikes=100, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test in ['width','t2p','trough_to_peak_width']:
         test_values = np.asarray([0.35,0.45,0.55])*1e-3 if test_values is None else test_values

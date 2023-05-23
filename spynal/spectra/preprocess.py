@@ -279,7 +279,9 @@ def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False)
         assert design.ndim in [1,2], \
             "Design matrix <design> must be matrix-like (2d) or vector-like (1d)"
 
-        model = LinearRegression()
+        # Only fit explicit intercept if design doesn't already have a constant (intercept) column in it
+        has_constant_col = np.any(np.all(design==1, axis=0))
+        model = LinearRegression(fit_intercept=True if not has_constant_col else False)
 
         data, data_shape = standardize_array(data, axis=axis, target_axis=0)
 

@@ -1632,6 +1632,7 @@ def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
         labels      = np.hstack((labels,np.ones((n_obs,1))))
         col_terms   = np.hstack((col_terms,np.nan))
         constant_col = np.hstack((constant_col,True))
+    constant_col = np.asarray(constant_col) # Note: This is just to satisfy linter
 
     n_params    = labels.shape[1]
 
@@ -1641,8 +1642,8 @@ def regress(data, labels, axis=0, col_terms=None, omega=True, constant=True,
     grand_mean  = np.mean(data, axis=0)
     SS_total    = np.sum((data - grand_mean)**2, axis=0) # Total Sums of Squares
 
-    # Create linear regression object
-    model       = LinearRegression()
+    # Create linear regression object (Note: Intercept is fit implicitly by constant column set above)
+    model       = LinearRegression(fit_intercept=False)
 
     # Fit full model to data, save coefficients, and compute prediction of data
     model.fit(labels,data)

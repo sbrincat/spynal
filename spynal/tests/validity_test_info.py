@@ -121,8 +121,8 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     sim_args = dict(gain=5.0, offset=5.0, spreads=5.0, n_conds=2, n=500,
                     distribution=distribution, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values

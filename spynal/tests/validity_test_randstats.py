@@ -141,8 +141,8 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
                     distribution=distribution, correlation=0, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -481,9 +481,8 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
                     distribution=distribution, seed=None)
     # Override defaults with any simulation-related params passed to function
-    for arg in kwargs:
-        if arg in sim_args: sim_args[arg] = kwargs.pop(arg)
-    
+    for arg in sim_args:
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test == 'gain':
         test_values = [1,2,5,10,20] if test_values is None else test_values
