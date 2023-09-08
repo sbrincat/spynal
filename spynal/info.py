@@ -88,6 +88,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
+from sklearn import __version__ as sklearn_version
 from patsy import DesignMatrix
 
 from spynal.utils import unsorted_unique, data_groups_to_data_labels, \
@@ -332,8 +333,10 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     stats : str or list of str, default: ['predict','prob'] (if return_stats=True)
         List of additional classifier stats to return. Options:
-        'predict' : Predicted class for each trial/observation
-        'prob' :    Posterior probability for each class, for each trial/observation
+
+        - 'predict' : Predicted class for each trial/observation
+        - 'prob' : Posterior probability for each class, for each trial/observation
+        - 'decision' : "Decision function" confidence score for each trial/observation.
 
     keepdims : bool, default: True
         If True, retains `axis` and `feature_axis` reduced to length-one axes in output.
@@ -361,8 +364,15 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
             Same shape as accuracy, but `axis` has length n_obs.
         - 'prob' : ndarray, shape=(...,_n_obs,...,n_classes,...)
             Posterior probabilty for each class and each observation (trial).
-            Same shape as accuracy, but `axis` has length
-            n_obs and `feature_axis` has length n_classes.
+            Same shape as accuracy, but `axis` has length n_obs
+            and `feature_axis` has length n_classes.
+        - 'decision' : ndarray, shape=(...,_n_obs,...,[1,]...) or (...,_n_obs,...,n_classes,...)
+            "Decision function" confidence score for each trial/observation.
+            For most classifiers, this is proportional to distance from separating hyperplane.
+            Same shape as accuracy, but `axis` has length n_obs. For binary classification,
+            `feature_axis` is reduced to length 1 and it reflects the signed decision in favor
+            of class 2. For multi-class classification, it reflects the signed score in favor
+            of each class, for each observation.
 
     Examples
     --------
@@ -378,9 +388,8 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     """
     data = np.asarray(data)
     labels = np.asarray(labels)
-    # FIX sklearn doesn't like when object arrays actually contain int values, so fix that
+    # BUGFIX sklearn doesn't like when object arrays actually contain int values, so fix that
     if (labels.dtype == object) and np.all([isinstance(label,int) for label in labels]):
-        
         labels = labels.astype(int)
     if axis < 0:            axis = data.ndim + axis
     if feature_axis < 0:    feature_axis = data.ndim + feature_axis
@@ -431,12 +440,14 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
         elif decoder in ['logistic','logisticregression']:
             # If not specified otherwise, set uniform prior
-            if 'penalty' not in kwargs: kwargs['penalty'] = 'none' # TODO Need to change to None due to deprecation
+            if 'penalty' not in kwargs:
+                kwargs['penalty'] = 'none' if sklearn_version < '1.2' else None
             decoder = LogisticRegression(**kwargs)
 
         elif decoder in ['svm','svc']:
             # If not specified otherwise, set linear kernel
             if 'kernel' not in kwargs: kwargs['kernel'] = 'linear'
+            if return_stats and ('prob' in stats): kwargs['probability'] = True
             decoder = SVC(**kwargs)
 
         else:
@@ -466,6 +477,10 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
             elif stat == 'prob':
                 stats[stat] = np.empty((n_obs,n_classes,n_series))
                 method = 'predict_proba'
+            elif stat == 'decision':
+                decision_len = n_classes if n_classes > 2 else 1
+                stats[stat] = np.empty((n_obs,decision_len,n_series))
+                method = 'decision_function'
             else:
                 raise ValueError("Unsupported stat '%s' requested" % stat)
 
@@ -491,8 +506,15 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
                         stats[stat][test_idxs,0,i_series] = \
                             decoder.predict(data[test_idxs,:,i_series])
                     elif stat == 'prob':
-                        tmp = decoder.predict_proba(data[test_idxs,:,i_series])
-                        stats[stat][test_idxs,:,i_series] = tmp
+                        stats[stat][test_idxs,:,i_series] = \
+                            decoder.predict_proba(data[test_idxs,:,i_series])
+                    elif stat == 'decision':
+                        stats[stat][test_idxs,:,i_series] = \
+                            decoder.decision_function(data[test_idxs,:,i_series]) \
+                            if n_classes > 2 else \
+                            decoder.decision_function(data[test_idxs,:,i_series])[:,np.newaxis]
+                                
+                            
 
         # Take the mean across all cross-validation folds
         accuracy = np.mean(acc_folds, axis=1)
@@ -519,31 +541,33 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
                 stats[stat] = stats[stat].reshape((n_obs,*data_shape[2:]))
             elif stat == 'prob':
                 stats[stat] = stats[stat].reshape((n_obs,n_classes,*data_shape[2:]))
+            elif stat == 'decision':
+                stats[stat] = stats[stat].reshape((n_obs,decision_len,*data_shape[2:]))
 
     # Move/swap array axes to original locations
     if (axis == 1) and (feature_axis == 0):
         data = np.swapaxes(data,axis,feature_axis)
         for stat in stats:
-            if stat == 'predict':   stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
-            elif stat == 'prob':    stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
+            stats[stat] = np.swapaxes(stats[stat],axis,feature_axis)
     else:
         if axis != 0:
             data = np.moveaxis(data,0,axis)
             for stat in stats:
-                if stat == 'predict':   stats[stat] = np.moveaxis(stats[stat],0,axis)
-                elif stat == 'prob':    stats[stat] = np.moveaxis(stats[stat],0,axis)
+                stats[stat] = np.moveaxis(stats[stat],0,axis)
         if feature_axis != 1:
             data = np.moveaxis(data,1,feature_axis)
             for stat in stats:
-                if stat == 'predict':   stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
-                elif stat == 'prob':    stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
+                stats[stat] = np.moveaxis(stats[stat],1,feature_axis)
 
     if data_ndim <= 2:
         accuracy = accuracy.item()
         for stat in stats:  stats[stat] = stats[stat].squeeze()
     elif not keepdims:
         accuracy = accuracy.squeeze(axis=(axis,feature_axis))
-        if 'predict' in stats:  stats['predict'] = stats['predict'].squeeze(axis=feature_axis)
+        if 'predict' in stats:
+            stats['predict'] = stats['predict'].squeeze(axis=feature_axis)
+        if ('decision' in stats) and (n_classes == 2):
+            stats['decision'] = stats['decision'].squeeze(axis=feature_axis)
 
     if return_stats:    return accuracy, stats
     else:               return accuracy
@@ -559,13 +583,13 @@ def _string_to_cv_object(cv, seed=None):
         return None
     else:
         raise ValueError("Unsupported value '%s' given for cv" % cv)
-   
+
 def _check_cv_object(cv):
     """ Ensure we actually have an sklearn(-like) cross-validator object """
     assert _has_method(cv,'split') or (cv is None), \
         TypeError("Unsupported type (%s) for cv. Use string | scikit model_selection Splitter object"
                     % type(cv))
-    
+
 
 # =============================================================================
 # Mutual information analysis

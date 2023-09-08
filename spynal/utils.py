@@ -1147,13 +1147,15 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
 
         # Note: empirically, this algorithm is faster for small n, other is faster for large n
         # todo Must be more efficient way to do this???
+        # Newer versions of Numpy have more efficient algorithm for inverting Hermitian matrices
+        pinv_args = {'hermitian':True} if np.__version__ >= '1.17' else {}
         if n_datapoints < 10000:
-            f_x = np.diagonal(d @ np.linalg.pinv(covariance,hermitian=True) @ d.T)
+            f_x = np.diagonal(d @ np.linalg.pinv(covariance,**pinv_args) @ d.T)
         else:
             f_x = np.empty((n_datapoints,))
             for j in range(n_datapoints):
                 d_j = d[j,:]
-                f_x[j] = d_j @ np.linalg.pinv(covariance,hermitian=True) @ d_j.T
+                f_x[j] = d_j @ np.linalg.pinv(covariance,**pinv_args) @ d_j.T
 
     # Compute exp(-1/2*z**2), scale by amplitude and add in any baseline
     f_x = amplitude*np.exp(-f_x/2) + baseline
@@ -1236,7 +1238,7 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
     step : scalar, default: step = `width` (ie, perfectly non-overlapping windows)
         Spacing between start of adjacent windows
 
-    reference : bool, dfault: None (just start at lim[0])
+    reference : bool, default: None (just start at lim[0])
         Optionally sets a reference value at which one window starts and the
         rest of windows will be determined from there.
         eg, set = 0 to have a window start at x=0, or set = -width/2 to have a
@@ -1381,7 +1383,7 @@ def standardize_array(data, axis=0, target_axis=0):
 
     target_axis : int, default: 0
         Array axis to move `axis` to for subsequent analysis.
-        MUST be 0 (first axis) or -1 (last axis).
+        NOTE: MUST be 0 (first axis) or -1 (last axis).
 
     Returns
     -------
@@ -1428,7 +1430,7 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
 
     target_axis : int, default: 0
         Array axis `axis` was moved to for subsequent analysis
-        MUST be 0 (first axis) or -1 (last axis)
+        NOTE: MUST be 0 (first axis) or -1 (last axis)
 
     Returns
     -------

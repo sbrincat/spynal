@@ -16,7 +16,7 @@ requirements = [
         'hdf5storage',
         'patsy',
         'sklearn',
-        'pyfftw'
+        'pyfftw>=0.12.0'
         ]
 
 setuptools.setup(
