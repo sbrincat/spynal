@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+title: spynal
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Scott
+    family-names: Brincat
+    affiliation: MIT
+    orcid: 'https://orcid.org/0000-0002-7777-7294'
+    email: sbrincat@mit.edu
+version: 0.1.2
+doi: 10.5281/zenodo.8346152
+date-released: 2023-09-14
+url: "https://github.com/sbrincat/spynal"

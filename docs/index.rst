@@ -24,7 +24,7 @@ Design principles
 -----------------
 The library is based on several underlying design principles:
 
-- **Simplicity** -- Simple, easy-to-use functional inferface that's friendly to users migrating to Python
+- **Simplicity** -- Simple, easy-to-use procedural inferface that's friendly to users migrating to Python
     from other languages. No knowledge of object-oriented programming or complicated
     data/parameter structures required.
 - **Consistency** -- Functions have a uniform, familiar interface of the form:

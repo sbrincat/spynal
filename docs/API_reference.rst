@@ -6,10 +6,10 @@ This section gives a high-level summary of the Spynal API -- how users interface
 and how developers should write new code for it. *Specific* reference for each Spynal module
 and function can be found in the :doc:`Function reference by module <modules>` section.
 
-Functional interface
+Procedural interface
 --------------------
-Spynal has a Matlab-like purely functional interface. No object-oriented programming required,
-and no hidden state changes. To perform analysis, users simply call the appropriate function
+Spynal has a Matlab-like purely procedural (function-based) interface. No object-oriented programming
+required, and no hidden state changes. To perform analysis, users simply call the appropriate function
 with a data array, and typically one or more appropriate parameters:
 
 ``analysis(data, labels, ...)``

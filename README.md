@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/296102080.svg)](https://zenodo.org/badge/latestdoi/296102080)
+
 # spynal
 Simple Python Neural Analysis Library, the backbone of your neural data analysis pipeline.  
 
@@ -9,7 +11,7 @@ accessible and easy-to-use for people migrating to Python from Matlab or other s
 programming languages.  
 
 ### Features include:
-**Simplicity**: Easy-to-use interface; no OOP or complicated data/params structures  
+**Simplicity**: Easy-to-use procedural interface; no OOP or complicated data/params structures  
 **Consistency**: Consistent function signature ~ analysis(data, labels, axis, extra_param=value)  
 **Modularity**: Can use specific functionality without buy-in to an entire processing chain  
 **Foolproof**: Extensive documentation and checking for proper function inputs  
