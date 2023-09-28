@@ -1,6 +1,6 @@
 [![DOI](https://zenodo.org/badge/296102080.svg)](https://zenodo.org/badge/latestdoi/296102080)
 
-# spynal
+# spynal: Simple Python Neural Analysis Library
 Simple Python Neural Analysis Library, the backbone of your neural data analysis pipeline.  
 
 Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python  
