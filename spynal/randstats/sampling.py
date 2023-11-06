@@ -8,6 +8,7 @@ Function reference
 - bootstraps :                  Generate random bootstrap samples (resampling w/ replacement)
 - signs :                       Generate random binary variables (eg for sign tests)
 - jackknifes :                  Generate jackknife samples (exclude each observation in turn)
+- subsets :                     Generate random length-k subsets (resampling w/o replacement)
 
 Function reference
 ------------------
@@ -41,7 +42,7 @@ def permutations(n, n_resamples=9999, seed=None):
     ------
     resamples : generator, shape=(n_resamples,) of [ndarray, shape=(n,), dtype=int]
         Generator to iterate over for permutation test.
-        Each iteration contains a distinct random permutation of integers 0:n-1.
+        Each iteration contains a random permutation of integers 0:n-1.
     """
     if seed is not None: set_random_seed(seed)
 
@@ -71,7 +72,7 @@ def bootstraps(n, n_resamples=9999, seed=None):
     ------
     resamples : generator, shape=(n_resamples,) of [ndarray, shape=(n,), dtype=int]
         Generator to iterate over for boostrap test or confidence interval computation.
-        Each iteration contains a distinct random resampling with replacement from integers 0:n-1.
+        Each iteration contains a random resampling with replacement from integers 0:n-1.
     """
     if seed is not None: set_random_seed(seed)
 
@@ -101,7 +102,7 @@ def signs(n, n_resamples=9999, seed=None):
     ------
     resamples : generator, shape=(n_resamples,) of [ndarray, shape=(n,), dtype=bool]
         Generator to iterate over for random sign test.
-        Each iteration contains a distinct random resampling of n Bernoulli random variables.
+        Each iteration contains a random resampling of n Bernoulli random variables.
     """
     if seed is not None: set_random_seed(seed)
 
@@ -140,3 +141,36 @@ def jackknifes(n, n_resamples=None, seed=None):
     trials = np.arange(n)
     for trial in range(n):
         yield trials != trial
+
+
+def subsets(n, k, n_resamples=9999, seed=None):
+    """
+    Yield generator with a set of `n_resamples` random length-k subsets of integers 0:n-1.
+    
+    Random sampling version of "n-choose-k" function.
+    
+    Parameters
+    ----------
+    n : int
+        Number of items to randomly resample from.
+        Will usually correspond to number of observations/trials.
+
+    k : int
+        Length of subset to select. For example, k=2 implies random sampling from "n-choose-2".
+
+    n_resamples : int, default: 9999 (appropriate number for test w/ 10,000 samples)
+        Number of independent resamples to generate.
+
+    seed : int, default: None
+        Random generator seed for repeatable results. Set=None for unseeded random numbers.
+
+    Yields
+    ------
+    resamples : generator, shape=(n_resamples,) of [ndarray, shape=(k,), dtype=int]
+        Generator to iterate over for a random-subset test.
+        Each iteration contains a random subset of integers 0:n-1.
+    """
+    if seed is not None: set_random_seed(seed)
+
+    for _ in range(n_resamples):
+        yield np.random.permutation(n)[:k]

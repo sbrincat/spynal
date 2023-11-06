@@ -1589,8 +1589,9 @@ def iarange(*args, **kwargs):
         stop = args[1]
         step = args[2]
 
-    # Offset to get final value in sequence is 1 for int-valued step, small float otherwise
-    offset = 1 if isinstance(step,int) else 1e-12
+    # Offset to get final value in sequence is 1 for int-valued args, small float otherwise
+    offset = 1 if (isinstance(stop,int) and isinstance(start,int) and isinstance(step,int)) \
+             else 1e-12
     # Make offset negative for a negative step
     if step < 0: offset = -offset
 

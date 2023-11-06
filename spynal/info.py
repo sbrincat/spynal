@@ -1128,7 +1128,7 @@ def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=
     elif model == 'anova2':
         return anova2(data, labels, axis=axis, omega=omega, as_pct=as_pct,
                       return_stats=return_stats, keepdims=keepdims, **kwargs)
-    # Compute PEV based on 2-way ANOVA model
+    # Compute PEV based on regression
     elif model == 'regress':
         return regress(data, labels, axis=axis, omega=omega, as_pct=as_pct,
                        return_stats=return_stats, keepdims=keepdims, **kwargs)
