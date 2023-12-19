@@ -15,7 +15,7 @@ requirements = [
         'h5py',
         'hdf5storage',
         'patsy',
-        'sklearn',
+        'scikit-learn',
         'pyfftw>=0.12.0'
         ]
 

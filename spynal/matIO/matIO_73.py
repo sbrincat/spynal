@@ -20,12 +20,13 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
     transpose = order.upper() in ['MATLAB','F','COL','COLMAJOR']
 
     # Open datafile for reading
-    # For newer versions, can specify to maintain original object attribute order
-    #  (eg original order of struct fields)
-    if h5py.__version__ >= '2.9.0':
-        file = h5py.File(filename,'r',track_order=True)
-    else:
-        file = h5py.File(filename,'r')
+    #  For newer versions, can specify to maintain original object attribute order
+    #    (eg original order of struct fields)
+    #  For newest versions, specifying 'locking' behavior may be necessary
+    extra_args = {}
+    if h5py.__version__ >= '2.9.0': extra_args['track_order'] = True
+    if h5py.__version__ >= '3.5.0': extra_args['locking'] = 'best-effort'
+    file = h5py.File(filename, 'r', **extra_args)
 
     # If <variables> not set, load all variables from datafile (keys for File object)
     # Note: Get rid of header info ('#refs#' variable)
@@ -132,7 +133,7 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
                                                       extract_item=extract_item,
                                                       extract_items=extract_items, level=level)
                         if not extract_item: elem_c = np.atleast_1d(elem_c)
-                        converted[row,col] = elem_c    
+                        converted[row,col] = elem_c
 
             # Matlab numerical arrays -- straight copy to Numpy ndarray of appropriate dtype
             else:

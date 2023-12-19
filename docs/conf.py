@@ -14,7 +14,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../spynal'))
 autodoc_mock_imports = ['numpy','scipy','pandas','matplotlib','h5py','hdf5storage',
-                        'patsy','sklearn','pyfftw','xarray','spynal']
+                        'patsy','scikit-learn','pyfftw','xarray','spynal']
 
 
 # -- Project information -----------------------------------------------------
