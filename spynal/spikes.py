@@ -1594,9 +1594,10 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
 
         # If xlim not input, set to full range of spike timestamps (rounding to nearest 0.1)
         if xlim is None:
-             min_vec = np.frompyfunc(min,1,1)
-             max_vec = np.frompyfunc(max,1,1)
-             xlim = (floor(10.0*np.min(min_vec(data)))/10.0, ceil(10.0*np.max(max_vec(data)))/10.0)
+            # Note: lambdas needed to deal with empty arrays (eg trials w/ no spikes)
+            min_vec = np.frompyfunc(lambda x: min(x) if len(x) > 0 else -1e-12, 1, 1)
+            max_vec = np.frompyfunc(lambda x: max(x) if len(x) > 0 else 1e-12, 1, 1)
+            xlim = (floor(10.0*np.min(min_vec(data)))/10.0, ceil(10.0*np.max(max_vec(data)))/10.0)
 
         # Merge any input parameters with default values and set axis parameters
         axes_args = _merge_dicts(dict(xlim=xlim, ylim=(-0.5,n_spike_trains-0.5)), axes_args)
