@@ -1589,8 +1589,8 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
                 if len(train) == 0: continue    # Check if spike train is empty now
 
             y = np.asarray([[i_train+height/2.0], [i_train-height/2.0]])
-            plt.plot(train[np.newaxis,:]*np.ones((2,1)),
-                     y*np.ones((1,len(train))), '-', color=color, linewidth=1)
+            ax.plot(train[np.newaxis,:]*np.ones((2,1)),
+                    y*np.ones((1,len(train))), '-', color=color, linewidth=1)
 
         # If xlim not input, set to full range of spike timestamps (rounding to nearest 0.1)
         if xlim is None:

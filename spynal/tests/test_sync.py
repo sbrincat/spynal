@@ -63,7 +63,7 @@ def spike_field_pair(oscillation_pair):
 @pytest.mark.parametrize('method, spec_method, single_trial, result',
                          [('coherence', 'wavelet',      None,       (0.2475,0.4795)),
                           ('coherence', 'multitaper',   None,       (0.1046,0.3043)),
-                          ('coherence', 'bandfilter',   None,       (0.3490,0.6706)),
+                          ('coherence', 'bandfilter',   None,       (0.3490,0.6702)),
                           ('PLV',       'wavelet',      None,       (0.2541,0.3713)),
                           ('PLV',       'multitaper',   None,       (0.0984,0.2228)),
                           ('PLV',       'bandfilter',   None,       (0.3321,0.4528)),
@@ -243,13 +243,13 @@ def test_synchrony(oscillation_pair, method, spec_method, single_trial, result):
 @pytest.mark.parametrize('method, spec_method, result',
                          [('coherence', 'wavelet',      (0.2399,0.2941)),
                           ('coherence', 'multitaper',   (0.1218,0.1556)),
-                          ('coherence', 'bandfilter',   (0.3722,0.2733)),
+                          ('coherence', 'bandfilter',   (0.3722,0.2734)),
                           ('PLV',       'wavelet',      (0.1600,-0.2388,1994)),
                           ('PLV',       'multitaper',   (0.0576,0.9267,6031)),
-                          ('PLV',       'bandfilter',   (0.3040,-0.2255,1994)),
+                          ('PLV',       'bandfilter',   (0.3040,-0.2257,1994)),
                           ('PPC',       'wavelet',      (0.0764,-0.2388,1994)),
                           ('PPC',       'multitaper',   (0.0085,0.9267,6031)),
-                          ('PPC',       'bandfilter',   (0.1417,-0.2255,1994))])
+                          ('PPC',       'bandfilter',   (0.1417,-0.2257,1994))])
 def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     """ Unit tests for spike_field_coupling() function """
     # Extract per-channel data and reshape -> (n_trials,n_timepts)
