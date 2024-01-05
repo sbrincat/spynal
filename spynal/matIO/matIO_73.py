@@ -22,10 +22,13 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
     # Open datafile for reading
     #  For newer versions, can specify to maintain original object attribute order
     #    (eg original order of struct fields)
-    #  For newest versions, specifying 'locking' behavior may be necessary
-    extra_args = {}
-    if h5py.__version__ >= '2.9.0': extra_args['track_order'] = True
-    if h5py.__version__ >= '3.5.0': extra_args['locking'] = 'best-effort'
+    #  For newest versions of h5py/HDF5, specifying 'locking' behavior may be necessary
+    #    but is not an option in older versions)
+    extra_args = {}    
+    if h5py.__version__ >= '2.9.0':
+        extra_args['track_order'] = True
+    if (h5py.__version__ >= '3.5.0') and  (h5py.version.hdf5_version >= '1.12.1'):
+        extra_args['locking'] = 'best-effort'
     file = h5py.File(filename, 'r', **extra_args)
 
     # If <variables> not set, load all variables from datafile (keys for File object)
