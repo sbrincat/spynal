@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """ Helper functions for matIO package """
 from types import SimpleNamespace
+from warnings import warn
 import numpy as np
 import pandas as pd
 
@@ -522,8 +523,10 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None, extract_
         # Strings: Extract string (dealing with empty strings appropriately)
         elif obj.dtype.type == np.str_:
             if DEBUG: print('\t'*level, "string")
-            # Empty strings
+            # Empty strings: return empty str
             if len(obj) == 0:   converted = str()
+            # Character arrays (not strings per se): keep as array of str's
+            elif len(obj) > 1:  converted = obj
             # General strings: Convert to string type (from np.str_)
             else:               converted = str(obj[0])
             if not extract_item: converted = np.asarray(converted, dtype=object)
@@ -554,11 +557,16 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None, extract_
 def _v7_matlab_type(obj):
     """ Infer Matlab variable type of objects loaded from v7 mat files """
     # Matlab class objects are returned as this weird object (which is unparsable)
-    if isinstance(obj,scipy.io.matlab.mio5_params.MatlabOpaque):    return 'class'
+    if isinstance(obj,scipy.io.matlab.mio5_params.MatlabOpaque):
+        warn("Can't convert Matlab 'object' type (unknown proprietary data type). Returning None.")
+        return 'class'
+    
     # Matlab scalar structs are returned as (1,1) Numpy structured arrays
-    elif _is_structured_array(obj) and (obj.size == 1):             return 'struct'
+    elif _is_structured_array(obj) and (obj.size == 1): return 'struct'
+    
     # Matlab struct arrays are returned as (m,n) Numpy structured arrays
-    elif _is_structured_array(obj) and (obj.size > 1):              return 'structarray'
+    elif _is_structured_array(obj) and (obj.size > 1):  return 'structarray'
+    
     elif isinstance(obj,np.ndarray):
         # Cell arrays are returned as object arrays
         if obj.dtype == object:                                         return 'cell'
@@ -566,6 +574,7 @@ def _v7_matlab_type(obj):
         elif _isbinary(obj) and len(obj) > 1 and not (obj == 0).all():  return 'logical'
         # General numeric array
         else:                                                           return 'array'
+        
     else:
         raise TypeError("Undetermined type of variable:", obj)
 

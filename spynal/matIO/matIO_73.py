@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """ Functions for loading from and saving to Matlab v7.3 MAT files using h5py & hdf5storage """
+from warnings import warn
 import numpy as np
 
 import h5py
@@ -108,10 +109,17 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
                                                  matlab_vbl_type=matlab_vbl_type,
                                                  extract_item=extract_item, level=level)
 
-            # Matlab char arrays (strings) -- convert to Python string
+            # Matlab 'strings' (string-like char vectors) -- convert to Python string (str)
+            # Matlab general char arrays -- convert to Numpy array of unicode char's
+            # NOTE: Can't convert new-style Matlab string type (proprietary Matlab class)
             elif matlab_vbl_type == 'char':
                 if DEBUG: print('\t'*level, "char")
-                converted = _convert_string(obj)
+                converted = _convert_string(obj)    # Convert ints -> str (for both types)
+                
+                # Convert string -> array of char's (for Matlab char arrays)
+                # Strings (weirdly) come out as row vectors of ints
+                is_str = (obj.ndim == 2) and (obj.shape[1] == 1)
+                if not is_str: converted = np.asarray([c for c in converted])
                 if not extract_item: converted = np.array(converted, dtype=object)
 
             # Matlab logical arrays -- convert to Numpy ndarray of dtype bool
@@ -138,6 +146,13 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
                         if not extract_item: elem_c = np.atleast_1d(elem_c)
                         converted[row,col] = elem_c
 
+            # Matlab proprietary custom object types which no one yet knows how to convert...
+            # Includes new-style Matlab string types and tables
+            elif matlab_vbl_type in ['string','table']:
+                warn("Can't convert Matlab '%s' type (unknown proprietary data type). \
+                      Returning None." % matlab_vbl_type)
+                converted = None
+                
             # Matlab numerical arrays -- straight copy to Numpy ndarray of appropriate dtype
             else:
                 if DEBUG: print('\t'*level, "numerical", obj.size, extract_item)
