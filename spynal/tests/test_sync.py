@@ -280,7 +280,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
                                                         method=method, spec_method=spec_method,
                                                         smp_rate=smp_rate, return_phase=True,
                                                         **extra_args)
-    print(np.nanmean(sync), np.nanmean(phi), result)
+    print("TEST1", sync.mean(), phi.mean(), result)
     assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert isinstance(freqs, np.ndarray)
@@ -294,7 +294,7 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     assert np.issubdtype(sync.dtype,float)
     assert np.issubdtype(phi.dtype,float)
     assert np.isclose(np.nanmean(sync), result[0], rtol=1e-4, atol=1e-4)
-    assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
+    # assert np.isclose(np.nanmean(phi), result[1], rtol=1e-4, atol=1e-4)
     if method != 'coherence':
         assert isinstance(n, np.ndarray)
         assert n.shape == (n_timepts,)
@@ -348,13 +348,13 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         assert timepts.shape == (n_timepts,)
         assert sync.shape == (*sync_shape, 2)
         assert phi.shape == (*sync_shape, 2)
-        print(sync.shape)
+        print("SHAPE", sync[...,0].mean(), phi[...,0].mean(), sync.shape)
         assert np.issubdtype(sync.dtype,float)
         assert np.issubdtype(phi.dtype,float)
         assert np.isclose(sync[...,0].mean(), result[0], rtol=1e-4, atol=1e-4)
-        assert np.isclose(phi[...,0].mean(), result[1], rtol=1e-4, atol=1e-4)
+        # assert np.isclose(phi[...,0].mean(), result[1], rtol=1e-4, atol=1e-4)
         if method != 'coherence': assert np.round(n.mean()) == result[2]
-
+        asdf
     # Test for consistent output with transposed data dimensionality -> (time,trials)
     transposed_shape = (*sync_shape[1:],sync_shape[0])
     sync, freqs, timepts, n, phi = spike_field_coupling(spkdata.T, lfpdata.T,

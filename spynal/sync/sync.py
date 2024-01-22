@@ -272,21 +272,18 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
 
     Returns
     -------
-    sync : ndarray
+    sync : ndarray, shape=(...,[1,]...)
         Magnitude/strength of spike-field coupling (coherence or PLV/PPC magnitude).
 
         For phase-based methods, time windows without any spikes are set = np.nan.
 
-        If data is spectral, this has same shape as data, but with `axis` removed.
-        If data is raw, this has same shape with `axis` removed and a new
-        frequency axis inserted immediately before `time_axis`.
-
-        TODO
-        If lfpdata is spectral, this has same shape, but with `axis` removed
-        (and taper_axis as well for multitaper), and time axis reduced to n_timewins.
-        If lfpdata is raw, this has same shape with `axis` removed, `time_axis`
-        reduced to n_timewins, and a new frequency axis inserted immediately
-        before `time_axis`.
+        If lfpdata is spectral, this has same shape as lfpdata, but time axis reduced
+        to n_timewins and with `axis` (and taper_axis as well for multitaper) reduced
+        to length 1 if `keepdims` is True or removed if `keepdims` is False.
+        
+        If lfpdata is raw, this has the same shape as described above for spectral data,
+        but with a new frequency axis (and also a taper axis if `spec_method`='multitaper`)
+        inserted immediately before `time_axis`.
 
     freqs : ndarray, shape=(n_freqs,)
         List of frequencies in `sync`. Only returned for raw data, [] otherwise.
@@ -299,8 +296,9 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
         Number of spikes contributing to synchrony computations.
         Value only returned for phase-based measures (PLV/PPC), for coherence, returns None.
 
-    phi : ndarray, optional
+    phi : ndarray, shape=(...,[1,]...), optional
         Mean phase of LFPs at spike times (or phase of complex coherency) in radians.
+        Same shape as `sync`.
         Optional: Only returned if return_phase is True.
 
     Examples

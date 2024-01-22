@@ -268,9 +268,6 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
 
         n_tapers = lfpdata.shape[taper_axis]
 
-        # STOPPED HERE Need to figure out how to undo taper axis folding after PLV computation
-        # OR keep taper axis thru PLV computation?
-
         # Move taper axis next to trial axis
         lfpdata = np.moveaxis(lfpdata,taper_axis,axis)
         # If trial axis was after taper axis, taper axis is now after trial, so unwrap in F order

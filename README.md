@@ -10,21 +10,21 @@ programming languages.
 
 ### Features include:
 **Simplicity**: Easy-to-use procedural interface; no OOP or complicated data/params structures  
-**Consistency**: Consistent function signature ~ analysis(data, labels, axis, extra_param=value)  
+**Consistency**: Consistent function signature ~ `analysis(data, labels, axis, extra_param=value)`  
 **Modularity**: Can use specific functionality without buy-in to an entire processing chain  
 **Foolproof**: Extensive documentation and checking for proper function inputs  
 **Flexibility**: Detailed parameterization allows customization of analysis to users' needs  
 **Vectorized analysis**: Runs in parallel across all channels, no loops or data reshaping needed  
 
 ### Package includes the following modules:
-**matIO** -- Painless loading of MATLAB .mat data files into appropriate Python data structures  
-**spikes** -- Preprocessing and analyses of spiking data  
-**spectra** -- Spectral analysis and preprocessing of continuous data (LFP/EEG)   
-**sync** -- Analysis of oscillatory neural synchrony (field-field and spike-field)  
-**info** -- Measures of neural information about task/behavior variables  
-**randstats** -- Nonparametric randomization, permutation, and bootstrap statistics  
-**plots** -- Generation of common plot types; plotting utilities  
-**utils** -- Numerical and general purpose utilities  
+**matIO** — Painless loading of MATLAB .mat data files into appropriate Python data structures  
+**spikes** — Preprocessing and analyses of spiking data  
+**spectra** — Spectral analysis and preprocessing of continuous data (LFP/EEG)   
+**sync** — Analysis of oscillatory neural synchrony (field-field and spike-field)  
+**info** — Measures of neural information about task/behavior variables  
+**randstats** — Nonparametric randomization, permutation, and bootstrap statistics  
+**plots** — Generation of common plot types; plotting utilities  
+**utils** — Numerical and general purpose utilities  
 
 Full documentation can be found at: https://spynal.readthedocs.io/en/latest/  
 
@@ -59,3 +59,9 @@ You should now be able to directly import spynal and its modules/functions in yo
     import spynal as spy  
     import spynal.spectra as spectra  
     from spynal.spectra import spectrogram  
+
+## Contributions
+
+We welcome any contributions of new/expanded functionality or more efficient implementations,  
+and all issues/bug reports.  
+Submit a pull request/issue on Github or email me at [Github handle] AT [institution] .edu  
