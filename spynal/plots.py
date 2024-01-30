@@ -49,7 +49,7 @@ from matplotlib.patches import Polygon
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 
 from spynal.utils import isnumeric, isarraylike
-from spynal.helpers import _merge_dicts
+from spynal.helpers import _isint, _merge_dicts
 
 # Lambda returns list of all settable attributes of given plotting object
 # Find all methods starting with 'set_***', strip out the 'set_', and place in a list
@@ -656,7 +656,7 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
         plt.plot/fill outputs for each marker plotted, in the same order as input.
         Allows access to properties of marker lines/fills.
     """
-    if isinstance(values,float) or isinstance(values,int): values = [values]
+    if isinstance(values,float) or _isint(values): values = [values]
     xlim_input = xlim is not None
     ylim_input = ylim is not None
     if ax is None: ax = plt.gca()
@@ -707,7 +707,7 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
     # Iterate thru each marker value (eg event time) and plot line or fill marker for it
     handles = []
     for value in values:
-        if isinstance(value,float) or isinstance(value,int): value = [value]
+        if isinstance(value,float) or _isint(value): value = [value]
         value = np.atleast_1d(value)
         if value.shape[0] == 0: continue
 

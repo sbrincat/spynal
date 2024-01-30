@@ -30,6 +30,10 @@ Full documentation can be found at: https://spynal.readthedocs.io/en/latest/
 
 
 ## Download & installation instructions
+NOTE: Currently, spynal can only be installed against Python<=3.11, due to changes in the Import
+Manager in Python 3.12 that have not been accounted for in all dependent packages. For details,
+see this Stack Overflow answer: https://stackoverflow.com/a/77364602.
+
 Users can either install the most recent stable release using pip or
 install the latest updates from the Github repository
 
@@ -53,7 +57,6 @@ Recommended for developers and for users that would like access to the latest up
         (this will allow you to edit the library without reinstalling)
 
 ## Usage
-
 You should now be able to directly import spynal and its modules/functions in your code/notebooks like so:  
     import spynal  
     import spynal as spy  
@@ -61,7 +64,6 @@ You should now be able to directly import spynal and its modules/functions in yo
     from spynal.spectra import spectrogram  
 
 ## Contributions
-
 We welcome any contributions of new/expanded functionality or more efficient implementations,  
 and all issues/bug reports.  
 Submit a pull request/issue on Github or email me at [Github handle] AT [institution] .edu  

@@ -1,4 +1,4 @@
-Spectral data postprocessing (**psynal.spectra.postprocess**)
+Spectral data postprocessing (**spynal.spectra.postprocess**)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. automodule:: spectra.postprocess  

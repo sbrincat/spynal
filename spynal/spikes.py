@@ -124,7 +124,7 @@ def rate(data, method='bin', **kwargs):
         List(s) of spike timestamps (in s).  Can be given for either a single spike train,
         or for multiple spike trains (eg different trials, units, etc.) within an object array
         of any arbitrary shape.
-        -or-
+        *or*
         Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     method : {'bin','density'}, default: 'bin'
@@ -182,7 +182,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
         List(s) of spike timestamps (in s).  Can be given for either a single spike train,
         or for multiple spike trains (eg different trials, units, etc.) within an object array
         of any arbitrary shape.
-        -or-
+        *or*
         Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     lims : array-like, shape=(2,)
@@ -352,7 +352,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
         List(s) of spike timestamps (in s).  Can be given for either a single spike train,
         or for multiple spike trains (eg different trials, units, etc.) within an object array
         of any arbitrary shape.
-        -or-
+        *or*
         Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     lims : array-like, shape=(2,)
@@ -588,7 +588,7 @@ def isi(data, axis=-1, timepts=None):
         List(s) of spike timestamps (in s).  Can be given for either a single spike train,
         or for multiple spike trains (eg different trials, units, etc.) within an object array
         of any arbitrary shape.
-        -or-
+        *or*
         Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
     axis : int, default: -1 (last axis of array)
@@ -1496,7 +1496,7 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
 
         List(s) of spike timestamps (in s).  Can be given for either a single spike train,
         or for multiple spike trains (eg different trials, units, etc.) within an object array.
-        -or-
+        *or*
         Binary/boolean representation of spike times, for either a single or multiple spike trains.
 
         Data is ultimately transformed to timestamp format for vector graphics plots, and to binary
@@ -1518,11 +1518,11 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
         Type of graphics to use for plotting rasters:
 
         - Vector graphics using :func:`plt.plot`. Individual spikes rendered as line objects
-        that are manipulatable in vector graphics software like Adobe Illustrator, but much slower.
+            that are manipulatable in vector graphics software like Adobe Illustrator, but much slower.
 
         - Bitmapped (aka raster) graphics using :func:plt.imshow. Full raster plot rendered as
-        single (unmanipulatable) image, but plots much faster. (Note: "raster graphics" is a
-        term from computer graphics that is unrelated to "raster plots" in electrophysiology.)
+            single (unmanipulatable) image, but plots much faster. (Note: "raster graphics" is a
+            term from computer graphics that is unrelated to "raster plots" in electrophysiology.)
         
         NOTE: In some cases, a substantial number of spikes "disappear" from bitmap plots. This
         seems to happen when plotting into smaller figures (eg inline/within-IDE plots or
@@ -1541,7 +1541,7 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
 
     events : callable or array-like, shape=(n_events,)
         List of event values (eg times) to plot as markers on x-axis
-        -or- callable function that will just plot the event markers itself.
+        *or* callable function that will just plot the event markers itself.
         See :func:`plots.plot_markers` for details.
 
     Returns

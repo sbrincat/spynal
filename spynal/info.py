@@ -93,7 +93,7 @@ from patsy import DesignMatrix
 
 from spynal.utils import unsorted_unique, data_groups_to_data_labels, \
                          standardize_array, undo_standardize_array
-from spynal.helpers import _has_method
+from spynal.helpers import _has_method, _isint
 
 
 # =============================================================================
@@ -389,7 +389,7 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
     data = np.asarray(data)
     labels = np.asarray(labels)
     # BUGFIX sklearn doesn't like when object arrays actually contain int values, so fix that
-    if (labels.dtype == object) and np.all([isinstance(label,int) for label in labels]):
+    if (labels.dtype == object) and np.all([_isint(label) for label in labels]):
         labels = labels.astype(int)
     if axis < 0:            axis = data.ndim + axis
     if feature_axis < 0:    feature_axis = data.ndim + feature_axis

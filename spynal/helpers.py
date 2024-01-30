@@ -14,6 +14,11 @@ import numpy as np
 from scipy.stats import mode
 
 
+def _isint(variable):
+    """ Check whether variable is an integer *type* (NOT integer-valued) -- int or np.integer """
+    return isinstance(variable, (int, np.integer))
+
+
 def _check_window_lengths(windows, tol=1):
     """
     Ensures a set of windows are the same length. If not equal, but within given tolerance,

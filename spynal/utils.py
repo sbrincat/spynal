@@ -82,7 +82,7 @@ from scipy.interpolate import interp1d
 from scipy.stats import rankdata
 
 from spynal.helpers import _standardize_to_axis_0, _undo_standardize_to_axis_0, \
-                           _standardize_to_axis_end, _undo_standardize_to_axis_end
+                           _standardize_to_axis_end, _undo_standardize_to_axis_end, _isint
 
 # =============================================================================
 # Basic statistics
@@ -1265,7 +1265,7 @@ def setup_sliding_windows(width, lims, step=None, reference=None,
 
     if exclude_end:
         # Determine if window params (and thus windows) are integer or float-valued
-        params = np.concatenate((lims,width,step))
+        params = np.concatenate((lims, np.atleast_1d(width), np.atleast_1d(step)))
         is_int = np.allclose(np.round(params), params)
         # Set window-end offset appropriately--1 for int, otherwise small float value
         offset = 1 if is_int else 1e-12
@@ -1590,7 +1590,7 @@ def iarange(*args, **kwargs):
         step = args[2]
 
     # Offset to get final value in sequence is 1 for int-valued args, small float otherwise
-    offset = 1 if (isinstance(stop,int) and isinstance(start,int) and isinstance(step,int)) \
+    offset = 1 if (_isint(stop) and _isint(start) and _isint(step)) \
              else 1e-12
     # Make offset negative for a negative step
     if step < 0: offset = -offset

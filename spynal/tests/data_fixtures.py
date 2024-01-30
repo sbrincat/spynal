@@ -5,7 +5,8 @@ import numpy as np
 from scipy.stats import norm, poisson, bernoulli
 from scipy.stats.mstats import gmean
 
-from spynal.spectra.utils import set_random_seed, simulate_oscillation
+from spynal.utils import set_random_seed
+from spynal.spectra import simulate_oscillation
 
 # Possible errors to expect when inputting a missing/misspelled argument
 # Used for unit tests against silently ignoring incorrect arguments

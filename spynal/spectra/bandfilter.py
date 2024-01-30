@@ -171,6 +171,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
             ValueError("Must input a value for either filter <params> or band <freqs>")
 
         freqs   = np.asarray(freqs)  # Convert freqs to (n_freqbands,2)
+        # Set any freqs > Nyquist equal to Nyquist
+        freqs[freqs > smp_rate/2] = smp_rate/2        
         n_freqs = freqs.shape[0]
         params  = set_filter_params(freqs, smp_rate, filt=filt, order=order,
                                     form='ba', return_dict=True, **kwargs)
@@ -197,9 +199,6 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                 params['a'][i_freq] = a
         else:
             n_freqs = len(params['b'])
-
-    # Set any freqs > Nyquist equal to Nyquist
-    if freqs is not None: freqs[freqs > smp_rate/2] = smp_rate/2
 
     # Reshape data array -> (n_timepts_in,n_dataseries) matrix
     data, data_shape = standardize_array(data, axis=axis, target_axis=0)
@@ -240,7 +239,7 @@ bandfilter = bandfilter_spectrogram
 """ Alias of :func:`bandfilter_spectrogram`. See there for details. """
 
 
-def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
+def set_filter_params(bands, smp_rate, filt='butter', order=4, btypes=None, form='ba',
                       return_dict=False, **kwargs):
     """
     Sets coefficients for desired filter(s) using scipy.signal
@@ -264,6 +263,19 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
 
     order : int, default: 4
         Filter order
+
+    btypes : str or array-like, shape=(n_freqbands,) of str, default: (based on `bands`)
+        Passband/stop-type of filter. For multiple bands, can either input a single string
+        value that will be used for all bands, or a sequence (list or object array) with
+        one string value per band.
+
+        Default values are set per band, depending on the band frequency range (ie, does it
+        correspond to a low/high/band-pass filter). Options and default logic:
+
+        - 'lowpass'  : Low-pass (high-cut) filtering. Default for bands[:,0] == 0 or -Inf
+        - 'highpass' : High-pass (low-cut) filtering. Default for bands[:,1] == smp_rate/2 or +Inf
+        - 'bandpass' : Band-pass filtering. Default if above conditions not met.
+        - 'bandstop' : Band-stop filtering (eg for notch filtering). Never assumed as default.
 
     form : {'ba','zpk'}, default: ‘ba’
         Type of parameters to output:
@@ -300,23 +312,46 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
     n_bands     = bands.shape[0]
     nyquist     = smp_rate/2.0   # Nyquist freq at given sampling freq
 
+    # Set default values for filter pass types based on freq range of each band
+    if btypes is None:
+        btypes = []
+        for i_band,band in enumerate(bands):
+            band_norm = band/nyquist  # Convert band to normalized frequency
+
+            # If low-cut freq <= 0, assume low-pass filter
+            if band_norm[0] <= 0:   btypes.append('lowpass')
+            # If high-cut freq >= Nyquist freq, assume high-pass filter
+            elif band_norm[1] >= 1: btypes.append('highpass')
+            # Otherwise, assume band-pass filter
+            else:                   btypes.append('bandpass')        
+        
+    # Ensure passed `btypes` is a n_bands-length list of strings    
+    else:
+        if isinstance(btypes,str): btypes = [btypes]
+        assert len(btypes) in [1,n_bands],\
+                "`btypes` must be given as a single string (used for *all* bands), \
+                    or a n_bands-length list of strings (%d bands, len(btypes)=%d)" \
+                        % (n_bands, len(btypes))
+        if len(btypes) < n_bands:
+            btypes = btypes * n_bands
+
     # Setup filter-generating function for requested filter type
     # Butterworth filter
     if filt.lower() in ['butter','butterworth']:
-        gen_filt = lambda band,btype: butter(order,band,btype=btype,output=form)
+        gen_filt = lambda band, btype: butter(order, band, btype=btype, output=form)
     # Elliptic filter
     elif filt.lower() in ['ellip','butterworth']:
-        rp = kwargs.pop('rp',5)
-        rs = kwargs.pop('rs',40)
-        gen_filt = lambda band,btype: ellip(order,rp,rs,band,btype=btype,output=form)
+        rp = kwargs.pop('rp', 5)
+        rs = kwargs.pop('rs', 40)
+        gen_filt = lambda band, btype: ellip(order, rp, rs, band, btype=btype, output=form)
     # Chebyshev Type 1 filter
     elif filt.lower() in ['cheby1','cheby','chebyshev1','chebyshev']:
-        rp = kwargs.pop('rp',5)
-        gen_filt = lambda band,btype: cheby1(order,rp,band,btype=btype,output=form)
+        rp = kwargs.pop('rp', 5)
+        gen_filt = lambda band, btype: cheby1(order, rp, band, btype=btype, output=form)
     # Chebyshev Type 2 filter
     elif filt.lower() in ['cheby2','chebyshev2']:
-        rs = kwargs.pop('rs',40)
-        gen_filt = lambda band,btype: cheby2(order,rs,band,btype=btype,output=form)
+        rs = kwargs.pop('rs', 40)
+        gen_filt = lambda band, btype: cheby2(order, rs, band, btype=btype, output=form)
     else:
         raise ValueError("Filter type '%s' is not supported (yet)" % filt)
     assert len(kwargs) == 0, \
@@ -329,20 +364,17 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, form='ba',
     else:
         raise ValueError("Output form '%s' is not supported. Should be 'ba' or 'zpk'" % form)
 
-    for i_band,band in enumerate(bands):
+    for i_band,(band,btype) in enumerate(zip(bands,btypes)):
         band_norm = band/nyquist  # Convert band to normalized frequency
 
-        # If low-cut freq = 0, assume low-pass filter
-        if band_norm[0] == 0:   btype = 'lowpass';  band_norm = band_norm[1]
-        # If high-cut freq >= Nyquist freq, assume high-pass filter
-        elif band_norm[1] >= 1: btype = 'highpass'; band_norm = band_norm[0]
-        # Otherwise, assume band-pass filter
-        else:                   btype = 'bandpass'
+        # Convert band_norm to format expected by filter functions for different filter types
+        if btype == 'lowpass':  band_norm = band_norm[1]
+        elif btype == 'highpass': band_norm = band_norm[0]
 
         if form == 'ba':
-            params['b'][i_band],params['a'][i_band] = gen_filt(band_norm,btype)
+            params['b'][i_band],params['a'][i_band] = gen_filt(band_norm, btype)
         else:
-            params['z'][i_band],params['p'][i_band],params['k'][i_band] = gen_filt(band_norm,btype)
+            params['z'][i_band],params['p'][i_band],params['k'][i_band] = gen_filt(band_norm, btype)
 
     if return_dict: return params
     else:           return params.values()

@@ -13,8 +13,10 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../spynal'))
+# Note: scikit people demand we use 'scikit-learn' now, but my docs won't compile
+# unless I import it as 'sklearn' here, so I dunno...?
 autodoc_mock_imports = ['numpy','scipy','pandas','matplotlib','h5py','hdf5storage',
-                        'patsy','scikit-learn','pyfftw','xarray','spynal']
+                        'patsy','scikit-learn','sklearn','pyfftw','xarray','spynal']
 
 
 # -- Project information -----------------------------------------------------
