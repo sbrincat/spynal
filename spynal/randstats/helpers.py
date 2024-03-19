@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """ Helper functions for `randstats` module for randomization statistics """
+from warnings import warn
 import numpy as np
 
 from spynal.utils import one_sample_tstat, two_sample_tstat, one_way_fstat, two_way_fstat, \
@@ -14,6 +15,8 @@ from spynal.utils import one_sample_tstat, two_sample_tstat, one_way_fstat, two_
 #==============================================================================
 def _tail_to_compare(tail):
     """ Convert string specifier to callable function implementing it """
+    warn("Helper function _tail_to_compare() is deprecated. Use randstats.tail_to_compare()")
+    
     # If input value is already a callable function, just return it
     if callable(tail): return tail
 

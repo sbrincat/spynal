@@ -92,7 +92,7 @@ from spynal.randstats.bootstrap import one_sample_bootstrap_test, paired_sample_
                                        paired_sample_association_bootstrap_test, \
                                        two_sample_bootstrap_test
 from spynal.randstats.utils import confint_to_indexes
-from spynal.randstats.helpers import _tail_to_compare, _two_sample_data_checks, \
+from spynal.randstats.helpers import _two_sample_data_checks, \
                                      _str_to_one_sample_stat, _str_to_two_sample_stat
 
 

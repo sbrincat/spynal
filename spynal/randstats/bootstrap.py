@@ -4,9 +4,9 @@ import numpy as np
 
 from spynal.utils import axis_index_slices, isarraylike, set_random_seed
 from spynal.randstats.sampling import bootstraps
-from spynal.randstats.utils import resamples_to_pvalue
+from spynal.randstats.utils import tail_to_compare, resamples_to_pvalue
 from spynal.randstats.helpers import _str_to_one_sample_stat, _str_to_assoc_stat, \
-                                     _str_to_two_sample_stat, _tail_to_compare, \
+                                     _str_to_two_sample_stat, \
                                      _paired_sample_data_checks, _two_sample_data_checks
 
 
@@ -30,7 +30,7 @@ def one_sample_bootstrap_test(data, axis=0, mu=0, stat='t', tail='both', n_resam
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_sample_stat(stat,axis)   # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+    compare_func = tail_to_compare(tail)                # Tail-specific comparator
 
     ndim = data.ndim
     n = data.shape[axis]
@@ -142,7 +142,7 @@ def paired_sample_association_bootstrap_test(data1, data2, axis=0, stat='r', tai
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_assoc_stat(stat,axis)    # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+    compare_func = tail_to_compare(tail)            # Tail-specific comparator
 
     ndim = data1.ndim
     n = data1.shape[axis]
@@ -227,7 +227,7 @@ def two_sample_bootstrap_test(data1, data2, axis=0, stat='t', tail='both',
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_two_sample_stat(stat,axis)   # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+    compare_func = tail_to_compare(tail)                # Tail-specific comparator
 
     ndim = data1.ndim
     n1 = data1.shape[axis]

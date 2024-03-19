@@ -13,7 +13,48 @@ Function reference
 """
 import numpy as np
 
-from spynal.randstats.helpers import _tail_to_compare
+
+def tail_to_compare(tail):
+    """
+    Convert string specifier for randomization test tail-type to callable function implementing it
+    
+    Parameters
+    ----------
+    tail : {'left','right','both'}, default: 'both'
+        Type of statistical test ("tail") to perform on x vs x_rsmp:
+        
+        - 'left' : HO: x_rsmp >= x; H1: x < x_rsmp
+        - 'right' : HO: x_rsmp <= x; H1: x > x_rsmp
+        - 'both' : HO: x_rsmp == x; H1: x != x_rsmp
+        
+    Returns
+    -------
+    compare_func : lambda, args:stat_obs,stat_resmp
+        Lambda function that implements comparison to evaluate randomization
+        statistical tests of given type
+    """
+    # If input value is already a callable function, just return it
+    if callable(tail): return tail
+
+    assert isinstance(tail,str), \
+        TypeError("Unsupported type '%s' for <tail>. Use string or function" % type(tail))
+
+    tail = tail.lower()
+
+    # 2-tailed test: hypothesis ~ stat_obs ~= statShuf
+    if tail == 'both':
+        return lambda stat_obs,stat_resmp: np.abs(stat_resmp) >= np.abs(stat_obs)
+
+    # 1-tailed rightward test: hypothesis ~ stat_obs > statShuf
+    elif tail == 'right':
+        return lambda stat_obs,stat_resmp: stat_resmp >= stat_obs
+
+    # 1-tailed leftward test: hypothesis ~ stat_obs < statShuf
+    elif tail == 'left':
+        return lambda stat_obs,stat_resmp: stat_resmp <= stat_obs
+
+    else:
+        ValueError("Unsupported value '%s' for <tail>. Use 'both', 'right', or 'left'" % tail)
 
 
 def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
@@ -44,7 +85,7 @@ def resamples_to_pvalue(stat_obs, stat_resmp, axis=0, tail='both'):
     p : ndarray, shape=(...,1,...)
         p values from resampling test. Same size as `stat_obs`.
     """
-    compare_func = _tail_to_compare(tail)           
+    compare_func = tail_to_compare(tail)           
 
     n_resamples = stat_resmp.shape[axis]
 

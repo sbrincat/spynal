@@ -56,6 +56,7 @@ Other utilities
 ^^^^^^^^^^^^^^^
 - iarange :             np.arange(), but with an inclusive endpoint
 - unsorted_unique :     np.unique(), but without sorting values
+- all_subsets :         Set of all subsets ("powerset) of a sequence/iterator
 - isarraylike :         Tests if variable is "array-like" (ndarray, list, or tuple)
 - isnumeric :           Tests if array dtype is numeric (int, float, or complex)
 - ispc:                 Tests if running on Windows OS
@@ -76,6 +77,7 @@ import platform
 import time
 import random
 from math import cos, sin, sqrt
+from itertools import chain, combinations
 import numpy as np
 
 from scipy.interpolate import interp1d
@@ -1631,6 +1633,48 @@ def unsorted_unique(x, axis=None, **kwargs):
         x = x.flatten()
         idxs = np.unique(x, return_index=True, axis=axis, **kwargs)[1]
         return x[np.sort(idxs)]
+
+
+def all_subsets(s, incl_empty=False, incl_full=True, aslist=True):
+    """
+    Return the set of all subsets of s, optionally including
+    the empty set () and S itself. In set theory, this is the powerset of s.
+    
+    Parameters
+    ----------
+    s : sequence or iterator, shape=(n_items,)
+        Any sequence (list,tuple,array,etc.), generator, or other iterator that
+        you want to find all subset of its constituent items
+    
+    incl_empty : bool, default: False
+        If True, includes the empty set () in output (as in a true powerset).
+        If False, only non-empty subsets are included.
+            
+    incl_full : bool, default: True
+        If True, includes the full set `s` in output (as in a true powerset).
+        If False, only subsets < full-length are included.
+        
+    aslist : bool, default: True
+        If True, returns subsets as a list of tuples.
+        If false, returns as itertools.chain iterator object that can be used to generate it.
+        
+    Returns
+    -------
+    powerset_s : list or generator of tuples
+        Each item is a tuple with one subset of all the items in `s`, and all possible subsets
+        are included (optionally including the empty and full sets).
+        
+    Acknowledgements
+    ----------------
+    Algorithm from https://stackoverflow.com/a/1482316    
+    """
+    s = list(s)
+    start = 0 if incl_empty else 1
+    stop = len(s)+1 if incl_full else len(s)
+    powerset_s = chain.from_iterable(combinations(s, r) for r in range(start,stop))
+    if aslist: powerset_s = list(powerset_s)
+    
+    return powerset_s
 
 
 def isarraylike(x):

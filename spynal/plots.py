@@ -255,6 +255,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     x = np.asarray(x)
     y = np.asarray(y)
 
+    assert (x.ndim == 1) and (y.ndim == 1), \
+        ValueError("`x` and `y` must be 1-dimensional (x ~ %d-d, y ~ %d-d)" % (x.ndim, y.ndim))
     assert data.ndim == 2, ValueError("data must be 2-dimensional (%d-d data given)" % data.ndim)
     assert data.shape == (len(y),len(x)), \
         ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)" \

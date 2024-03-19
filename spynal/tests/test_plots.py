@@ -152,10 +152,10 @@ def test_savefig():
         savefig(filename, fig=fig)
 
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
-        # HACK  Temporarily commeent this out
-        #       plt.savefig() doesn't check for unexpected kwargs now, but will for v3.5
-        # with pytest.raises(MISSING_ARG_ERRS):
-        #     savefig(filename, fig=fig, foo=None, asdfdssdf=True)
+        # NOTE: This currently fails, but deprecation warnings indicate it will properly raise
+        #       an error in an upcoming matplotlib release (supposedly 3.5, but hasn't worked yet)
+        with pytest.raises(MISSING_ARG_ERRS):
+            savefig(filename, fig=fig, foo=None)
 
     plt.close('all')
 

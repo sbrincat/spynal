@@ -5,10 +5,10 @@ import numpy as np
 
 from spynal.utils import axis_index_slices, isarraylike, one_way_fstat, two_way_fstat
 from spynal.randstats.sampling import signs, permutations
-from spynal.randstats.utils import resamples_to_pvalue
+from spynal.randstats.utils import tail_to_compare, resamples_to_pvalue
 from spynal.randstats.helpers import _str_to_one_sample_stat, _str_to_assoc_stat, \
                                      _str_to_two_sample_stat, _str_to_one_way_stat, \
-                                     _str_to_two_way_stat, _tail_to_compare, \
+                                     _str_to_two_way_stat, \
                                      _paired_sample_data_checks, _two_sample_data_checks
 
 
@@ -36,7 +36,7 @@ def one_sample_randomization_test(data, axis=0, mu=0, stat='t', tail='both', n_r
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_sample_stat(stat,axis)   # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+    compare_func = tail_to_compare(tail)                # Tail-specific comparator
 
     n = data.shape[axis]
     ndim = data.ndim
@@ -151,7 +151,7 @@ def paired_sample_association_permutation_test(data1, data2, axis=0, stat='r', t
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_assoc_stat(stat,axis)    # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+    compare_func = tail_to_compare(tail)            # Tail-specific comparator
 
     ndim = data1.ndim
     n = data1.shape[axis]
@@ -231,7 +231,7 @@ def two_sample_permutation_test(data1, data2, axis=0, stat='t', tail='both', n_r
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_two_sample_stat(stat,axis)   # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)               # Tail-specific comparator
+    compare_func = tail_to_compare(tail)                # Tail-specific comparator
 
     ndim = data1.ndim
     n1 = data1.shape[axis]
@@ -326,7 +326,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     # Convert string specifiers to callable functions
     stat_func    = _str_to_one_way_stat(stat,axis)  # Statistic (includes default)
-    compare_func = _tail_to_compare(tail)           # Tail-specific comparator
+    compare_func = tail_to_compare(tail)            # Tail-specific comparator
 
     labels  = np.asarray(labels)
     ndim    = data.ndim
@@ -425,7 +425,7 @@ def two_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     # Convert string specifier to callable function
     stat_func = _str_to_two_way_stat(stat,axis) # Statistic (includes default))
-    compare_func = _tail_to_compare(tail)       # Tail-specific comparator
+    compare_func = tail_to_compare(tail)        # Tail-specific comparator
 
     labels  = np.asarray(labels)
     n_terms = labels.shape[1]
