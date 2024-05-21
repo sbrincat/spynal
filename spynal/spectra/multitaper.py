@@ -18,7 +18,8 @@ except:
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
-                        keep_tapers=False, tapers=None, pad=True, torch_avail=False, **kwargs):
+                        keep_tapers=False, tapers=None, pad=True, torch_avail=False, 
+                        max_bin_size=1e9, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP) or point process (spike) data
 
@@ -298,7 +299,10 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         else: 
             ntps = n_tapers
             
-        spec = np.zeros((s0,ntps,len(timepts),*data.shape[1:])) * 1j
+        if keep_tapers:
+            spec = np.zeros((s0,ntps,len(timepts),*data.shape[1:])) * 1j
+        else:
+            spec = np.zeros((s0,len(timepts),*data.shape[1:])) * 1j
 
         step = int(np.ceil(win_starts.shape[0]/nbins))
         i = 0
@@ -378,4 +382,3 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     # Note: You might imagine you'd want sym=False, but sym=True gives same values
     #       as Chronux dpsschk() function...
     return dpss(n_samples, time_freq_prod, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
-
