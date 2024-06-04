@@ -277,7 +277,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     ylim = [y[0]-dy/2, y[-1]+dy/2]
 
     # Sort any keyword args to their appropriate plotting object
-    axes_args, imshow_args = _hash_kwargs(kwargs, [AXES_PARAMS, IMSHOW_PARAMS])
+    axes_args, imshow_args, line_args = _hash_kwargs(kwargs,
+                                                     [AXES_PARAMS, IMSHOW_PARAMS, PLOT_PARAMS])
     # Merge any input parameters with default values
     axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
     imshow_args = _merge_dicts(dict(extent=[*xlim,*ylim], vmin=clim[0], vmax=clim[1],
@@ -301,7 +302,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     if events is not None:
         if callable(events):    events()
         else:                   plot_markers(events, axis='x', ax=ax,
-                                             xlim=axes_args['xlim'], ylim=axes_args['ylim'])
+                                             xlim=axes_args['xlim'], ylim=axes_args['ylim'],
+                                             **line_args)
 
     return img, ax
 
@@ -446,7 +448,7 @@ def full_figure(**kwargs):
 def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwargs):
     """
     Save figure to file in (more-or-less) WYSIWYG manner, generate target directory if missing
-    
+
     Wrapper around fig.savefig()
 
     Parameters
@@ -494,44 +496,44 @@ def savefig(filename, fig=None, figsize=(11.0,8.5), dpi=500, makedir=True, **kwa
 def make_colormap(name=None, colors=None, register=None, **kwargs):
     """
     Create a custom colormap and register its name for later convenient use
-    
+
     Parameters
     ----------
     name : str
         Name of colormap to create. If `register` is True, name will be registered as a
-        matplotlib colormap, so later you can invoke it using cmap=`name`.        
-        
+        matplotlib colormap, so later you can invoke it using cmap=`name`.
+
     colors : callable or dict or array-like
         Specifies the colors in custom colormap in one of three ways:
-        
+
         (1) callable : `colors` is input as a function/lambda that generates
             `colors` under one of the two following specifications...
-            
+
         (2) dict : Keys = 'red', 'green', 'blue', and (optionally) 'alpha'.
             Values for each = (n_segments-1,3) array-like of floats in range (0,1). These are
             anchor points for each color, and segments of colormap will be linearly interpolated
             between each to generate a full colormap. The first of the 3 values in each row
             determines where the anchor point lies in the colormap (0-1 ~ lowest to highest point).
-            Color segements are interpolated from the 3rd value in one row to the 2nd value in 
+            Color segements are interpolated from the 3rd value in one row to the 2nd value in
             the subsequent row (see LinearSegmentedColormap ref below for full explanation).
             Colormap generated using :func:`matplotlib.colors.LinearSegmentedColormap`.
 
-        (3) array-like : List of Matplotlib color specifications, or an equivalent 
-            (n_colors,3=RGB) or (n_colors,4=RGBA) array. Specifies each color in entire 
+        (3) array-like : List of Matplotlib color specifications, or an equivalent
+            (n_colors,3=RGB) or (n_colors,4=RGBA) array. Specifies each color in entire
             colormap. Colormap generated using :func:`matplotlib.colors.ListedColormap`.
 
     register : bool, default: True if value given for `name`
             If True, `name` is registered as matplotlib colormap, which can later be invoked
             using cmap=`name`.
-            
+
     **kwargs :
         Any other keyword args passed directly to `LinearSegmentedColormap` or `ListedColormap`.
-        
+
     Returns
     -------
-    cmap : matplotlib.colors.Colormap object (LinearSegmentedColormap or ListedColormap) 
-        Generated colormap        
-    
+    cmap : matplotlib.colors.Colormap object (LinearSegmentedColormap or ListedColormap)
+        Generated colormap
+
     References
     ----------
     https://matplotlib.org/stable/tutorials/colors/colormap-manipulation.html
@@ -539,24 +541,24 @@ def make_colormap(name=None, colors=None, register=None, **kwargs):
     https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.ListedColormap.html
     """
     if register is None: register = name is not None
-    
+
     # If `colors` input as callable, run it to generate actual colors for colormap
     colors = colors() if callable(colors) else colors
-    
+
     # If `colors` is dict, we assume it contains points to linearly interp colormap segments btwn
-    if isinstance(colors,dict):        
+    if isinstance(colors,dict):
         cmap = LinearSegmentedColormap(name=name, segmentdata=colors, **kwargs)
-        
-    # If `colors` is array/list, we assume it directly represents all colors in colormap    
+
+    # If `colors` is array/list, we assume it directly represents all colors in colormap
     elif isarraylike(colors):
         cmap = ListedColormap(colors=colors, name=name, **kwargs)
-    
+
     else:
         raise TypeError("Unsupported type <%s> set for `colors`" % type(colors))
-    
-    # Register colormap name for later use        
+
+    # Register colormap name for later use
     if register: plt.register_cmap(cmap=cmap)
-    
+
     return cmap
 
 
@@ -565,7 +567,7 @@ def colorbar(mappable=None, ax=None, size=0.05, pad=0.05, **kwargs):
     Create a colorbar for given axis without messing up parent axis size (as plt.colorbar() does)
 
     Wrapper around `fig.colorbar`
-    
+
     Parameters
     ----------
     mappable : matplotlib.cm.ScalarMappable object, default: ax._gci() (current artist)
@@ -820,9 +822,9 @@ def _maximize_figure():
     https://stackoverflow.com/a/32428266
     """
     manager = plt.get_current_fig_manager()
-    
+
     # Method depends on which Matplotlib backend you are using
-    backend = get_backend()    
+    backend = get_backend()
     if 'qt' in backend.lower():     # QT backend
         manager.resize(manager.window.maximumWidth(), manager.window.maximumHeight())
     elif 'tk' in backend.lower():   # TkAgg backend

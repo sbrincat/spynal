@@ -167,14 +167,14 @@ def test_make_colormap():
 
     # Baasic test of function
     colors = _set_colors()
-    make_colormap('testmap', colors=colors)
+    make_colormap('testmap1', colors=colors)
 
     # Test function with callable arg for `colors`
-    make_colormap('testmap', colors=_set_colors)
+    make_colormap('testmap2', colors=_set_colors)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        make_colormap('testmap', colors=colors, foo=None)
+        make_colormap('testmap3', colors=colors, foo=None)
 
 
 def test_imports():

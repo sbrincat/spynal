@@ -46,7 +46,7 @@ def _check_window_lengths(windows, tol=1):
     if np.allclose(window_lengths, window_lengths[0]): return windows
 
     # Compute mode of windows lengths and max difference from it
-    modal_length    = mode(window_lengths)[0][0]
+    modal_length    = mode(window_lengths)[0]
     max_diff        = np.max(np.abs(window_lengths - modal_length))
 
     # If range is beyond our allowed tolerance, throw an error

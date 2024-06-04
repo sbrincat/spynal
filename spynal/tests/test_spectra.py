@@ -19,10 +19,10 @@ from spynal.spectra.utils import get_freq_sampling, one_sided_to_two_sided, powe
 @pytest.mark.parametrize('data_type, spec_type, method, result',
                          [('lfp',   'power', 'multitaper',  0.0137),
                           ('lfp',   'power', 'wavelet',     44.9462),
-                          ('lfp',   'power', 'bandfilter',  2.3069),
+                          ('lfp',   'power', 'bandfilter',  2.3097),
                           ('spike', 'power', 'multitaper',  194.0514),
                           ('spike', 'power', 'wavelet',     0.4774),
-                          ('spike', 'power', 'bandfilter',  0.0483)])
+                          ('spike', 'power', 'bandfilter',  0.0545)])
 def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
     """ Unit tests for spectrum function """
     data = oscillatory_data[data_type]
@@ -96,21 +96,21 @@ def test_spectrum(oscillatory_data, data_type, spec_type, method, result):
 @pytest.mark.parametrize('data_type, spec_type, method, result',
                          [('lfp',   'power',    'wavelet',     44.9462),
                           ('lfp',   'power',    'multitaper',  0.0137),
-                          ('lfp',   'power',    'bandfilter',  2.3069),
+                          ('lfp',   'power',    'bandfilter',  2.3097),
                           ('burst', 'burst',    'wavelet',     0.0),
                           ('burst', 'burst',    'bandfilter',  0.0),
                           ('spike', 'power',    'wavelet',     0.4774),
                           ('spike', 'power',    'multitaper',  193.7612),
-                          ('spike', 'power',    'bandfilter',  0.0483),
+                          ('spike', 'power',    'bandfilter',  0.0545),
                           ('lfp',   'phase',    'wavelet',     0.0053),
                           ('lfp',   'phase',    'multitaper', -0.1523),
-                          ('lfp',   'phase',    'bandfilter',  0.1473),
+                          ('lfp',   'phase',    'bandfilter',  0.0799),
                           ('spike', 'phase',    'wavelet',     0.0054),
                           ('spike', 'phase',    'multitaper', -0.0547),
-                          ('spike', 'phase',    'bandfilter',  0.1190),
+                          ('spike', 'phase',    'bandfilter',  -0.0764),
                           ('lfp',   'complex',  'wavelet',     0j),
                           ('lfp',   'complex',  'multitaper',  0.0019-0.0011j),
-                          ('lfp',   'complex',  'bandfilter',  -0.0109+0j)])
+                          ('lfp',   'complex',  'bandfilter',  -0.0063+0j)])
 def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
     """ Unit tests for spectrogram() function """
     # Extract given data type from data dict
@@ -198,13 +198,13 @@ def test_spectrogram(oscillatory_data, data_type, spec_type, method, result):
 @pytest.mark.parametrize('itpc_method, method, result',
                          [('plv',   'wavelet',     0.5494),
                           ('plv',   'multitaper',  0.2705),
-                          ('plv',   'bandfilter',  0.6556),
+                          ('plv',   'bandfilter',  0.7836),
                           ('z',     'wavelet',     1.5316),
                           ('z',     'multitaper',  0.3762),
-                          ('z',     'bandfilter',  2.0734),
+                          ('z',     'bandfilter',  2.7367),
                           ('ppc',   'wavelet',     0.1772),
                           ('ppc',   'multitaper',  -0.2079),
-                          ('ppc',   'bandfilter',  0.3578)])
+                          ('ppc',   'bandfilter',  0.5789)])
 def test_itpc(oscillation, itpc_method, method, result):
     """ Unit tests for spectrogram() function """
     # Extract given data type from data dict

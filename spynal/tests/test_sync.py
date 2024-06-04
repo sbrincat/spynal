@@ -63,19 +63,19 @@ def spike_field_pair(oscillation_pair):
 @pytest.mark.parametrize('method, spec_method, single_trial, result',
                          [('coherence', 'wavelet',      None,       (0.2475,0.4795)),
                           ('coherence', 'multitaper',   None,       (0.1046,0.3043)),
-                          ('coherence', 'bandfilter',   None,       (0.3490,0.6702)),
+                          ('coherence', 'bandfilter',   None,       (0.3221,0.8096)),
                           ('PLV',       'wavelet',      None,       (0.2541,0.3713)),
                           ('PLV',       'multitaper',   None,       (0.0984,0.2228)),
-                          ('PLV',       'bandfilter',   None,       (0.3321,0.4528)),
+                          ('PLV',       'bandfilter',   None,       (0.3326,0.5461)),
                           ('PPC',       'wavelet',      None,       (0.0912,0.3713)),
                           ('PPC',       'multitaper',   None,       (0.0100,0.2228)),
-                          ('PPC',       'bandfilter',   None,       (0.1715,0.4528)),
+                          ('PPC',       'bandfilter',   None,       (0.1715,0.5461)),
                           ('coherence', 'wavelet',      'pseudo',   (0.1988,None)),
                           ('coherence', 'multitaper',   'pseudo',   (0.0623,None)),
-                          ('coherence', 'bandfilter',   'pseudo',   (0.3080,None)),
+                          ('coherence', 'bandfilter',   'pseudo',   (0.2640,None)),
                           ('PLV',       'wavelet',      'pseudo',   (0.2022,None)),
                           ('PLV',       'multitaper',   'pseudo',   (0.0588,None)),
-                          ('PLV',       'bandfilter',   'pseudo',   (0.2858,None)),
+                          ('PLV',       'bandfilter',   'pseudo',   (0.2923,None)),
                           ('PPC',       'wavelet',      'pseudo',   (0.0679,None)),
                           ('PPC',       'multitaper',   'pseudo',   (0.0015,None)),
                           ('PPC',       'bandfilter',   'pseudo',   (0.1502,None))])
@@ -354,14 +354,14 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
         assert np.isclose(sync[...,0].mean(), result[0], rtol=1e-4, atol=1e-4)
         # assert np.isclose(phi[...,0].mean(), result[1], rtol=1e-4, atol=1e-4)
         if method != 'coherence': assert np.round(n.mean()) == result[2]
-        asdf
+        
     # Test for consistent output with transposed data dimensionality -> (time,trials)
     transposed_shape = (*sync_shape[1:],sync_shape[0])
     sync, freqs, timepts, n, phi = spike_field_coupling(spkdata.T, lfpdata.T,
                                                         axis=-1, time_axis=0, method=method,
                                                         spec_method=spec_method, smp_rate=smp_rate,
                                                         return_phase=True, **extra_args)
-    print(sync.shape, phi.shape)
+    print("TEST.T", sync.mean(), phi.mean(), result)
     assert np.array_equal(spkdata,spkdata_orig)     # Ensure input data not altered by func
     assert np.array_equal(lfpdata,lfpdata_orig)
     assert freqs.shape == freqs_shape

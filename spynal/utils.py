@@ -1590,6 +1590,8 @@ def iarange(*args, **kwargs):
         start = args[0]
         stop = args[1]
         step = args[2]
+    else:
+        raise ValueError("Only 1, 2, or 3 args allowed (not %d as input)" % len(args))
 
     # Offset to get final value in sequence is 1 for int-valued args, small float otherwise
     offset = 1 if (_isint(stop) and _isint(start) and _isint(step)) \

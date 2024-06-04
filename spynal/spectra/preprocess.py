@@ -22,7 +22,7 @@ def cut_trials(data, trial_lims, smp_rate, axis=0):
     trial_lims : array-like, shape=(n_trials,2)
         List of [start,end] of each trial (in s) to use to cut data.
 
-    smp_rate : scalar
+    smp_rate : float
         Sampling rate of data (Hz).
 
     axis : int, default: 0 (1st axis)

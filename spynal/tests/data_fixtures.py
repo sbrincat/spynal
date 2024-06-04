@@ -283,10 +283,10 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, n_chnls=1, distribu
     else:
         # Single gain = incremental difference btwn cond 0 and 1, 1 and 2, etc.
         # Convert to vector of gains for each condition
-        gains = gain*np.arange(n_conds) if np.isscalar(gain) else gain
+        gains = gain*np.arange(n_conds) if np.isscalar(gain) else np.asarray(gain)
 
         # Convert scalar spread value to vector for each condition
-        if np.isscalar(spreads): spreads = spreads*np.ones((n_conds,))
+        spreads = spreads*np.ones((n_conds,)) if np.isscalar(spreads) else np.asarray(spreads)
 
     assert len(gains) == n_conds, \
         ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \

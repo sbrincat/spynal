@@ -305,9 +305,12 @@ def _parse_typemap(typemap_in=None):
     """
     # Set of Matlab data types to deal with here
     vbl_types = {'array', 'cell', 'struct', 'structarray'}
+
     # Set default values
-    typemap_out = {'array':'array', 'cell':'array',
-                   'struct':'dict', 'structarray':'dict'}
+    # Special case: Matlab structs converted from Matlab tables may retain the
+    # 'Properties' metadata attribute as a struct field. If so, convert it to dict.
+    typemap_out = {'array':'array', 'cell':'array', 'struct':'dict', 'structarray':'dict',
+                   'Properties':'dict'}
 
     # Modify defaults with any input values
     if isinstance(typemap_in,dict):

@@ -64,6 +64,9 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
                 if DEBUG: print('\t'*level, "'%s'" % key)
                 matlab_elem_type = _h5py_matlab_type(obj[key])
                 if key in extract_items: extract_item = extract_items[key]
+                # # Special case: Matlab structs converted from Matlab tables may retain the
+                # # 'Properties' metadata attribute as a struct field. If so, convert it to dict.
+                # if key == 'Properties': python_vbl_type = 'dict'
                 converted[key] = _process_h5py_object(obj[key], file,
                                                       matlab_vbl_type=matlab_elem_type,
                                                       extract_item=extract_item,

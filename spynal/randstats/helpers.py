@@ -25,15 +25,15 @@ def _tail_to_compare(tail):
 
     tail = tail.lower()
 
-    # 2-tailed test: hypothesis ~ stat_obs ~= statShuf
+    # 2-tailed test: hypothesis ~ stat_obs ~= stat_resmp
     if tail == 'both':
         return lambda stat_obs,stat_resmp: np.abs(stat_resmp) >= np.abs(stat_obs)
 
-    # 1-tailed rightward test: hypothesis ~ stat_obs > statShuf
+    # 1-tailed rightward test: hypothesis ~ stat_obs > stat_resmp
     elif tail == 'right':
         return lambda stat_obs,stat_resmp: stat_resmp >= stat_obs
 
-    # 1-tailed leftward test: hypothesis ~ stat_obs < statShuf
+    # 1-tailed leftward test: hypothesis ~ stat_obs < stat_resmp
     elif tail == 'left':
         return lambda stat_obs,stat_resmp: stat_resmp <= stat_obs
 
