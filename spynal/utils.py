@@ -17,6 +17,8 @@ Function list
 Basic statistics
 ^^^^^^^^^^^^^^^^
 - zscore :            Mass univariate Z-score data along given axis (or whole array)
+- fisherz :           Fisher Z transform to make correlation data ~normally distributed.
+- inverse_fisherz :   Inverse Fisher Z transform to get Fisher-z'd data back to correlations.
 - fano :              Fano factor (variance/mean) of data
 - cv :                Coefficient of Variation (SD/mean) of data
 - cv2 :               Local Coefficient of Variation (Holt 1996) of data
@@ -186,6 +188,40 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
 
     if return_stats:    return data, mu, sd
     else:               return data
+
+
+def fisherz(data):
+    """
+    Fisher Z transform. Used to make correlation data approximately normally distributed.
+
+    Parameters
+    ----------
+    data : array-like, shape=Any
+        Correlation data to transform. Should be within range [-1,+1].
+
+    Returns
+    -------
+    z_data : ndarray, shape=Any
+        Fisher's z-transformed data. Range is [-Inf,+Inf]. Same shape as input data.
+    """
+    return np.arctanh(data)
+
+
+def inverse_fisherz(data):
+    """
+    Inverse Fisher Z transform. Transforms Fisher-transformed data back to correlations.
+
+    Parameters
+    ----------
+    data : array-like, shape=Any
+        Fisher z-transformed correlation data. Range is [-Inf,+Inf].
+
+    Returns
+    -------
+    invz_data : ndarray, shape=Any
+        Data transformed back to correlations. Range is [-1,+1]. Same shape as input data.
+    """
+    return np.tanh(data)
 
 
 def fano(data, axis=None, ddof=0, keepdims=True):
@@ -878,17 +914,17 @@ def randperm(n, k=None):
 
     k : int, default: `n` (generate random permutation of 0:n-1)
         Length of subset to select. Default generates random permutation w/o sub-selection.
-        
+
     Returns
     -------
     perm : ndarray, shape=(k,), dtype=int
-        Length-k random subset/permutation of integers 0:n-1 
+        Length-k random subset/permutation of integers 0:n-1
     """
     assert (k is None) or (k <= n), "<k> must be an integer <= <n> (or None)"
-    
+
     if k is None:   return np.random.permutation(n)
     else:           return np.random.permutation(n)[:k]
-        
+
 
 def interp1(x, y, xinterp, axis=0, **kwargs):
     """
@@ -1641,41 +1677,41 @@ def all_subsets(s, incl_empty=False, incl_full=True, aslist=True):
     """
     Return the set of all subsets of s, optionally including
     the empty set () and S itself. In set theory, this is the powerset of s.
-    
+
     Parameters
     ----------
     s : sequence or iterator, shape=(n_items,)
         Any sequence (list,tuple,array,etc.), generator, or other iterator that
         you want to find all subset of its constituent items
-    
+
     incl_empty : bool, default: False
         If True, includes the empty set () in output (as in a true powerset).
         If False, only non-empty subsets are included.
-            
+
     incl_full : bool, default: True
         If True, includes the full set `s` in output (as in a true powerset).
         If False, only subsets < full-length are included.
-        
+
     aslist : bool, default: True
         If True, returns subsets as a list of tuples.
         If false, returns as itertools.chain iterator object that can be used to generate it.
-        
+
     Returns
     -------
     powerset_s : list or generator of tuples
         Each item is a tuple with one subset of all the items in `s`, and all possible subsets
         are included (optionally including the empty and full sets).
-        
+
     Acknowledgements
     ----------------
-    Algorithm from https://stackoverflow.com/a/1482316    
+    Algorithm from https://stackoverflow.com/a/1482316
     """
     s = list(s)
     start = 0 if incl_empty else 1
     stop = len(s)+1 if incl_full else len(s)
     powerset_s = chain.from_iterable(combinations(s, r) for r in range(start,stop))
     if aslist: powerset_s = list(powerset_s)
-    
+
     return powerset_s
 
 
@@ -1832,7 +1868,7 @@ def concatenate_object_array(data, axis=None, elem_axis=0, sort=False):
         Axis(s) *of object array* to concatenate object array elements across.
         Set = list of ints to concatenate across multiple axes.
         Set = None to concatenate across *all* axes in data.
-        
+
     elem_axis : int, default: 0
         Axis of *each element* of object array to concatenate along.
         Note: This is the axis of the contained elements that are being concatenated,

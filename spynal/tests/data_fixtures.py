@@ -1,4 +1,38 @@
-""" Fixtures and functions for generating synthetic data for testing """
+"""
+Fixtures and functions for generating synthetic data for testing
+
+Overview
+--------
+Functionality includes:
+
+- pytest data fixtures for use with unit tests
+- general-purpose random synthetic data generation functions
+
+Function list
+-------------
+Fixtures for generating test data of different data schemes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- one_sample_data : Simulate one-sample (single-condition) data
+- two_sample_data : Simulate set of two-sample (2 condition) data
+- one_way_data : Simulate set of 3-condition data along a single dimension
+- two_way_data : Simulate set of 4-condition data along two orthogonal dimensions
+
+Fixtures for generating oscillatory test data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- oscillation : Simulate continuous (LFP/EEG-like) oscillatory data
+- bursty_oscillation : Simulate bursty continuous oscillatory data
+- spiking_oscillation : Simulate spiking oscillatory data
+- oscillatory_data : Wrapper dict containing all other oscillation fixture functions
+
+Functions for generating synthetic data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- simulate_data : Simulate single-condition random data with given distribution and parameters
+- simulate_dataset : Simulates multi-condition random data with effect size, dist'n, parameters
+
+Function reference
+------------------
+"""
+
 import pytest
 import numpy as np
 
@@ -14,12 +48,12 @@ MISSING_ARG_ERRS = (TypeError,AttributeError,AssertionError)
 
 
 # =============================================================================
-# Fixtures for generating random test data of different data schemes
+# Fixtures for generating fixed test data of different data schemes
 # =============================================================================
 @pytest.fixture(scope='session')
 def one_sample_data():
     """
-    Fixture simulates one-sample (single-condition) random data to use for unit tests
+    Fixture simulates one-sample (single-condition) fixed data to use for unit tests
 
     RETURNS
     data    (10,4) ndarray. Simulated data, simulating (10 trials x 4 channels)
@@ -37,7 +71,7 @@ def one_sample_data():
 @pytest.fixture(scope='session')
 def two_sample_data():
     """
-    Fixture simulates set of two-sample (2 condition) random data to use for unit tests
+    Fixture simulates set of two-sample (2 condition) fixed data to use for unit tests
 
     RETURNS
     data    (20,4) ndarray. Simulated data, simulating (10 trials*2 conditions/levels x 4 channels)
@@ -61,7 +95,7 @@ def two_sample_data():
 @pytest.fixture(scope='session')
 def one_way_data():
     """
-    Fixture simulates set of 3-condition random data to use for unit tests of one-way test functions
+    Fixture simulates set of 3-condition fixed data to use for unit tests of one-way test functions
 
     RETURNS
     data    (30,4) ndarray. Simulated data, simulating (10 trials*3 conditions x 4 channels)
@@ -86,7 +120,7 @@ def one_way_data():
 @pytest.fixture(scope='session')
 def two_way_data():
     """
-    Fixture simulates set of 4-condition random data to use for unit tests of two-way test functions
+    Fixture simulates set of 4-condition fixed data to use for unit tests of two-way test functions
 
     RETURNS
     data    (40,4) ndarray. Simulated data, simulating (10 trials*4 conditions/levels x 4 channels)
@@ -183,7 +217,7 @@ def oscillatory_data(oscillation, bursty_oscillation, spiking_oscillation):
 
 
 # =============================================================================
-# Functions for generating simulated data
+# Functions for generating synthetic data
 # =============================================================================
 def simulate_data(distribution='normal', mean=None, spread=1, n=100, seed=None):
     """
@@ -247,7 +281,7 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, n_chnls=1, distribu
     n_conds Int. Number of distinct conditions/groups to simulate. Default: 2
 
     n       Int. Number of trials/observations to simulate *per condition*. Default: 100
-    
+
     n_chnls Int. Number of independent data channels to simulate (all channels currently
             have same stochastic properties). Default: 1
 
