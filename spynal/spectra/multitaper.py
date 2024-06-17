@@ -9,12 +9,17 @@ from spynal.utils import iarange
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, get_freq_sampling, complex_to_spec_type, phase
-from spynal.spectra.helpers import fft, _extract_triggered_data
+from spynal.spectra.helpers import fft, _extract_triggered_data, _calc_total_data_size, _calc_spec_shape
 
+try:
+    import torch
+except:
+    pass
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
-                        keep_tapers=False, tapers=None, pad=True, **kwargs):
+                        keep_tapers=False, tapers=None, pad=True, torch_avail=False, 
+                        max_bin_size=1e9, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP) or point process (spike) data
 
@@ -74,6 +79,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     - Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
     - Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
+    
     if axis < 0: axis = data.ndim + axis
 
     # Convert spike timestamp data to boolean spike train format
@@ -133,7 +139,15 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     data    = data * tapers
 
     # Compute Fourier transform of projected data, normalizing appropriately
-    spec    = fft(data,n=n_fft,axis=0)
+    if torch_avail:
+        t = torch.from_numpy(data)
+        spec = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
+        spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
+        spec = spec.numpy()
+    else:
+        spec    = fft(data,n=n_fft,axis=0)
+    
+    
     if data_type != 'spike': spec = spec/smp_rate
 
     # DELETE Results are identical with just subtracting of DC from data before fft
@@ -162,7 +176,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freq_range=None, removeDC=True, time_width=0.5, freq_width=4,
                            n_tapers=None, spacing=None, tapers=None, keep_tapers=False,
-                           pad=True, **kwargs):
+                           pad=True, torch_avail=False, max_bin_size=1e9, **kwargs):
     """
     Compute multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
@@ -232,6 +246,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     - Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
     - Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
+
     if axis < 0: axis = data.ndim + axis
 
     # Convert spike timestamp data to boolean spike train format
@@ -259,16 +274,56 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     timepts     = win_starts + window/2.0
 
     # Extract time-windowed version of data -> (n_timepts_per_win,n_wins,n_dataseries)
-    data = _extract_triggered_data(data, smp_rate, win_starts, [0,window])
+        
+    data_size_tot = _calc_total_data_size(data, smp_rate, win_starts, [0,window])
+    if data_size_tot <= max_bin_size:
+         
+        data = _extract_triggered_data(data, smp_rate, win_starts, [0,window])
 
-    if removeDC: data = remove_dc(data, axis=0)
+        if removeDC: data = remove_dc(data, axis=0)
 
-    # Do multitaper analysis on windowed data
-    # Note: Set axis=0 and removeDC=False bc already dealt with above.
-    # Note: Input values for `freq_width`,`n_tapers` are implicitly propagated here via `tapers`
-    spec, freqs = multitaper_spectrum(data, smp_rate, axis=0, data_type=data_type,
-                                      spec_type=spec_type, freq_range=freq_range, tapers=tapers,
-                                      pad=pad, removeDC=False, keep_tapers=keep_tapers, **kwargs)
+        # Do multitaper analysis on windowed data
+        # Note: Set axis=0 and removeDC=False bc already dealt with above.
+        # Note: Input values for `freq_width`,`n_tapers` are implicitly propagated here via `tapers`   
+        spec, freqs = multitaper_spectrum(data, smp_rate, axis=0, data_type=data_type,
+                                        spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+                                        pad=pad, removeDC=False, keep_tapers=keep_tapers, torch_avail=torch_avail, 
+                                         **kwargs)
+    else:
+        nbins = int(np.floor(data_size_tot / max_bin_size))
+        s0 = np.round(np.asarray(window)*smp_rate).astype(int)
+        s0 = _calc_spec_shape(s0, smp_rate, freq_range, pad)
+        n_tapers_max = np.floor(2*time_width*freq_width - 1)
+        if n_tapers is None: 
+            ntps = n_tapers_max
+        else: 
+            ntps = n_tapers
+            
+        if keep_tapers:
+            spec = np.zeros((s0,ntps,len(timepts),*data.shape[1:])) * 1j
+        else:
+            spec = np.zeros((s0,len(timepts),*data.shape[1:])) * 1j
+
+        step = int(np.ceil(win_starts.shape[0]/nbins))
+        i = 0
+        while (i+1)+step+1 < ntps:
+            i_win_starts = win_starts[i*step:(i+1)*step,...]
+            d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
+            if removeDC: d = remove_dc(d, axis=0)
+            spec[...,i*step:(i+1)*step,:], freqs = multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
+                                        spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+                                        pad=pad, removeDC=False, keep_tapers=keep_tapers, torch_avail=torch_avail, 
+                                        **kwargs)
+            i += 1
+            
+        i_win_starts = win_starts[i*step:,...]
+        d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
+        if removeDC: d = remove_dc(d, axis=0)
+        spec[...,i*step:,:], freqs = multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
+                                    spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+                                    pad=pad, removeDC=False, keep_tapers=keep_tapers, torch_avail=torch_avail, 
+                                    **kwargs)
+
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
     if axis != 0:
@@ -276,6 +331,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         else:           spec = np.moveaxis(spec, [0,1], [axis,axis+1])
 
     return spec, freqs, timepts
+
 
 
 def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
@@ -326,4 +382,3 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     # Note: You might imagine you'd want sym=False, but sym=True gives same values
     #       as Chronux dpsschk() function...
     return dpss(n_samples, time_freq_prod, Kmax=n_tapers, sym=True, norm=2).T * sqrt(smp_rate)
-
