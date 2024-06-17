@@ -236,17 +236,17 @@ def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False)
         Only returned if `return_evoked` is True.
     """
     assert axis is not None, "<axis> should correspond to data trials/observations dimension"
-    
+
     method = method.lower()
     design = np.asarray(design)
 
     data = data.copy()  # Copy input data to avoid overwriting it in caller
-    
+
     # Subtract off grand mean potential across all trials
     if method in ['mean','grandmean']:
         evoked_grandmean = np.mean(data, axis=axis, keepdims=True)
         data -= evoked_grandmean
-        
+
         # Expand grand-mean evoked potential to n_trials if returning evoked
         if return_evoked:
             reps = np.ones((data.ndim,),dtype=int)
@@ -263,7 +263,7 @@ def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False)
 
         data, data_shape = standardize_array(data, axis=axis, target_axis=0)
         if return_evoked: evoked = np.empty_like(data)
-        
+
         for group in groups:
             idxs = design == group
             evoked_group = np.mean(data[idxs,...], axis=0, keepdims=True)
@@ -294,4 +294,3 @@ def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False)
 
     if return_evoked:   return data, evoked
     else:               return data
-

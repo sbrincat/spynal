@@ -8,7 +8,7 @@ from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, complex_to_spec_type
 from spynal.spectra.helpers import fft, ifft, _FFTW_KWARGS_DEFAULT, \
-                                   _extract_triggered_data, _undo_standardize_array_newaxis
+                                   _undo_standardize_array_newaxis
 try:
     import torch
 except:
@@ -65,7 +65,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
 
 def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
                         removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0,
-                        downsmp=1, torch_avail=False, max_bin_size=1e10, **kwargs):
+                        downsmp=1, use_torch=False, **kwargs):
     """
     Compute continuous time-frequency wavelet transform of data at given frequencies.
 
@@ -147,7 +147,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if removeDC: data = remove_dc(data,axis=0)
 
     # Compute FFT of data
-    if torch_avail:
+    if use_torch:
         t = torch.from_numpy(data)
         data = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
         data = data.permute(*torch.arange(data.ndim - 1, -1, -1))
@@ -163,7 +163,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Convolve data with wavelets (multiply in Fourier domain)
     # -> inverse FFT to get wavelet transform
-    if torch_avail:
+    if use_torch:
         t = torch.from_numpy(data*wavelets_fft)
         spec = torch.fft.ifft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft, axis=1)
         spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
@@ -251,7 +251,7 @@ def compute_wavelets(n, smp_rate, freqs=None, wavelet='morlet', wavenumber=6, do
             raise NotImplementedError("non-FFT wavelet output not coded up yet (TODO)")
 
     else:
-        raise ValueError("Unsupported value '%s' given for <wavelet>." \
+        raise ValueError("Unsupported value '%s' given for <wavelet>."
                          "Currently only 'Morlet' suppported")
 
     return wavelets
@@ -291,7 +291,7 @@ def wavelet_bandwidth(freqs, wavelet='morlet', wavenumber=6, full=True):
         time_widths = 1 / (2*pi*freq_widths)
 
     else:
-        raise ValueError("Unsupported value '%s' given for <wavelet>." \
+        raise ValueError("Unsupported value '%s' given for <wavelet>."
                          "Currently only 'Morlet' suppported")
 
     # Convert half-bandwidths to full-bandwidths
@@ -344,8 +344,7 @@ def wavelet_edge_extent(freqs, wavelet='morlet', wavenumber=6):
         edge_extent     = sqrt(2.0) * scales
 
     else:
-        raise ValueError("Unsupported value '%s' given for <wavelet>." \
+        raise ValueError("Unsupported value '%s' given for <wavelet>."
                          "Currently only 'Morlet' suppported")
 
     return edge_extent
-

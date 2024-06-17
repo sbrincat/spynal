@@ -8,7 +8,6 @@ try:
 except ImportError:
     HAS_XARRAY = False
 
-from spynal.utils import set_random_seed, iarange
 from spynal.spectra.helpers import _str_to_pool_func
 
 
@@ -79,9 +78,9 @@ def pool_freq_bands(data, bands, axis=None, freqs=None, func='mean'):
 
     else:
         assert axis is not None, \
-        ValueError("For ndarray data, must give frequency axis in <axis>")
+            ValueError("For ndarray data, must give frequency axis in <axis>")
         assert freqs is not None, \
-        ValueError("For ndarray data, must give frequency sampling vector in <freqs>")
+            ValueError("For ndarray data, must give frequency sampling vector in <freqs>")
 
         if axis != 0: data = data.swapaxes(0,axis)
 
@@ -164,9 +163,9 @@ def pool_time_epochs(data, epochs, axis=None, timepts=None, func='mean'):
 
     else:
         assert axis is not None, \
-        ValueError("For ndarray data, must give time axis in <axis>")
+            ValueError("For ndarray data, must give time axis in <axis>")
         assert timepts is not None, \
-        ValueError("For ndarray data, must give time sampling vector in <timepts>")
+            ValueError("For ndarray data, must give time sampling vector in <timepts>")
 
         if axis != 0: data = data.swapaxes(0,axis)
 
@@ -233,4 +232,3 @@ def one_over_f_norm(data, axis=None, freqs=None, exponent=1.0):
         freqs           = freqs[tuple(slicer)]      # Expand freqs to dimensionality of data
 
     return data * freqs**exponent
-

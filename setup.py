@@ -16,7 +16,8 @@ requirements = [
         'hdf5storage',
         'patsy',
         'scikit-learn',
-        'pyfftw>=0.12.0'
+        'pyfftw>=0.12.0',
+        'torch'
         ]
 
 setuptools.setup(

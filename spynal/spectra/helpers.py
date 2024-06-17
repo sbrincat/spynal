@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 """ Helper functions for spectra module for spectral analysis """
 from warnings import warn
-from math import floor, ceil, log2
+from math import floor, ceil
 import numpy as np
 from spynal.spectra.utils import next_power_of_2, get_freq_sampling
 
 from multiprocessing import cpu_count
 from pyfftw.interfaces.scipy_fftpack import fft, ifft # ~ 46/16 s on benchmark
+
+try:
+    import torch
+    HAS_TORCH = True
+except:
+    HAS_TORCH = False
 
 # Set default arguments for pyfftw functions: Fast planning, use all available threads
 _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
@@ -61,21 +67,6 @@ def _extract_triggered_data(data, smp_rate, event_times, window):
 
     return data_out
 
-def _calc_total_data_size(data, smp_rate, event_times, window):
-    # Convert event_times, window from s -> samples
-    event_times = np.floor(np.asarray(event_times)*smp_rate).astype(int)
-    window      = np.round(np.asarray(window)*smp_rate).astype(int)
-
-    n_per_event = window[1] - window[0]
-    n_events    = len(event_times)
-    data_shape  = data.shape
-    return (n_per_event) * (n_events) * np.prod(data_shape[1:]) * 8
-
-def _calc_spec_shape(data_shape_0, smp_rate, freq_range, pad):
-    if not pad: n_fft = data_shape_0
-    else:       n_fft = next_power_of_2(data_shape_0)
-    freqs,_ = get_freq_sampling(smp_rate,n_fft,freq_range=freq_range)
-    return len(freqs)
 
 def _undo_standardize_array_newaxis(data,data_shape,axis=0):
     """

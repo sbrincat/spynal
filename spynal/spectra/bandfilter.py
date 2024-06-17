@@ -9,14 +9,13 @@ from scipy.signal import filtfilt, hilbert, zpk2tf, butter, ellip, cheby1, cheby
 from spynal.utils import standardize_array
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
-from spynal.spectra.utils import complex_to_spec_type, phase
+from spynal.spectra.utils import complex_to_spec_type
 from spynal.spectra.helpers import _undo_standardize_array_newaxis
 
 
 def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freqs=((2,8),(10,32),(40,100)), removeDC=True,
-                        filt='butter', order=4, params=None, buffer=0, 
-                        torch_avail=False, max_bin_size=1e10, **kwargs):
+                        filt='butter', order=4, params=None, buffer=0, use_torch=False, **kwargs):
     """
     Computes band-filtered and Hilbert-transformed signal from data
     for given frequency band(s), then reduces it to 1D frequency spectra by averaging across time.
@@ -82,7 +81,6 @@ def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     spec, freqs, _ = bandfilter_spectrogram(data, smp_rate, axis=axis, data_type=data_type,
                                             spec_type=spec_type, freqs=freqs, removeDC=removeDC,
                                             filt=filt, order=order, params=params, buffer=buffer,
-                                            torch_avail=False, max_bin_size=1e10, 
                                             **kwargs)
 
     # Take mean across time axis (which is now shifted +1 b/c of frequency axis)
@@ -91,8 +89,7 @@ def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
 def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freqs=((2,8),(10,32),(40,100)), removeDC=True,
-                           filt='butter', order=4, params=None, buffer=0, downsmp=1, 
-                           torch_avail=False, max_bin_size=1e10, **kwargs):
+                           filt='butter', order=4, params=None, buffer=0, downsmp=1, use_torch=False, **kwargs):
     """
     Computes zero-phase band-filtered and Hilbert-transformed signal from data
     for given frequency band(s).
@@ -175,7 +172,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
         freqs   = np.asarray(freqs)  # Convert freqs to (n_freqbands,2)
         # Set any freqs > Nyquist equal to Nyquist
-        freqs[freqs > smp_rate/2] = smp_rate/2        
+        freqs[freqs > smp_rate/2] = smp_rate/2
         n_freqs = freqs.shape[0]
         params  = set_filter_params(freqs, smp_rate, filt=filt, order=order,
                                     form='ba', return_dict=True, **kwargs)
@@ -237,6 +234,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
 
     return spec, freqs, timepts
+
 
 bandfilter = bandfilter_spectrogram
 """ Alias of :func:`bandfilter_spectrogram`. See there for details. """
@@ -326,15 +324,15 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, btypes=None, form
             # If high-cut freq >= Nyquist freq, assume high-pass filter
             elif band_norm[1] >= 1: btypes.append('highpass')
             # Otherwise, assume band-pass filter
-            else:                   btypes.append('bandpass')        
-        
-    # Ensure passed `btypes` is a n_bands-length list of strings    
+            else:                   btypes.append('bandpass')
+
+    # Ensure passed `btypes` is a n_bands-length list of strings
     else:
         if isinstance(btypes,str): btypes = [btypes]
-        assert len(btypes) in [1,n_bands],\
-                "`btypes` must be given as a single string (used for *all* bands), \
-                    or a n_bands-length list of strings (%d bands, len(btypes)=%d)" \
-                        % (n_bands, len(btypes))
+        assert len(btypes) in [1,n_bands], \
+            "`btypes` must be given as a single string (used for *all* bands), \
+              or a n_bands-length list of strings (%d bands, len(btypes)=%d)" \
+            % (n_bands, len(btypes))
         if len(btypes) < n_bands:
             btypes = btypes * n_bands
 
@@ -381,4 +379,3 @@ def set_filter_params(bands, smp_rate, filt='butter', order=4, btypes=None, form
 
     if return_dict: return params
     else:           return params.values()
-

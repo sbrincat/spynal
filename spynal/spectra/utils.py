@@ -14,7 +14,7 @@ def next_power_of_2(n):
     return 1 if n == 0 else 2**ceil(log2(n))
 
 
-def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
+def get_freq_sampling(smp_rate, n_fft, freq_range=None, pad=False, two_sided=False):
     """
     Return frequency sampling vector (axis) for a given FFT-based computation
 
@@ -24,12 +24,14 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
         Data sampling rate (Hz)
 
     n_fft : scalar
-        Number of samples (timepoints) in FFT output
+        Number of samples (timepoints) in FFT output (excluding any padding due to `pad`)
 
     freq_range : array-like, shape=(2,) or scalar, default: all frequencies from FFT
         Range of frequencies to retain in output, either given as an explicit [low,high]
         range or just a scalar giving the highest frequency to return.
 
+    pad : bool, default: False
+        If True, `n_fft` is increased to length = the next power of 2
 
     two_sided : bool, default: False
         If True, return freqs for two-sided spectrum, including both positive and
@@ -44,7 +46,10 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
     freq_bool : ndarray, shape=(n_fft,), dtype=bool
         Boolean vector flagging frequencies in full FFT output to retain, given desired freq_range
     """
-    freqs   = np.fft.fftfreq(n_fft,d=1/smp_rate) # All possible frequencies
+    # If requested, pad data to next power of 2 > input n
+    if pad: n_fft = next_power_of_2(n_fft)
+
+    freqs   = np.fft.fftfreq(n_fft, d=1/smp_rate) # All possible frequencies
 
     # If no range requested, keep all frequencies
     if freq_range is None:
@@ -53,8 +58,8 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
             freq_bool = np.ones((n_fft,),dtype=bool)
         # Limit to positive frequencies
         else:
-            if n_fft%2 == 0: n = (n_fft/2 + 1, n_fft/2 - 1)
-            else:            n = ((n_fft-1)/2, (n_fft-1)/2 + 1)
+            if n_fft % 2 == 0:  n = (n_fft/2 + 1, n_fft/2 - 1)
+            else:               n = ((n_fft-1)/2, (n_fft-1)/2 + 1)
             freq_bool = np.concatenate((np.ones((int(n[0]),),dtype=bool),
                                         np.zeros((int(n[1]),),dtype=bool)))
 
@@ -67,7 +72,7 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
             freq_bool = (np.abs(freqs) >= freq_range[0]) & \
                         (np.abs(freqs) <= freq_range[1])
         else:
-            raise ValueError("freq_range must be given as 2-length vector = [min,max]" \
+            raise ValueError("freq_range must be given as 2-length vector = [min,max]"
                              "or scalar max frequency")
 
         # Limit to positive frequencies. Special case to also get f = (-)smp_rate/2
@@ -80,7 +85,26 @@ def get_freq_sampling(smp_rate, n_fft, freq_range=None, two_sided=False):
     # Again, special case to deal with (-)smp_rate/2
     if not two_sided: freqs = np.abs(freqs)
 
-    return freqs,freq_bool
+    return freqs, freq_bool
+
+
+def get_freq_length(smp_rate, n_fft, freq_range=None, pad=False, two_sided=False):
+    """
+    Return length of frequency sampling vector (axis) for a given FFT-based computation.
+
+    Wrapper around :func:`get_freq_sampling` that simply returns the length of the list
+    of sampled freqs. Input arguments are identical; see there for details.
+
+    Returns
+    -------
+    n_freqs : int
+        Length of frequency sampling vector for given FFT, which could be used to set axis
+        length for array to hold FFT results.
+    """
+    freqs,_ = get_freq_sampling(smp_rate, n_fft, freq_range=freq_range,
+                                pad=pad, two_sided=two_sided)
+
+    return len(freqs)
 
 
 def complex_to_spec_type(data, spec_type):
