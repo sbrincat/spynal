@@ -3,7 +3,6 @@
 from warnings import warn
 from math import floor, ceil
 import numpy as np
-from spynal.spectra.utils import next_power_of_2, get_freq_sampling
 
 from multiprocessing import cpu_count
 from pyfftw.interfaces.scipy_fftpack import fft, ifft # ~ 46/16 s on benchmark
@@ -25,6 +24,31 @@ _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
 # from pyfftw.interfaces.cache import enable as enable_pyfftw_cache
 # import pyfft
 # enable_pyfftw_cache()
+
+
+def _fft(data, nfft, axis=0, use_torch=HAS_TORCH):
+    """ FFT """
+    if use_torch:
+        d = torch.from_numpy(data)
+        spec = torch.fft.fft(d.permute(*torch.arange(d.ndim - 1, -1, -1)), n=nfft)
+        spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
+        spec = spec.numpy()
+    else:
+        spec = fft(data, n=nfft, axis=0, **_FFTW_KWARGS_DEFAULT)
+
+    return spec
+
+def _ifft(spec, nfft, axis=0, use_torch=HAS_TORCH):
+    """ Inverse FFT """
+    if use_torch:
+        s = torch.from_numpy(spec)
+        data = torch.fft.ifft(s.permute(*torch.arange(s.ndim - 1, -1, -1)), n=nfft, axis=1)
+        data = data.permute(*torch.arange(data.ndim - 1, -1, -1))
+        data = data.numpy()
+    else:
+        data = ifft(spec, n=nfft, axis=1, **_FFTW_KWARGS_DEFAULT)
+
+    return data
 
 
 def _extract_triggered_data(data, smp_rate, event_times, window):

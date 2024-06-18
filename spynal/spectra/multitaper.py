@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """ Multitaper spectral analysis """
-from math import floor, sqrt
+from math import floor, ceil, sqrt
 import numpy as np
 
 from scipy.signal.windows import dpss
@@ -10,12 +10,8 @@ from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, get_freq_sampling, get_freq_length, \
                                  complex_to_spec_type, phase
-from spynal.spectra.helpers import fft, _extract_triggered_data
+from spynal.spectra.helpers import _fft, _extract_triggered_data
 
-try:
-    import torch
-except:
-    pass
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
@@ -142,13 +138,15 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     data    = data * tapers
 
     # Compute Fourier transform of projected data, normalizing appropriately
-    if use_torch:
-        t = torch.from_numpy(data)
-        spec = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
-        spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
-        spec = spec.numpy()
-    else:
-        spec    = fft(data,n=n_fft,axis=0)
+    spec = _fft(data, n_fft, axis=-1 if use_torch else 0, use_torch=use_torch)
+    # DELETE
+    # if use_torch:
+    #     t = torch.from_numpy(data)
+    #     spec = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
+    #     spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
+    #     spec = spec.numpy()
+    # else:
+    #     spec  = fft(data,n=n_fft,axis=0)
 
 
     if data_type != 'spike': spec = spec/smp_rate
@@ -179,7 +177,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freq_range=None, removeDC=True, time_width=0.5, freq_width=4,
                            n_tapers=None, spacing=None, tapers=None, keep_tapers=False,
-                           pad=True, use_torch=False, max_bin_size=1e9, **kwargs):
+                           pad=True, use_torch=False, max_chunk_size=1e9, **kwargs):
     """
     Compute multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
@@ -269,64 +267,88 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     if tapers is None:
         tapers = compute_tapers(smp_rate, time_width=time_width, freq_width=freq_width,
                                 n_tapers=n_tapers)
+    n_tapers = tapers.shape[-1]
 
     # Set up parameters for data time windows
     # Set window starts to range from time 0 to time n - window width
     win_starts  = iarange(0, n_timepts/smp_rate - window, spacing)
     # Set sampled timepoint vector = center of each window
     timepts     = win_starts + window/2.0
+    n_timepts   = len(timepts)
 
-    # Extract time-windowed version of data -> (n_timepts_per_win,n_wins,n_dataseries)
-    n_per_win = np.round(window*smp_rate).astype(int) 
-    data_size_tot = n_per_win * len(timepts) * np.prod(data.shape[1:]) * data.itemsize
+    # Determine size in memory of output spectral data, to see if we need to break into chunks
+    n_per_win = np.round(window*smp_rate).astype(int)
+    data_size_per_t = n_per_win * np.prod(data.shape[1:]) * data.itemsize
+    data_size_total = data_size_per_t * n_timepts
 
-    if data_size_tot <= max_bin_size:
-
+    # If data is small enough, just compute spectrogram of it all in one step
+    if data_size_total <= max_chunk_size:
+        # Extract time-windowed version of data -> (n_timepts_per_win,n_timewins,n_dataseries)
         data = _extract_triggered_data(data, smp_rate, win_starts, [0,window])
 
-        if removeDC: data = remove_dc(data, axis=0)
-
         # Do multitaper analysis on windowed data
-        # Note: Set axis=0 and removeDC=False bc already dealt with above.
-        # Note: Input values for `freq_width`,`n_tapers` are implicitly propagated here via `tapers`
         spec, freqs = multitaper_spectrum(data, smp_rate, axis=0, data_type=data_type,
                                           spec_type=spec_type, freq_range=freq_range,
-                                          tapers=tapers, pad=pad, removeDC=False,
+                                          tapers=tapers, pad=pad, removeDC=removeDC,
                                           keep_tapers=keep_tapers, use_torch=use_torch, **kwargs)
+
+    # For larger data that might saturate RAM, break into temporal chunks for spectral analysis
     else:
-        nbins = int(np.floor(data_size_tot / max_bin_size))
-        s0 = np.round(np.asarray(window)*smp_rate).astype(int)
-        s0 = get_freq_length(smp_rate, s0, freq_range=freq_range, pad=pad)
-        n_tapers_max = np.floor(2*time_width*freq_width - 1)
-        if n_tapers is None:
-            ntps = n_tapers_max
-        else:
-            ntps = n_tapers
+        # Number of timepoints (windows) who's memory size fits in 1 chunk
+        n_timepts_per_chunk = int(floor(max_chunk_size / data_size_per_t))
+        # Resulting number of chunks in total data (round up to get final, possibly partial, chunk)
+        n_chunks = int(ceil(n_timepts / n_timepts_per_chunk))
 
+        n_fft = np.round(np.asarray(window)*smp_rate).astype(int)
+        n_freqs = get_freq_length(smp_rate, n_fft, freq_range=freq_range, pad=pad)
         if keep_tapers:
-            spec = np.zeros((s0,ntps,len(timepts),*data.shape[1:])) * 1j
+            spec = np.empty((n_freqs,n_tapers,len(timepts),*data.shape[1:]), dtype=complex)
         else:
-            spec = np.zeros((s0,len(timepts),*data.shape[1:])) * 1j
+            spec = np.empty((n_freqs,len(timepts),*data.shape[1:]), dtype=complex)
 
-        step = int(np.ceil(win_starts.shape[0]/nbins))
-        i = 0
-        while (i+1)+step+1 < ntps:
-            i_win_starts = win_starts[i*step:(i+1)*step,...]
-            d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
-            if removeDC: d = remove_dc(d, axis=0)
-            spec[...,i*step:(i+1)*step,:], freqs = multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
-                                        spec_type=spec_type, freq_range=freq_range, tapers=tapers,
-                                        pad=pad, removeDC=False, keep_tapers=keep_tapers, use_torch=use_torch,
-                                        **kwargs)
-            i += 1
+        for i_chunk in range(n_chunks):
+            # Time indexes for current chunk. Truncate final chunk at end of data.
+            if ((i_chunk+1)*n_timepts_per_chunk - 1) < n_timepts:
+                idxs = slice(i_chunk*n_timepts_per_chunk, (i_chunk+1)*n_timepts_per_chunk)
+            else:
+                idxs = slice(i_chunk*n_timepts_per_chunk, n_timepts)
 
-        i_win_starts = win_starts[i*step:,...]
-        d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
-        if removeDC: d = remove_dc(d, axis=0)
-        spec[...,i*step:,:], freqs = multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
+            # Extract time-windowed version of data -> (n_timepts_per_win,n_timewins,n_dataseries)
+            data_win = _extract_triggered_data(data, smp_rate, win_starts[idxs], [0,window])
+
+            # Do multitaper analysis on windowed data
+            spec[...,idxs,:], freqs = \
+                multitaper_spectrum(data_win, smp_rate, axis=0,data_type=data_type,
                                     spec_type=spec_type, freq_range=freq_range, tapers=tapers,
-                                    pad=pad, removeDC=False, keep_tapers=keep_tapers, use_torch=use_torch,
-                                    **kwargs)
+                                    pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
+                                    use_torch=use_torch, **kwargs)
+
+        # DELETE
+        # n_chunks = int(ceil(data_size_total / max_chunk_size))
+        # n_timepts_per_chunk = int(ceil(n_timepts/n_chunks))
+
+        # # Number of chunks to break data into; Number of time windows per chunk
+        # n_chunks = int(floor(data_size_total / max_chunk_size))
+        # step = int(ceil(n_timepts/n_chunks))
+
+        # i = 0
+        # while (i+1)+step+1 < n_chunks:
+        #     i_win_starts = win_starts[i*step:(i+1)*step,...]
+        #     d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
+        #     spec[...,i*step:(i+1)*step,:], freqs = \
+        #         multitaper_spectrum(d, smp_rate, axis=0,data_type=data_type,
+        #                             spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+        #                             pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
+        #                             use_torch=use_torch, **kwargs)
+        #     i += 1
+
+        # i_win_starts = win_starts[i*step:,...]
+        # d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
+        # spec[...,i*step:,:], freqs = \
+        #     multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
+        #                         spec_type=spec_type, freq_range=freq_range, tapers=tapers,
+        #                         pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
+        #                         use_torch=use_torch, **kwargs)
 
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
