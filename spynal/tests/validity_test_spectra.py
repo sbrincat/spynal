@@ -18,12 +18,15 @@ import time
 from warnings import warn
 from math import pi, sqrt, ceil, floor, log2
 import numpy as np
+import xarray as xr
 import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
-from spynal.spectra.spectra import power_spectrogram, itpc
-from spynal.spectra.utils import simulate_oscillation
+from spynal.spectra.spectra import spectrum, power_spectrogram, itpc
+from spynal.spectra.utils import simulate_oscillation, set_random_seed
+from spynal.spectra.helpers import _fft, _ifft
+from spynal.plots import plot_line_with_error_fill
 
 
 def test_power(method, test='frequency', test_values=None, spec_type='power',
@@ -38,7 +41,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
 
     For test failures, raises an error or warning (depending on value of `do_tests`).
     Optionally plots summary of test results.
-    
+
     Parameters
     ----------
     method : str
@@ -47,7 +50,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
 
     test : str, default: 'frequency'
         Type of test to run. Options:
-        
+
         - 'frequency' : Tests multiple simulated oscillatory frequencies
             Checks power for monotonic increase of peak freq
         - 'amplitude' : Tests multiple simulated amplitudes at same freq
@@ -62,7 +65,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'frequency' : List of frequencies to test. Default: [4,8,16,32,64]
         - 'amplitude' : List of oscillation amplitudes to test. Default: [1,2,5,10,20]
         - 'n' :         Trial numbers. Default: [25,50,100,200,400,800]
@@ -81,7 +84,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
 
     seed : int, default: 1 (reproducible random numbers)
         Random generator seed for repeatable results. Set=None for fully random numbers.
-        
+
     - Following args set param's for sim, may be overridden by <test_values> depending on test -
     amp     Scalar. Simulated oscillation amplitude (a.u.) if test != 'amplitude'. Default: 5.0
     freq    Scalar. Simulated oscillation frequency (Hz) if test != 'frequency'. Default: 32
@@ -243,7 +246,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     # For frequency test, find frequency with maximal power for each test
     if test in ['frequency','freq']:
         idxs = np.argmax(marginal_means,axis=0)
-        peak_freqs = freqs[idxs] if not(do_burst or (method == 'bandfilter')) else idxs
+        peak_freqs = freqs[idxs] if not (do_burst or (method == 'bandfilter')) else idxs
 
         # Find frequency in spectrogram closest to each simulated frequency
         test_freq_idxs  = np.asarray([np.argmin(np.abs(freq_transform(f) - freqs_transformed))
@@ -410,7 +413,7 @@ def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
     ----------
     methods : array-like of str, default: ('wavelet','multitaper','bandfilter') (all supported)
         List of power computation methods to test.
-                
+
     tests : array-like of str, default: ('frequency','amplitude','phase','phase_sd','n','burst_rate')
         List of tests to run.
 
@@ -449,14 +452,14 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
     ----------
     methods : array-like, default: ('wavelet','multitaper','bandfilter') (all supported methods)
         List of power computation methods to test.
-                
+
 
     tests : array-like, default: ('frequency','amplitude','phase','phase_sd','n') (all supported)
-        List of tests to run.                
+        List of tests to run.
 
     itpc_method : array-like, default: ('PLV','Z','PPC') (all supported options)
         List of methods to use for computing intertrial phase clustering
-                
+
     do_tests : bool, default: True
         Set=True to evaluate test results against expected values and raise an error if they fail.
 
@@ -484,3 +487,47 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
 
                 # If saving plots to file, let's not leave them all open
                 if 'plot_dir' in kwargs: plt.close('all')
+
+
+def test_fft_time(spec_method, fft_methods=('torch','pyfftw','scipy','numpy'),
+                  n_ffts=(512,1024,2048,4096,8192,16384), n_chnls=(1,10,100,500), n_reps=5, seed=1):
+    """ Time testing for different FFT methods """
+    if seed is not None: set_random_seed(seed)
+
+    run_times = xr.DataArray(np.empty((len(n_ffts),len(n_chnls),len(fft_methods),n_reps)),
+                             dims=['n_fft','n_chnl','method','rep'],
+                             coords={'n_fft':list(n_ffts),
+                                     'n_chnl':list(n_chnls),
+                                     'method':list(fft_methods),
+                                     'rep':list(range(n_reps))})
+
+    for n_fft in n_ffts:
+        for n_chnl in n_chnls:
+            for rep in range(n_reps):
+                data = np.random.rand(n_fft,n_chnl)
+
+                for fft_method in fft_methods:
+                    start_time = time.time()
+                    spec = _fft(data, n_fft, axis=0, fft_method=fft_method)
+                    data2 = _ifft(spec, n_fft, axis=0, fft_method=fft_method)
+                    # spectrum(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
+                    dt = time.time() - start_time
+                    run_times.loc[n_fft,n_chnl,fft_method,rep] = dt
+
+    means = run_times.mean(dim='rep')
+    sds = run_times.std(dim='rep')
+
+    plt.figure()
+    for j,n_chnl in enumerate(n_chnls):
+        plt.subplot(len(n_chnls),1,j+1)
+        plot_line_with_error_fill(n_ffts, means.sel(n_chnl=n_chnl).values.T,
+                                  sds.sel(n_chnl=n_chnl).values.T)
+        plt.legend(fft_methods)
+        plt.title("%d channels" % n_chnl)
+        plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
+        if n_chnl == n_chnls[-1]:
+            plt.xlabel("Number of samples")
+            plt.ylabel("Time per FFT (s)")
+            plt.xticks(n_ffts)
+        else:
+            plt.xticks(n_ffts,[])

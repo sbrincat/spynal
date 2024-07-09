@@ -61,7 +61,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
 
 def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
                         removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0,
-                        downsmp=1, use_torch=False, **kwargs):
+                        downsmp=1, fft_method=None, **kwargs):
     """
     Compute continuous time-frequency wavelet transform of data at given frequencies.
 
@@ -143,15 +143,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if removeDC: data = remove_dc(data,axis=0)
 
     # Compute FFT of data
-    data = _fft(data, n_fft, axis=-1 if use_torch else 0, use_torch=use_torch)
-    # DELETE
-    # if use_torch:
-    #     t = torch.from_numpy(data)
-    #     data = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
-    #     data = data.permute(*torch.arange(data.ndim - 1, -1, -1))
-    #     data = data.numpy()
-    # else:
-    #     data = fft(data, n=n_fft,axis=0, **_FFTW_KWARGS_DEFAULT)
+    data = _fft(data, n_fft, axis=-1 if fft_method=='torch' else 0, fft_method=fft_method)
 
     # Reshape data -> (1,n_timepts,n_series) (insert axis 0 for wavelet scales/frequencies)
     # Reshape wavelets -> (n_freqs,n_timepts,1) to broadcast
@@ -161,15 +153,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Convolve data with wavelets (multiply in Fourier domain)
     # -> inverse FFT to get wavelet transform
-    spec = _ifft(data*wavelets_fft, n_fft, axis=-1 if use_torch else 0, use_torch=use_torch)[:,time_idxs_out,...]
-    # DELETE
-    # if use_torch:
-    #     t = torch.from_numpy(data*wavelets_fft)
-    #     spec = torch.fft.ifft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft, axis=1)
-    #     spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
-    #     spec = spec.numpy()[:,time_idxs_out,...]
-    # else:
-    #     spec = ifft(data*wavelets_fft, n=n_fft,axis=1, **_FFTW_KWARGS_DEFAULT)[:,time_idxs_out,...]
+    spec = _ifft(data*wavelets_fft, n_fft, axis=-1 if fft_method=='torch' else 1, fft_method=fft_method)[:,time_idxs_out,...]
 
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)

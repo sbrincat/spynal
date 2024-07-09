@@ -15,7 +15,7 @@ from spynal.spectra.helpers import _undo_standardize_array_newaxis
 
 def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freqs=((2,8),(10,32),(40,100)), removeDC=True,
-                        filt='butter', order=4, params=None, buffer=0, use_torch=False, **kwargs):
+                        filt='butter', order=4, params=None, buffer=0, **kwargs):
     """
     Computes band-filtered and Hilbert-transformed signal from data
     for given frequency band(s), then reduces it to 1D frequency spectra by averaging across time.
@@ -89,7 +89,7 @@ def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
 def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freqs=((2,8),(10,32),(40,100)), removeDC=True,
-                           filt='butter', order=4, params=None, buffer=0, downsmp=1, use_torch=False, **kwargs):
+                           filt='butter', order=4, params=None, buffer=0, downsmp=1, **kwargs):
     """
     Computes zero-phase band-filtered and Hilbert-transformed signal from data
     for given frequency band(s).

@@ -3,9 +3,25 @@
 from warnings import warn
 from math import floor, ceil
 import numpy as np
+import scipy as sp
 
 from multiprocessing import cpu_count
-from pyfftw.interfaces.scipy_fftpack import fft, ifft # ~ 46/16 s on benchmark
+# from pyfftw.interfaces.scipy_fftpack import fft, ifft # ~ 46/16 s on benchmark
+
+try:
+    import pyfftw.interfaces.scipy_fftpack as fftw
+    HAS_FFTW = True
+    # Set default arguments for pyfftw functions: Fast planning, use all available threads
+    _FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
+                            'threads': cpu_count()}
+except:
+    HAS_FFTW = False
+
+try:
+    import mkl_fft
+    HAS_MKL = True
+except:
+    HAS_MKL = False
 
 try:
     import torch
@@ -13,40 +29,59 @@ try:
 except:
     HAS_TORCH = False
 
-# Set default arguments for pyfftw functions: Fast planning, use all available threads
-_FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE',
-                        'threads': cpu_count()}
 
 # from numpy.fft import fft,ifft        # ~ 15 s on benchmark
 # from scipy.fftpack import fft,ifft    # ~ 11 s on benchmark
 # from mkl_fft import fft,ifft    # ~ 15.2 s on benchmark
-# from pyfftw import empty_aligned, byte_align
-# from pyfftw.interfaces.cache import enable as enable_pyfftw_cache
-# import pyfft
-# enable_pyfftw_cache()
+# from pyfftw.interfaces.scipy_fftpack import fft, ifft # ~ 46/16 s on benchmark
 
 
-def _fft(data, nfft, axis=0, use_torch=HAS_TORCH):
+def _fft(data, nfft, axis=0, fft_method=None):
     """ FFT """
-    if use_torch:
+    if fft_method is None:
+        if HAS_TORCH:   fft_method = 'torch'
+        elif HAS_FFTW:  fft_method = 'pyfftw'
+        elif HAS_MKL:   fft_method = 'mkl_fft'
+        else:           fft_method = 'scipy'
+
+    if fft_method == 'torch':
         d = torch.from_numpy(data)
         spec = torch.fft.fft(d.permute(*torch.arange(d.ndim - 1, -1, -1)), n=nfft)
         spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
         spec = spec.numpy()
+    elif fft_method == 'pyfftw':
+        spec = fftw.fft(data, n=nfft, axis=axis, **_FFTW_KWARGS_DEFAULT)
+    elif fft_method == 'mkl_fft':
+        spec = mkl_fft.fft(data, n=nfft, axis=axis)
+    elif fft_method == 'scipy':
+        spec = sp.fftpack.fft(data, n=nfft, axis=axis)
     else:
-        spec = fft(data, n=nfft, axis=0, **_FFTW_KWARGS_DEFAULT)
+        spec = np.fft.fft(data, n=nfft, axis=axis)
 
     return spec
 
-def _ifft(spec, nfft, axis=0, use_torch=HAS_TORCH):
+
+def _ifft(spec, nfft, axis=0, fft_method=None):
     """ Inverse FFT """
-    if use_torch:
+    if fft_method is None:
+        if HAS_TORCH:   fft_method = 'torch'
+        elif HAS_FFTW:  fft_method = 'pyfftw'
+        elif HAS_MKL:   fft_method = 'mkl_fft'
+        else:           fft_method = 'scipy'
+
+    if fft_method == 'torch':
         s = torch.from_numpy(spec)
         data = torch.fft.ifft(s.permute(*torch.arange(s.ndim - 1, -1, -1)), n=nfft, axis=1)
         data = data.permute(*torch.arange(data.ndim - 1, -1, -1))
         data = data.numpy()
+    elif fft_method == 'pyfftw':
+        data = fftw.ifft(spec, n=nfft, axis=axis, **_FFTW_KWARGS_DEFAULT)
+    elif fft_method == 'mkl_fft':
+        data = mkl_fft.ifft(spec, n=nfft, axis=axis)
+    elif fft_method == 'scipy':
+        data = sp.fftpack.ifft(spec, n=nfft, axis=axis)
     else:
-        data = ifft(spec, n=nfft, axis=1, **_FFTW_KWARGS_DEFAULT)
+        data = np.fft.ifft(spec, n=nfft, axis=axis)
 
     return data
 

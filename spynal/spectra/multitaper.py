@@ -15,7 +15,7 @@ from spynal.spectra.helpers import _fft, _extract_triggered_data
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                         freq_range=None, removeDC=True, freq_width=4, n_tapers=None,
-                        keep_tapers=False, tapers=None, pad=True, use_torch=False, **kwargs):
+                        keep_tapers=False, tapers=None, pad=True, fft_method=None, **kwargs):
     """
     Multitaper Fourier spectrum computation for continuous (eg LFP) or point process (spike) data
 
@@ -95,7 +95,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if not pad: n_fft = n_timepts
     else:       n_fft = next_power_of_2(n_timepts)
     # Set frequency sampling vector
-    freqs,fbool = get_freq_sampling(smp_rate,n_fft,freq_range=freq_range)
+    freqs,fbool = get_freq_sampling(smp_rate, n_fft, freq_range=freq_range)
 
     # Compute DPSS taper functions (if not precomputed)
     if tapers is None:
@@ -138,16 +138,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     data    = data * tapers
 
     # Compute Fourier transform of projected data, normalizing appropriately
-    spec = _fft(data, n_fft, axis=-1 if use_torch else 0, use_torch=use_torch)
-    # DELETE
-    # if use_torch:
-    #     t = torch.from_numpy(data)
-    #     spec = torch.fft.fft(t.permute(*torch.arange(t.ndim - 1, -1, -1)), n=n_fft)
-    #     spec = spec.permute(*torch.arange(spec.ndim - 1, -1, -1))
-    #     spec = spec.numpy()
-    # else:
-    #     spec  = fft(data,n=n_fft,axis=0)
-
+    spec = _fft(data, n_fft, axis=-1 if fft_method=='torch' else 0, fft_method=fft_method)
 
     if data_type != 'spike': spec = spec/smp_rate
 
@@ -177,7 +168,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freq_range=None, removeDC=True, time_width=0.5, freq_width=4,
                            n_tapers=None, spacing=None, tapers=None, keep_tapers=False,
-                           pad=True, use_torch=False, max_chunk_size=1e9, **kwargs):
+                           pad=True, fft_method=None, max_chunk_size=1e9, **kwargs):
     """
     Compute multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
@@ -290,7 +281,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         spec, freqs = multitaper_spectrum(data, smp_rate, axis=0, data_type=data_type,
                                           spec_type=spec_type, freq_range=freq_range,
                                           tapers=tapers, pad=pad, removeDC=removeDC,
-                                          keep_tapers=keep_tapers, use_torch=use_torch, **kwargs)
+                                          keep_tapers=keep_tapers, fft_method=fft_method, **kwargs)
 
     # For larger data that might saturate RAM, break into temporal chunks for spectral analysis
     else:
@@ -321,7 +312,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                 multitaper_spectrum(data_win, smp_rate, axis=0,data_type=data_type,
                                     spec_type=spec_type, freq_range=freq_range, tapers=tapers,
                                     pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
-                                    use_torch=use_torch, **kwargs)
+                                    fft_method=fft_method, **kwargs)
 
         # DELETE
         # n_chunks = int(ceil(data_size_total / max_chunk_size))
@@ -339,7 +330,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         #         multitaper_spectrum(d, smp_rate, axis=0,data_type=data_type,
         #                             spec_type=spec_type, freq_range=freq_range, tapers=tapers,
         #                             pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
-        #                             use_torch=use_torch, **kwargs)
+        #                             fft_method=fft_method, **kwargs)
         #     i += 1
 
         # i_win_starts = win_starts[i*step:,...]
@@ -348,7 +339,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         #     multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
         #                         spec_type=spec_type, freq_range=freq_range, tapers=tapers,
         #                         pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
-        #                         use_torch=use_torch, **kwargs)
+        #                         fft_method=fft_method, **kwargs)
 
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position

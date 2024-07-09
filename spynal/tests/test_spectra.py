@@ -16,6 +16,178 @@ from spynal.spectra.utils import get_freq_sampling, one_sided_to_two_sided, powe
 # =============================================================================
 # Unit tests for spectral analysis functions
 # =============================================================================
+@pytest.mark.parametrize('data_type, spec_type, method, fft_method, result',
+                         [('lfp',   'power', 'multitaper',  'torch',    0.0137),
+                          ('lfp',   'power', 'multitaper',  'pyfftw',   0.0137),
+                          ('lfp',   'power', 'multitaper',  'scipy',    0.0137),
+                          ('lfp',   'power', 'multitaper',  'numpy',    0.0137),
+                          ('lfp',   'power', 'wavelet',     'torch',    44.9462),
+                          ('lfp',   'power', 'wavelet',     'pyfftw',   44.9462),
+                          ('lfp',   'power', 'wavelet',     'scipy',    44.9462),
+                          ('lfp',   'power', 'wavelet',     'numpy',    44.9462)])
+def test_spectrum_fft_method(oscillatory_data, data_type, spec_type, method, fft_method, result):
+    """ Unit tests for spectrum function """
+    data = oscillatory_data[data_type]
+    data_orig = data.copy()
+    smp_rate = 1000
+    n_trials = 4
+    method_to_n_freqs   = {'wavelet': 26, 'multitaper':513,  'bandfilter': 3}
+    n_freqs = method_to_n_freqs[method]
+    freqs_shape = (n_freqs,2) if (method == 'bandfilter') or (spec_type == 'burst') else (n_freqs,)
+
+    # Time reversal -> inverted sign phase, complex conj of complex, preserves power
+    if spec_type == 'phase':        reversed_result = -result
+    elif spec_type == 'complex':    reversed_result = np.conj(result)
+    else:                           reversed_result = result
+
+    # Basic test of shape, dtype, value of output.
+    # Test values averaged over all freqs in first trial for simplicity
+    spec, freqs = spectrum(data, smp_rate, axis=0, method=method, data_type=data_type,
+                           spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert spec.shape == (n_freqs, n_trials)
+    assert np.issubdtype(spec.dtype,float)
+    assert np.isclose(spec[:,0].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with different data array shape (3rd axis)
+    spec, freqs = spectrum(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
+                           smp_rate, axis=0, method=method, data_type=data_type,
+                           spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert spec.shape == (n_freqs, n_trials/2, n_trials/2)
+    assert np.issubdtype(spec.dtype,float)
+    assert np.isclose(spec[:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with transposed data dimensionality
+    spec, freqs = spectrum(data.T, smp_rate, axis=-1, method=method, data_type=data_type,
+                           spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert spec.shape == (n_trials, n_freqs)
+    assert np.issubdtype(spec.dtype,float)
+    assert np.isclose(spec[0,:].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with vector-valued data
+    spec, freqs = spectrum(data[:,0], smp_rate, axis=-1, method=method, data_type=data_type,
+                           spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert spec.shape == (n_freqs,)
+    assert np.issubdtype(spec.dtype,float)
+    assert np.isclose(spec.mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for expected output with time-reversed data
+    # Skip test for bandfilter method -- different init conds do change results slightly at start
+    # Skip test for multitaper phase/complex -- not time-reversal invariant
+    if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
+        spec, freqs = spectrum(np.flip(data,axis=0), smp_rate, axis=0, method=method,
+                               data_type=data_type, spec_type=spec_type, fft_method=fft_method)
+        assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert spec.shape == (n_freqs, n_trials)
+        assert np.isclose(spec[:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        spec, freqs = spectrum(data, smp_rate, axis=0, method=method, data_type=data_type,
+                               spec_type=spec_type, fft_method=fft_method, foo=None)
+
+
+@pytest.mark.parametrize('data_type, spec_type, method, fft_method, result',
+                         [('lfp',   'power',    'multitaper',  'torch',    0.0137),
+                          ('lfp',   'power',    'multitaper',  'pyfftw',   0.0137),
+                          ('lfp',   'power',    'multitaper',  'scipy',    0.0137),
+                          ('lfp',   'power',    'multitaper',  'numpy',    0.0137),
+                          ('lfp',   'power',    'wavelet',     'torch',    44.9462),
+                          ('lfp',   'power',    'wavelet',     'pyfftw',   44.9462),
+                          ('lfp',   'power',    'wavelet',     'scipy',    44.9462),
+                          ('lfp',   'power',    'wavelet',     'numpy',    44.9462),                          
+                          ])
+def test_spectrogram_fft_method(oscillatory_data, data_type, spec_type, method, fft_method,result):
+    """ Unit tests for spectrogram() function """
+    # Extract given data type from data dict
+    data = oscillatory_data[data_type]
+    data_orig = data.copy()
+    data_type_ = 'lfp' if data_type == 'burst' else data_type
+    smp_rate = 1000
+    n_trials = 4
+
+    method_to_n_freqs   = {'wavelet': 26, 'multitaper':257, 'bandfilter': 3, 'burst':4}
+    method_to_n_timepts = {'wavelet': 1000, 'multitaper':2, 'bandfilter': 1000}
+    n_freqs = method_to_n_freqs['burst'] if spec_type == 'burst' else method_to_n_freqs[method]
+    freqs_shape = (n_freqs,2) if (method == 'bandfilter') or (spec_type == 'burst') else (n_freqs,)
+    n_timepts = method_to_n_timepts[method]
+    if spec_type == 'complex':  dtype = complex
+    elif spec_type == 'burst':  dtype = bool
+    else:                       dtype = float
+
+    # Time reversal -> inverted sign phase, complex conj of complex, preserves power
+    if spec_type == 'phase':        reversed_result = -result
+    elif spec_type == 'complex':    reversed_result = np.conj(result)
+    else:                           reversed_result = result
+
+    # Basic test of shape, dtype, value of output.
+    # Test values averaged over all timepts, freqs for 1st trial for simplicity
+    spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
+                                       data_type=data_type_, spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_freqs, n_timepts, n_trials)
+    assert np.issubdtype(spec.dtype,dtype)
+    assert np.isclose(spec[:,:,0].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with different data array shape (3rd axis)
+    spec, freqs, timepts = spectrogram(data.reshape((-1,int(n_trials/2),int(n_trials/2))),
+                                       smp_rate, axis=0, method=method, data_type=data_type_,
+                                       spec_type=spec_type, fft_method=fft_method)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_freqs, n_timepts, n_trials/2, n_trials/2)
+    assert np.issubdtype(spec.dtype,dtype)
+    assert np.isclose(spec[:,:,0,0].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with transposed data dimensionality
+    extra_args = {'trial_axis':0} if spec_type == 'burst' else {}
+    spec, freqs, timepts = spectrogram(data.T, smp_rate, axis=-1, method=method,
+                                       data_type=data_type_, spec_type=spec_type, fft_method=fft_method, **extra_args)
+    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert freqs.shape == freqs_shape
+    assert timepts.shape == (n_timepts,)
+    assert spec.shape == (n_trials, n_freqs, n_timepts)
+    assert np.issubdtype(spec.dtype,dtype)
+    assert np.isclose(spec[0,:,:].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistent output with vector-valued (single-trial/channel) data
+    # Note: Skip for burst_analysis bc needs multiple trials to compute z-scores
+    if spec_type != 'burst':
+        spec, freqs, timepts = spectrogram(data[:,0], smp_rate, axis=0, method=method,
+                                        data_type=data_type_, spec_type=spec_type, fft_method=fft_method)
+        assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert freqs.shape == freqs_shape
+        assert timepts.shape == (n_timepts,)
+        assert spec.shape == (n_freqs, n_timepts)
+        assert np.issubdtype(spec.dtype,dtype)
+        assert np.isclose(spec[:,:].mean(), result, rtol=1e-4, atol=1e-4)
+
+    # Test for expected output with time-reversed data
+    # Skip test for bandfilter method -- different init conds do change results slightly at start
+    # Skip test for multitaper phase/complex -- not time-reversal invariant
+    if (method == 'wavelet') or ((method == 'multitaper') and (spec_type == 'power')):
+        spec, freqs, timepts = spectrogram(np.flip(data,axis=0), smp_rate, axis=0, method=method,
+                                           data_type=data_type_, spec_type=spec_type, fft_method=fft_method)
+        assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+        assert spec.shape == (n_freqs, n_timepts, n_trials)
+        assert np.isclose(spec[:,:,0].mean(), reversed_result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method=method,
+                                           data_type=data_type_, spec_type=spec_type, fft_method=fft_method, foo=None)
+
+
 @pytest.mark.parametrize('data_type, spec_type, method, result',
                          [('lfp',   'power', 'multitaper',  0.0137),
                           ('lfp',   'power', 'wavelet',     44.9462),
@@ -325,7 +497,7 @@ def test_remove_dc(oscillation, axis):
     """ Unit tests for remove_dc() function """
     data = oscillation
     data_orig = data.copy()
-    
+
     # Test that DC-removed data does have mean=0
     data_no_dc = remove_dc(data, axis=axis)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
@@ -339,12 +511,12 @@ def test_remove_dc(oscillation, axis):
     assert np.array_equal(data_no_dc.shape, data.T.shape)
     if axis == None:    assert np.isclose(data_no_dc.sum(), 0)
     else:               assert np.allclose(data_no_dc.sum(axis=axis_T), 0)
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         data_no_dc = remove_dc(data, axis=axis, foo=None)
-        
-  
+
+
 @pytest.mark.parametrize('method, result, result2',
                          [('mean',      13.3, 0.31),
                           ('groupmean', 0.49, 13.13),
@@ -358,7 +530,7 @@ def test_remove_evoked(oscillation, method, result, result2):
     if method == 'mean':        design = None
     elif method == 'groupmean': design = [0,0,1,1]
     elif method == 'regress':   design = np.vstack(([0,0,0,0], [-1,-1,1,1])).T
-                
+
     # Basic test of function
     data_no_evoked, evoked = remove_evoked(data, axis=1, method=method, design=design, return_evoked=True)
     print(np.round(power(data_no_evoked).mean(),2), np.round(power(evoked).mean(),2))
@@ -388,7 +560,7 @@ def test_remove_evoked(oscillation, method, result, result2):
 # Unit tests for spectral/LFP postprocessing functions
 # =============================================================================
 def test_one_over_f_norm():
-    """ Unit tests for one_over_f_norm() function """    
+    """ Unit tests for one_over_f_norm() function """
     # Generate idealized 1/f spectrogam ~ (n_freqs,n_trials) = (100,4)
     f = iarange(1,100)
     data = np.tile((1.0/f)[:,np.newaxis], (1,4))
@@ -399,14 +571,14 @@ def test_one_over_f_norm():
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert np.array_equal(data_corrected.shape, data.shape)
     assert np.allclose(data_corrected.std(axis=0), 0)
-    
+
     # Test for consistency for transposed data
     data_corrected = one_over_f_norm(data.T, axis=1, freqs=f, exponent=1.0)
     assert np.array_equal(data_corrected.shape, data.T.shape)
     assert np.allclose(data_corrected.std(axis=1), 0)
 
     # Test for expected output for higher exponent
-    data = np.tile((1.0/f**2)[:,np.newaxis], (1,4))    
+    data = np.tile((1.0/f**2)[:,np.newaxis], (1,4))
     data_corrected = one_over_f_norm(data, axis=0, freqs=f, exponent=2.0)
     assert np.allclose(data_corrected.std(axis=0), 0)
 
@@ -414,7 +586,7 @@ def test_one_over_f_norm():
     with pytest.raises(MISSING_ARG_ERRS):
         data_corrected = one_over_f_norm(data, axis=0, freqs=f, foo=None)
 
-             
+
 @pytest.mark.parametrize('variable_type, pooler, result',
                          [('numpy',   'mean',   43.5538),
                           ('numpy',   'sum',    300.0944),
@@ -608,7 +780,7 @@ def test_get_freq_sampling():
     """ Unit tests for get_freq_sampling() function """
     smp_rate = 1000
     nfft = 1000
-    
+
     # Basic test of function
     f, fbool = get_freq_sampling(smp_rate, nfft)
     print(f.shape, f[:10], f[-1])
@@ -638,23 +810,23 @@ def test_one_sided_to_two_sided(oscillation):
     # Basic test of shape, dtype, value of output.
     # Test values averaged over all timepts, freqs for 1st trial for simplicity
     spec, freqs, timepts = spectrogram(data, smp_rate, axis=0, method='multitaper',
-                                       data_type='lfp', spec_type='complex')    
+                                       data_type='lfp', spec_type='complex')
     spec_orig = spec.copy()
-    
+
     # TODO Set up some basic tests of function
     spec2 = one_sided_to_two_sided(spec, freqs, smp_rate, axis=0)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         spec2 = one_sided_to_two_sided(spec, freqs, smp_rate, axis=0, foo=None)
-    
-    
+
+
 def test_imports():
     """ Test different import methods for spectra module """
     # Import entire package
     import spynal
-    spynal.spectra.wavelet.wavelet_spectrogram    
+    spynal.spectra.wavelet.wavelet_spectrogram
     spynal.spectra.wavelet_spectrogram
     # Import module
     import spynal.spectra as spec
@@ -666,4 +838,3 @@ def test_imports():
     # Import specific function from module
     from spynal.spectra.wavelet import wavelet_spectrogram
     wavelet_spectrogram
-        

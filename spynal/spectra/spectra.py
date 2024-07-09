@@ -112,19 +112,14 @@ from spynal.spectra.wavelet import wavelet_spectrum, wavelet_spectrogram
 from spynal.spectra.multitaper import multitaper_spectrum, multitaper_spectrogram
 from spynal.spectra.bandfilter import bandfilter_spectrum, bandfilter_spectrogram
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands
-from spynal.spectra.helpers import _frequency_plot_settings, HAS_TORCH
+from spynal.spectra.helpers import _frequency_plot_settings
 
-# try:
-#     import torch
-#     torch_avail = True
-# except:
-#     torch_avail = False
 
 # =============================================================================
 # General spectral analysis functions
 # =============================================================================
 def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_type='complex',
-             removeDC=True, use_torch=HAS_TORCH, **kwargs):
+             removeDC=True, fft_method=None, **kwargs):
     """
     Compute frequency spectrum of data using given method
 
@@ -186,13 +181,13 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_
         raise ValueError("Unsupported value set for <method>: '%s'" % method)
 
     spec,freqs = spec_fun(data, smp_rate, axis=axis, data_type=data_type, spec_type=spec_type,
-                          removeDC=removeDC, use_torch=use_torch, **kwargs)
+                          removeDC=removeDC, fft_method=fft_method, **kwargs)
 
     return spec, freqs
 
 
 def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_type='complex',
-                removeDC=True, use_torch=HAS_TORCH, **kwargs):
+                removeDC=True, fft_method=None, **kwargs):
     """
     Compute time-frequency transform of data using given method
 
@@ -253,7 +248,7 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
         assert data_type == 'lfp', ValueError("<data_type> must be 'lfp' for burst analysis")
 
         spec,freqs,timepts = burst_analysis(data, smp_rate, axis=axis, removeDC=removeDC,
-                                            use_torch=use_torch, **kwargs)
+                                            fft_method=fft_method, **kwargs)
 
     else:
         assert data_type in ['lfp','spike'], \
@@ -267,36 +262,36 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
 
         spec,freqs,timepts = spec_fun(data, smp_rate, axis=axis, data_type=data_type,
                                       spec_type=spec_type, removeDC=removeDC,
-                                      use_torch=use_torch, **kwargs)
+                                      fft_method=fft_method, **kwargs)
 
     return spec, freqs, timepts
 
 
-def power_spectrum(data, smp_rate, axis=0, method='multitaper',use_torch=HAS_TORCH, **kwargs):
+def power_spectrum(data, smp_rate, axis=0, method='multitaper', fft_method=None, **kwargs):
     """
     Convenience wrapper around spectrum() to compute **power** spectrum of data with given method
 
     See :func:`spectrum` for details
     """
-    return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power', use_torch=use_torch, **kwargs)
+    return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power', fft_method=fft_method, **kwargs)
 
 
-def power_spectrogram(data, smp_rate, axis=0, method='wavelet', use_torch=HAS_TORCH, **kwargs):
+def power_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None, **kwargs):
     """
     Convenience wrapper around spectrogram() to compute time-frequency **power** with given method
 
     See :func:`spectrogram` for details
     """
-    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', use_torch=use_torch, **kwargs)
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', fft_method=fft_method, **kwargs)
 
 
-def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', use_torch=HAS_TORCH, **kwargs):
+def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None, **kwargs):
     """
     Convenience wrapper around spectrogram() to compute **phase** of time-frequency transform
 
     See :func:`spectrogram` for details
     """
-    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', use_torch=use_torch, **kwargs)
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', fft_method=fft_method, **kwargs)
 
 
 # =============================================================================
@@ -416,7 +411,7 @@ intertrial_phase_clustering = itpc
 def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycles=3,
                    method='wavelet', spec_type='power', freq_exp=None,
                    bands=((20,35),(40,65),(55,90),(70,100)),
-                   window=None, timepts=None, use_torch=HAS_TORCH, **kwargs):
+                   window=None, timepts=None, fft_method=None, **kwargs):
     """
     Oscillatory burst analysis of Lundqvist et al 2016.
 
@@ -559,7 +554,7 @@ def burst_analysis(data, smp_rate, axis=0, trial_axis=-1, threshold=2, min_cycle
 
     # Compute time-frequency power from raw data -> (n_freqs,n_timepts,n_data_series,n_trials)
     data,freqs,times = spectrogram(data, smp_rate, axis=0, method=method, spec_type=spec_type,
-                                   use_torch=use_torch, **kwargs)
+                                   fft_method=fft_method, **kwargs)
     timepts = times + timepts[0] if timepts is not None else times
     n_timepts = len(times)
     dt = np.mean(np.diff(times))
