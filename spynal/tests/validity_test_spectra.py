@@ -23,13 +23,13 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import bernoulli
 
+from spynal.utils import set_random_seed, iarange
 from spynal.spectra.spectra import spectrum, power_spectrogram, itpc
-from spynal.spectra.utils import simulate_oscillation, set_random_seed
-from spynal.spectra.helpers import _fft, _ifft
+from spynal.spectra.utils import fft, ifft, simulate_oscillation
 from spynal.plots import plot_line_with_error_fill
 
 
-def test_power(method, test='frequency', test_values=None, spec_type='power',
+def test_power(method, test='frequency', test_values=None, spec_type='power', fft_method=None,
                do_tests=True, do_plots=False, plot_dir=None, seed=1,
                amp=5.0, freq=32, phi=0, phi_sd=0, noise=0.5, n=1000, burst_rate=0,
                time_range=3.0, smp_rate=1000, spikes=False, **kwargs):
@@ -73,6 +73,9 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     spec_type : str, default: 'power'
         Type of spectral signal to return. Options: 'power' | 'itpc' (intertrial phase clustering)
 
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+
     do_tests : bool, default: True
         Set=True to evaluate test results against expected values and raise an error if they fail
 
@@ -113,6 +116,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     method = method.lower()
     test = test.lower()
     spec_type = spec_type.lower()
+    fft_method = fft_method.lower()
 
     # Set defaults for tested values and set up rate generator function depending on <test>
     sim_args = dict(amplitude=amp, phase=phi, phase_sd=phi_sd,
@@ -191,7 +195,8 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
             # Use probabilities to generate Bernoulli random variable at each time point
             data = bernoulli.ppf(0.5, data).astype(bool)
 
-        spec,freqs,timepts = spec_fun(data,smp_rate,axis=0,method=method,**kwargs)
+        spec,freqs,timepts = spec_fun(data, smp_rate, axis=0, method=method, fft_method=fft_method,
+                                      **kwargs)
         if freqs.ndim == 2:
             bands = freqs
             freqs = freqs.mean(axis=1)  # Compute center of freq bands
@@ -315,8 +320,8 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
         plt.title("%s %s test" % (method,test))
         plt.show()
         if plot_dir is not None:
-            filename = 'power-spectrum-%s-%s-%s.png' % (kwargs['itpc_method'],method,test) \
-                        if do_itpc else 'power-spectrum-%s-%s.png' % (method,test)
+            filename = 'power-spectrum-%s-%s-%s-%s.png' % (kwargs['itpc_method'],method,fft_method,test) \
+                        if do_itpc else 'power-spectrum-%s-%s-%s.png' % (method,fft_method,test)
             plt.savefig(os.path.join(plot_dir,filename))
 
         # Plot summary curve of power (or peak frequency) vs tested value
@@ -343,21 +348,21 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
         plt.title("%s %s test" % (method,test))
         plt.show()
         if plot_dir is not None:
-            filename = 'power-summary-%s-%s-%s.png' % (kwargs['itpc_method'],method,test) \
-                        if do_itpc else 'power-summary-%s-%s.png' % (method,test)
+            filename = 'power-summary-%s-%s-%s-%s.png' % (kwargs['itpc_method'],method,fft_method,test) \
+                        if do_itpc else 'power-summary-%s-%s-%s.png' % (method,fft_method,test)
             plt.savefig(os.path.join(plot_dir,filename))
 
     ## Determine if test actually produced the expected values
     # frequency test: check if frequency of peak power matches simulated target frequency
     if test in ['frequency','freq']:
         evals = [((np.diff(peak_freqs) >= 0).all(),
-                    "Estimated peak freq does not increase monotonically with expected freq")]
+                  "Estimated peak freq does not increase monotonically with expected freq")]
 
     # 'amplitude' : Test if power increases monotonically with simulated amplitude
     elif test in ['amplitude','amp']:
         if spec_type == 'power':
             evals = [((np.diff(test_freq_means) > 0).all(),
-                        "Estimated power doesn't increase monotonically with simulated amplitude")]
+                      "Estimated power doesn't increase monotonically with simulated amplitude")]
         else:
             evals = {}
 
@@ -365,31 +370,31 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
     elif test in ['phase','phi']:
         crit = 0.2 if do_itpc else test_freq_errs.max()
         evals = [(test_freq_means.ptp() < crit,
-                    "Estimated %s has larger than expected range across different simulated phases"
-                    % spec_type)]
+                  "Estimated %s has larger than expected range across different simulated phases"
+                  % spec_type)]
 
     # 'phase_sd' : Test if power is ~ constant across phase SD;
     #              Test if ITPC decreases monotonically with it
     elif test in ['phase_sd','phi_sd']:
         if do_itpc:
             evals = [((np.diff(test_freq_means) < 0).all(),
-                        "Estimated ITPC does not decrease monotonically with simulated phase SD")]
+                      "Estimated ITPC does not decrease monotonically with simulated phase SD")]
         else:
             evals = [(test_freq_means.ptp() < test_freq_errs.max(),
-                        "Estimated %s has larger than expected range across simulated phase SDs"
-                        % spec_type)]
+                      "Estimated %s has larger than expected range across simulated phase SDs"
+                      % spec_type)]
 
     # 'n' : Test if power is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
         crit = 0.2 if do_itpc else test_freq_errs.max()
         evals = [(test_freq_means.ptp() < crit,
-                    "Estimated %s has larger than expected range across n's (likely biased by n)"
-                    % spec_type)]
+                  "Estimated %s has larger than expected range across n's (likely biased by n)"
+                  % spec_type)]
 
     # 'burst_rate': Test if measured burst rate increases monotonically with simulated burst rate
     elif test in ['burst_rate','burst']:
         evals = [((np.diff(test_freq_means) > 0).all(),
-                    "Estimated burst rate does not increase monotonic with simulated burst rate")]
+                  "Estimated burst rate does not increase monotonic with simulated burst rate")]
 
     passed = True
     for cond,message in evals:
@@ -404,7 +409,8 @@ def test_power(method, test='frequency', test_values=None, spec_type='power',
 
 
 def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
-                       tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),
+                       fft_methods=('torch','fftw','numpy'),
+                       tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),                       
                        do_tests=True, **kwargs):
     """
     Run a battery of given tests on given oscillatory power computation methods
@@ -413,6 +419,9 @@ def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
     ----------
     methods : array-like of str, default: ('wavelet','multitaper','bandfilter') (all supported)
         List of power computation methods to test.
+
+    fft_methods : array-like of str, default: ('torch','fftw','numpy') (all supported)
+        List of underlying FFT implementations to test
 
     tests : array-like of str, default: ('frequency','amplitude','phase','phase_sd','n','burst_rate')
         List of tests to run.
@@ -428,21 +437,27 @@ def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
 
     for test in tests:
         for method in methods:
-            print("Running %s test on %s spectral analysis" % (test,method))
-            extra_args = kwargs
-            if (method in ['burst','burst_analysis']) and ('burst_rate' not in kwargs):
-                extra_args['burst_rate'] = 0.4
+            for fft_method in fft_methods:
+                # No FFTs used in bandfilter method, so no need to test them
+                if (method == 'bandfilter') and not (fft_method == 'numpy'): continue
 
-            t1 = time.time()
+                print("Running %s test on %s spectral analysis (%s FFT method)" % (test,method,fft_method))
+                extra_args = kwargs
+                if (method in ['burst','burst_analysis']) and ('burst_rate' not in kwargs):
+                    extra_args['burst_rate'] = 0.4
 
-            _,_,passed = test_power(method, test=test, do_tests=do_tests, **extra_args)
-            print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
+                t1 = time.time()
 
-            # If saving plots to file, let's not leave them all open
-            if 'plot_dir' in kwargs: plt.close('all')
+                _,_,passed = test_power(method, test=test, do_tests=do_tests, fft_method=fft_method,
+                                        **extra_args)
+                print('%s (test ran in %.1f s)' % ('PASSED' if passed else 'FAILED', time.time()-t1))
+
+                # If saving plots to file, let's not leave them all open
+                if 'plot_dir' in kwargs: plt.close('all')
 
 
 def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
+                      fft_methods=('torch','fftw','numpy'),
                       tests=('frequency','amplitude','phase','phase_sd','n'),
                       itpc_methods=('PLV','Z','PPC'), do_tests=True, **kwargs):
     """
@@ -453,6 +468,8 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
     methods : array-like, default: ('wavelet','multitaper','bandfilter') (all supported methods)
         List of power computation methods to test.
 
+    fft_methods : array-like of str, default: ('torch','fftw','numpy') (all supported)
+        List of underlying FFT implementations to test
 
     tests : array-like, default: ('frequency','amplitude','phase','phase_sd','n') (all supported)
         List of tests to run.
@@ -475,24 +492,32 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
     for test in tests:
         for itpc_method in itpc_methods:
             for method in methods:
-                print("Running %s test on %s %s" % (test,method,itpc_method))
-                extra_args = kwargs
-                t1 = time.time()
+                for fft_method in fft_methods:
+                    # No FFTs used in bandfilter method, so no need to test them
+                    if (method == 'bandfilter') and not (fft_method == 'numpy'): continue
 
-                _,_,passed = test_power(method, test=test, itpc_method=itpc_method,
-                                        spec_type='itpc', phi_sd=phi_sd, do_tests=do_tests,
-                                        **extra_args)
-                print('%s (test ran in %.1f s)'
-                      % ('PASSED' if passed else 'FAILED', time.time()-t1))
+                    print("Running %s test on %s %s" % (test,method,itpc_method))
+                    extra_args = kwargs
+                    t1 = time.time()
 
-                # If saving plots to file, let's not leave them all open
-                if 'plot_dir' in kwargs: plt.close('all')
+                    _,_,passed = test_power(method, test=test, itpc_method=itpc_method,
+                                            spec_type='itpc', fft_method=fft_method, phi_sd=phi_sd,
+                                            do_tests=do_tests, **extra_args)
+                    print('%s (test ran in %.1f s)'
+                          % ('PASSED' if passed else 'FAILED', time.time()-t1))
+
+                    # If saving plots to file, let's not leave them all open
+                    if 'plot_dir' in kwargs: plt.close('all')
 
 
-def test_fft_time(spec_method, fft_methods=('torch','pyfftw','scipy','numpy'),
-                  n_ffts=(512,1024,2048,4096,8192,16384), n_chnls=(1,10,100,500), n_reps=5, seed=1):
+def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
+                  n_ffts=tuple(2**iarange(10,15)), n_chnls=(1,10,100),
+                  n_trials=100, n_reps=5, seed=1):
     """ Time testing for different FFT methods """
     if seed is not None: set_random_seed(seed)
+
+    n_ffts = np.asarray(n_ffts).astype(int)
+    n_chnls = np.asarray(n_chnls).astype(int)
 
     run_times = xr.DataArray(np.empty((len(n_ffts),len(n_chnls),len(fft_methods),n_reps)),
                              dims=['n_fft','n_chnl','method','rep'],
@@ -500,24 +525,34 @@ def test_fft_time(spec_method, fft_methods=('torch','pyfftw','scipy','numpy'),
                                      'n_chnl':list(n_chnls),
                                      'method':list(fft_methods),
                                      'rep':list(range(n_reps))})
+    fft_methods = np.asarray(fft_methods)
 
     for n_fft in n_ffts:
         for n_chnl in n_chnls:
             for rep in range(n_reps):
-                data = np.random.rand(n_fft,n_chnl)
 
-                for fft_method in fft_methods:
+                # Reorder methods each loop to avoid any weird order effects
+                for fft_method in fft_methods[np.random.permutation(len(fft_methods))]:
+                    print(fft_method, n_fft, n_chnl, rep)
+                    # Regenerate new data each loop to avoid and weird caching effects
+                    set_random_seed(rep)
+                    data = np.random.rand(n_fft,n_chnl,n_trials)
+
                     start_time = time.time()
-                    spec = _fft(data, n_fft, axis=0, fft_method=fft_method)
-                    data2 = _ifft(spec, n_fft, axis=0, fft_method=fft_method)
-                    # spectrum(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
+                    if spec_method == 'fft':
+                        fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
+                    elif spec_method == 'fft/ifft':
+                        spec = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
+                        _ = ifft(spec, n_fft=n_fft, axis=0, fft_method=fft_method)
+                    else:
+                        spectrum(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
                     dt = time.time() - start_time
                     run_times.loc[n_fft,n_chnl,fft_method,rep] = dt
 
     means = run_times.mean(dim='rep')
     sds = run_times.std(dim='rep')
 
-    plt.figure()
+    fig = plt.figure()
     for j,n_chnl in enumerate(n_chnls):
         plt.subplot(len(n_chnls),1,j+1)
         plot_line_with_error_fill(n_ffts, means.sel(n_chnl=n_chnl).values.T,
@@ -527,7 +562,8 @@ def test_fft_time(spec_method, fft_methods=('torch','pyfftw','scipy','numpy'),
         plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
         if n_chnl == n_chnls[-1]:
             plt.xlabel("Number of samples")
-            plt.ylabel("Time per FFT (s)")
+            plt.ylabel("Time per call (s)")
             plt.xticks(n_ffts)
         else:
             plt.xticks(n_ffts,[])
+    fig.suptitle(spec_method)

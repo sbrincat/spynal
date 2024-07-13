@@ -7,7 +7,8 @@ from spynal.utils import standardize_array
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, complex_to_spec_type
-from spynal.spectra.helpers import _fft, _ifft, _undo_standardize_array_newaxis
+from spynal.spectra.utils import fft, ifft
+from spynal.spectra.helpers import _undo_standardize_array_newaxis
 
 
 def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
@@ -88,6 +89,10 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
         Factor to downsample time sampling by (after spectral analysis).
         eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
 
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT/iFFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
+
     Returns
     -------
     spec : ndarray, shape=(...,n_freqs,n_timepts_out,...), dtype=complex or float.
@@ -143,7 +148,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if removeDC: data = remove_dc(data,axis=0)
 
     # Compute FFT of data
-    data = _fft(data, n_fft, axis=-1 if fft_method=='torch' else 0, fft_method=fft_method)
+    data = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method) 
 
     # Reshape data -> (1,n_timepts,n_series) (insert axis 0 for wavelet scales/frequencies)
     # Reshape wavelets -> (n_freqs,n_timepts,1) to broadcast
@@ -153,7 +158,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     # Convolve data with wavelets (multiply in Fourier domain)
     # -> inverse FFT to get wavelet transform
-    spec = _ifft(data*wavelets_fft, n_fft, axis=-1 if fft_method=='torch' else 1, fft_method=fft_method)[:,time_idxs_out,...]
+    spec = ifft(data*wavelets_fft, n_fft=n_fft, axis=1, fft_method=fft_method)[:,time_idxs_out,...]
 
     # Convert to desired output spectral signal type
     spec    = complex_to_spec_type(spec,spec_type)

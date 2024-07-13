@@ -10,7 +10,8 @@ from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, get_freq_sampling, get_freq_length, \
                                  complex_to_spec_type, phase
-from spynal.spectra.helpers import _fft, _extract_triggered_data
+from spynal.spectra.utils import fft
+from spynal.spectra.helpers import _extract_triggered_data
 
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
@@ -58,6 +59,10 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     pad : bool, default: True
         If True, zero-pads data to next power of 2 length
+
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
 
     Returns
     -------
@@ -138,7 +143,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     data    = data * tapers
 
     # Compute Fourier transform of projected data, normalizing appropriately
-    spec = _fft(data, n_fft, axis=-1 if fft_method=='torch' else 0, fft_method=fft_method)
+    spec = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
 
     if data_type != 'spike': spec = spec/smp_rate
 
@@ -217,6 +222,12 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     pad : bool, default: True
         If True, zero-pads data to next power of 2 length
+
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
+
+    max_chunk_size : int, default: TODO
 
     Returns
     -------
@@ -313,34 +324,6 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                                     spec_type=spec_type, freq_range=freq_range, tapers=tapers,
                                     pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
                                     fft_method=fft_method, **kwargs)
-
-        # DELETE
-        # n_chunks = int(ceil(data_size_total / max_chunk_size))
-        # n_timepts_per_chunk = int(ceil(n_timepts/n_chunks))
-
-        # # Number of chunks to break data into; Number of time windows per chunk
-        # n_chunks = int(floor(data_size_total / max_chunk_size))
-        # step = int(ceil(n_timepts/n_chunks))
-
-        # i = 0
-        # while (i+1)+step+1 < n_chunks:
-        #     i_win_starts = win_starts[i*step:(i+1)*step,...]
-        #     d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
-        #     spec[...,i*step:(i+1)*step,:], freqs = \
-        #         multitaper_spectrum(d, smp_rate, axis=0,data_type=data_type,
-        #                             spec_type=spec_type, freq_range=freq_range, tapers=tapers,
-        #                             pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
-        #                             fft_method=fft_method, **kwargs)
-        #     i += 1
-
-        # i_win_starts = win_starts[i*step:,...]
-        # d = _extract_triggered_data(data, smp_rate, i_win_starts, [0,window])
-        # spec[...,i*step:,:], freqs = \
-        #     multitaper_spectrum(d, smp_rate, axis=0, data_type=data_type,
-        #                         spec_type=spec_type, freq_range=freq_range, tapers=tapers,
-        #                         pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,
-        #                         fft_method=fft_method, **kwargs)
-
 
     # If time axis wasn't 0, permute (freq,tapers,timewin) axes back to original position
     if axis != 0:

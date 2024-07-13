@@ -76,6 +76,7 @@ def bandfilter_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     freqs : ndarray, shape=(n_freqbands,2)
         List of (low,high) cut frequencies (Hz) for each band used
     """
+    _ = kwargs.pop('fft_method',None)   # Align API with other *_spectrum() functions
     if axis < 0: axis = data.ndim + axis
 
     spec, freqs, _ = bandfilter_spectrogram(data, smp_rate, axis=axis, data_type=data_type,
@@ -153,6 +154,7 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     timepts : ndarray, shape=(n_timepts_out,)
         List of timepoints in `spec` (in s, referenced to start of data).
     """
+    _ = kwargs.pop('fft_method',None)   # Align API with other *_spectrogram() functions
     if axis < 0: axis = data.ndim + axis
 
     # Convert spike timestamp data to boolean spike train format

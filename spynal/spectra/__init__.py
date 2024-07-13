@@ -10,6 +10,6 @@ from spynal.spectra.bandfilter import bandfilter_spectrum, bandfilter_spectrogra
 from spynal.spectra.preprocess import cut_trials, realign_data, realign_data_on_event, \
                                       remove_dc, remove_evoked
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs
-from spynal.spectra.utils import next_power_of_2, get_freq_sampling, \
+from spynal.spectra.utils import next_power_of_2, get_freq_sampling, fft, ifft, \
                                  one_sided_to_two_sided, simulate_oscillation, \
                                  complex_to_spec_type, power, magnitude, phase, real, imag

@@ -2,12 +2,31 @@
 """ Utility functions for LFP/EEG/continuous data and spectral analysis """
 from math import pi, ceil, log2
 import numpy as np
+import scipy as sp
 
+from multiprocessing import cpu_count
 from scipy.stats import norm
 
 from spynal.utils import axis_index_slices, set_random_seed, interp1
 
+try:
+    import torch
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 
+try:
+    import pyfftw.interfaces.scipy_fftpack as fftw
+    HAS_FFTW = True
+    # Set default arguments for pyfftw functions: Fast planning, use all available threads
+    FFTW_KWARGS_DEFAULT = {'planner_effort': 'FFTW_ESTIMATE', 'threads': cpu_count()}
+except ImportError:
+    HAS_FFTW = False
+
+
+# =============================================================================
+# Preprocessing/helper functions
+# =============================================================================
 def next_power_of_2(n):
     """ Find next power of 2 (smallest power of 2 greater than n) """
     # todo  Think about switching this to use scipy.fftpack.next_fast_len
@@ -107,6 +126,132 @@ def get_freq_length(smp_rate, n_fft, freq_range=None, pad=False, two_sided=False
     return len(freqs)
 
 
+# =============================================================================
+# Core FFT/IFFT functions
+# =============================================================================
+def fft(data, n_fft=None, axis=0, fft_method=None):
+    """
+    Compute 1d discrete Fast Fourier transform along given array axis, using given method.
+
+    Thin wrapper around multiple low-level FFT implementations, which may be chosen based on
+    performance and availability (in our hands, torch is fastest for virtually all tests).
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_samples,...)
+        Data to compute 1d FFT on. Shape is arbitrary; FFT is performed along `axis`
+        (usually corresponding to time) independently across any/all other array axes
+        (which might be data channels, trials, etc.).
+
+    n_fft : int, default: data.shape[axis]
+        Length of the transformed axis of the output. If smaller than the length of the input,
+        the input is cropped. If larger, the input is zero-padded with zeros. If not given,
+        the length of the input along the axis specified by `axis` is used.
+
+    axis : int, default: 0 (1st array axis)
+        Axis over which to compute the FFT. If not given, the first axis is used.
+
+    fft_method : str, default: 'torch' (if available)
+        Which underlying low-level FFT implementation to use. Options:
+
+        - 'torch' : Torch's FFT on the GPU, using :func:torch.fft.fft.
+            Across a range of tests, this is by far the fastest method.
+        - 'fftw' : FFTW library's optimized FFT, using :func:pyfftw.interfaces.scipy_fftpack.fft
+        - 'numpy' : Numpy's FFT implementation, using :func:np.fft.fft
+
+        Depending on what is installed, default order is: torch -> fftw -> numpy
+
+    Returns
+    -------
+    spec : ndarray, shape=(...,n_fft,...)
+        1d Fast-Fourier Transformed data, along `axis`. Same shape as `data`, except `axis` now
+        has length `n_fft`.
+    """
+    if n_fft is None: n_fft = data.shape[axis]
+
+    if fft_method is None:
+        if HAS_TORCH:   fft_method = 'torch'
+        elif HAS_FFTW:  fft_method = 'fftw'
+        else:           fft_method = 'numpy'
+
+    if fft_method == 'torch':
+        return torch.fft.fft(torch.from_numpy(data), n=n_fft, dim=axis).numpy()
+
+    elif fft_method == 'fftw':
+        return fftw.fft(data, n=n_fft, axis=axis, **FFTW_KWARGS_DEFAULT)
+
+    elif fft_method == 'numpy':
+        return np.fft.fft(data, n=n_fft, axis=axis)
+
+    elif fft_method == 'scipy':
+        return sp.fft.fft(data, n=n_fft, axis=axis)
+
+    else:
+        raise ValueError("Unsupported value '%s' set for `fft_method`" % fft_method)
+
+
+def ifft(spec, n_fft, axis=0, fft_method=None):
+    """
+    Compute inverse 1d discrete Fast Fourier transform along given array axis, using given method
+
+    Thin wrapper around multiple low-level iFFT implementations, which may be chosen based on
+    performance and availability (in our hands, torch is fastest for virtually all tests).
+
+    Parameters
+    ----------
+    spec : ndarray, shape=(...,n_freqs,...)
+        Spectral data  to compute inverse 1d FFT on. Shape is arbitrary; iFFT is performed along
+        `axis` (corresponding to frequency), independently across any/all other array axes
+        (which might be data channels, trials, etc.).
+
+    n_fft : int, default: spec.shape[axis]
+        Length of the transformed axis of the output. If smaller than the length of the input,
+        the input is cropped. If larger, the input is zero-padded with zeros. If not given,
+        the length of the input along the axis specified by `axis` is used.
+
+    axis : int, default: 0 (1st array axis)
+        Axis over which to compute the FFT. If not given, the first axis is used.
+
+    fft_method : str, default: 'torch' (if available)
+        Which underlying low-level inverse FFT implementation to use. Options:
+
+        - 'torch' : Torch's FFT on the GPU, using :func:torch.fft.ifft.
+            Across a range of tests, this is by far the fastest method.
+        - 'fftw' : FFTW's optimized FFT, using :func:pyfftw.interfaces.scipy_fftpack.ifft
+        - 'numpy' : Numpy's FFT implementation, using :func:np.fft.ifft
+
+        Depending on what is installed, default order is: torch -> fftw -> numpy
+
+    Returns
+    -------
+    data : ndarray, shape=(...,n_fft,...)
+        1d inverse Fast-Fourier Transformed data, along `axis`. Same shape as `spec`, except `axis`
+        (usually corresponding to time) now has length `n_fft`.
+    """
+    if fft_method is None:
+        if HAS_TORCH:   fft_method = 'torch'
+        elif HAS_FFTW:  fft_method = 'fftw'
+        else:           fft_method = 'numpy'
+
+    if fft_method == 'torch':
+        return torch.fft.ifft(torch.from_numpy(spec), n=n_fft, dim=axis).numpy()
+
+    elif fft_method == 'numpy':
+        return np.fft.ifft(spec, n=n_fft, axis=axis)
+
+    elif fft_method == 'fftw':
+        return fftw.ifft(spec, n=n_fft, axis=axis, **FFTW_KWARGS_DEFAULT)
+
+    elif fft_method == 'scipy':
+        return sp.fft.ifft(spec, n=n_fft, axis=axis)
+
+    else:
+        raise ValueError("Unsupported value '%s' set for `fft_method`" % fft_method)
+
+
+# =============================================================================
+# Post-processing functions
+# =============================================================================
 def complex_to_spec_type(data, spec_type):
     """
     Converts complex spectral data to given spectral signal type
@@ -221,6 +366,9 @@ def one_sided_to_two_sided(data, freqs, smp_rate, axis=0):
     return data, freqs
 
 
+# =============================================================================
+# Data simulation functions
+# =============================================================================
 def simulate_oscillation(frequency, amplitude=5.0, phase=0, noise=1.0, n_trials=1000,
                          freq_sd=0, amp_sd=0, phase_sd=0,
                          smp_rate=1000, time_range=1.0, burst_rate=0, burst_width=4, seed=None):

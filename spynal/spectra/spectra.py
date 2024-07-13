@@ -82,6 +82,8 @@ Utilities (spectra.utils)
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 - get_freq_sampling :       Frequency sampling vector for a given FFT-based computation
 - get_freq_length :         Length of frequency sampling vector for a given FFT-based computation
+- fft :                     Wrapper around multiple low-level implementations of FFT
+- ifft :                    Wrapper around multiple low-level implementations of inverse FFT
 - complex_to_spec_type :    Convert complex Fourier transform output to power/phase/real/imag/etc.
 - one_sided_to_two_sided :  Convert 1-sided Fourier transform output to 2-sided equivalent
 - simulate_oscillation :    Generates simulated oscillation-in-noise data
