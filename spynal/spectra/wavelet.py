@@ -148,7 +148,7 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     if removeDC: data = remove_dc(data,axis=0)
 
     # Compute FFT of data
-    data = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method) 
+    data = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
 
     # Reshape data -> (1,n_timepts,n_series) (insert axis 0 for wavelet scales/frequencies)
     # Reshape wavelets -> (n_freqs,n_timepts,1) to broadcast

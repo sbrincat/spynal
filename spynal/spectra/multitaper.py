@@ -9,7 +9,7 @@ from spynal.utils import iarange
 from spynal.spikes import _spike_data_type, times_to_bool
 from spynal.spectra.preprocess import remove_dc
 from spynal.spectra.utils import next_power_of_2, get_freq_sampling, get_freq_length, \
-                                 complex_to_spec_type, phase
+                                 complex_to_spec_type, phase, axis_index_slices
 from spynal.spectra.utils import fft
 from spynal.spectra.helpers import _extract_triggered_data
 
@@ -314,12 +314,14 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                 idxs = slice(i_chunk*n_timepts_per_chunk, (i_chunk+1)*n_timepts_per_chunk)
             else:
                 idxs = slice(i_chunk*n_timepts_per_chunk, n_timepts)
+            # Slices to index into time axis of `spec`, with ':' on all other axes    
+            slices = axis_index_slices(2 if keep_tapers else 1, idxs, spec.ndim)
 
             # Extract time-windowed version of data -> (n_timepts_per_win,n_timewins,n_dataseries)
             data_win = _extract_triggered_data(data, smp_rate, win_starts[idxs], [0,window])
 
             # Do multitaper analysis on windowed data
-            spec[...,idxs,:], freqs = \
+            spec[slices], freqs = \
                 multitaper_spectrum(data_win, smp_rate, axis=0,data_type=data_type,
                                     spec_type=spec_type, freq_range=freq_range, tapers=tapers,
                                     pad=pad, removeDC=removeDC, keep_tapers=keep_tapers,

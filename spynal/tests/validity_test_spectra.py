@@ -9,12 +9,15 @@ Plots results and runs assertions that basic expected results are reproduced
 
 Functions
 ---------
-- test_power :            Contains tests of spectral estimation functions
-- power_test_battery :    Runs standard battery of tests of spectral estimation functions
-- itpc_test_battery :     Runs standard battery of tests of ITPC estimation functions
+- test_power :          Tests of spectral estimation functions
+- power_test_battery :  Runs standard battery of tests of spectral estimation functions
+- itpc_test_battery :   Runs standard battery of tests of ITPC estimation functions
+- test_fft_time :       Time testing for different FFT implementations
+- test_chunk_size :     Time testing for max data chunk size in multitaper spectrogram
 """
 import os
 import time
+from psutil import virtual_memory
 from warnings import warn
 from math import pi, sqrt, ceil, floor, log2
 import numpy as np
@@ -410,7 +413,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power', ff
 
 def power_test_battery(methods=('wavelet','multitaper','bandfilter'),
                        fft_methods=('torch','fftw','numpy'),
-                       tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),                       
+                       tests=('frequency','amplitude','phase','phase_sd','n','burst_rate'),
                        do_tests=True, **kwargs):
     """
     Run a battery of given tests on given oscillatory power computation methods
@@ -513,7 +516,7 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
 def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
                   n_ffts=tuple(2**iarange(10,15)), n_chnls=(1,10,100),
                   n_trials=100, n_reps=5, seed=1):
-    """ Time testing for different FFT methods """
+    """ Time testing for different FFT implementations """
     if seed is not None: set_random_seed(seed)
 
     n_ffts = np.asarray(n_ffts).astype(int)
@@ -534,7 +537,7 @@ def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
                 # Reorder methods each loop to avoid any weird order effects
                 for fft_method in fft_methods[np.random.permutation(len(fft_methods))]:
                     print(fft_method, n_fft, n_chnl, rep)
-                    # Regenerate new data each loop to avoid and weird caching effects
+                    # Regenerate new data each loop to avoid weird caching effects
                     set_random_seed(rep)
                     data = np.random.rand(n_fft,n_chnl,n_trials)
 
@@ -545,7 +548,9 @@ def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
                         spec = fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
                         _ = ifft(spec, n_fft=n_fft, axis=0, fft_method=fft_method)
                     else:
-                        spectrum(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
+                        power_spectrogram(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
+                        # spectrum(data, 1000, axis=0, method=spec_method, fft_method=fft_method)
+
                     dt = time.time() - start_time
                     run_times.loc[n_fft,n_chnl,fft_method,rep] = dt
 
@@ -567,3 +572,66 @@ def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
         else:
             plt.xticks(n_ffts,[])
     fig.suptitle(spec_method)
+
+
+def test_chunk_size(fft_methods=('torch','fftw','scipy','numpy'),
+                    n_ffts=tuple(2**iarange(12,15)), chunk_sizes=tuple(10**iarange(-2.5,-0.5,0.25)),
+                    n_chnl=100, n_trials=1000, n_reps=5, seed=1):
+    """ Time testing for max data chunk size in multitaper spectrogram """
+    if seed is not None: set_random_seed(seed)
+
+    n_ffts = np.asarray(n_ffts).astype(int)
+    chunk_sizes = np.asarray(chunk_sizes)
+    memory_available = virtual_memory().available
+    memory_total = virtual_memory().total
+
+    run_times = xr.DataArray(np.empty((len(n_ffts),len(chunk_sizes),len(fft_methods),n_reps)),
+                             dims=['n_fft','chunk_size','method','rep'],
+                             coords={'n_fft':list(n_ffts),
+                                     'chunk_size':chunk_sizes,
+                                     'method':list(fft_methods),
+                                     'rep':list(range(n_reps))})
+    fft_methods = np.asarray(fft_methods)
+
+    for fft_method in fft_methods:
+        for n_fft in n_ffts:
+            for rep in range(n_reps):
+
+                # Reorder each loop to avoid any weird order effects
+                for chunk_size in chunk_sizes: # TEMP [np.random.permutation(len(chunk_sizes))]:
+                    print(fft_method, n_fft, round(chunk_size,3), rep)
+                    chunk_size_bytes = chunk_size*memory_total
+
+                    # Regenerate new data each loop to avoid weird caching effects
+                    set_random_seed(rep)
+                    data = np.random.rand(n_fft,n_chnl,n_trials)
+
+                    start_time = time.time()
+                    power_spectrogram(data, 1000, axis=0, method='multitaper',
+                                      fft_method=fft_method, max_chunk_size=chunk_size_bytes)
+
+                    dt = time.time() - start_time
+                    run_times.loc[n_fft,chunk_size,fft_method,rep] = dt
+
+    means = run_times.mean(dim='rep')
+    sds = run_times.std(dim='rep')
+
+    fig = plt.figure()
+    for j,n_fft in enumerate(n_ffts):
+        plt.subplot(len(n_ffts),1,j+1)
+        plot_line_with_error_fill(chunk_sizes, means.sel(n_fft=n_fft).values.T,
+                                  sds.sel(n_fft=n_fft).values.T)
+        plt.legend(chunk_sizes)
+        plt.title("nfft = %d" % n_fft)
+        plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
+        if n_fft == n_ffts[-1]:
+            plt.xlabel("Max chunk size (fract of total RAM)")
+            plt.ylabel("Time per call (s)")
+            plt.xticks(chunk_sizes)
+        else:
+            plt.xticks(chunk_sizes,[])
+    fig.suptitle('multitaper max chunk size test')
+    print("Chunk sizes:")
+    print(np.round(chunk_sizes,3), "(fract of total RAM)")
+    print(np.round((chunk_sizes*memory_total)/memory_available, 3), "(fract of available RAM)")
+    print(np.round(chunk_sizes*memory_total/(1024**3), 3), "(GB)")
