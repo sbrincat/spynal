@@ -157,7 +157,9 @@ def fft(data, n_fft=None, axis=0, fft_method=None):
         - 'torch' : Torch's FFT on the GPU, using :func:torch.fft.fft.
             Across a range of tests, this is by far the fastest method.
         - 'fftw' : FFTW library's optimized FFT, using :func:pyfftw.interfaces.scipy_fftpack.fft
+            FFTW is faster than scipy/numpy for data length != power of 2 (but slower than torch).
         - 'numpy' : Numpy's FFT implementation, using :func:np.fft.fft
+        - 'scipy' : Scipy's FFT implementation, using :func:scipy.fft.fft
 
         Depending on what is installed, default order is: torch -> fftw -> numpy
 
@@ -218,7 +220,9 @@ def ifft(spec, n_fft, axis=0, fft_method=None):
         - 'torch' : Torch's FFT on the GPU, using :func:torch.fft.ifft.
             Across a range of tests, this is by far the fastest method.
         - 'fftw' : FFTW's optimized FFT, using :func:pyfftw.interfaces.scipy_fftpack.ifft
+            FFTW is faster than scipy/numpy for data length != power of 2 (but slower than torch).
         - 'numpy' : Numpy's FFT implementation, using :func:np.fft.ifft
+        - 'scipy' : Scipy's FFT implementation, using :func:scipy.fft.ifft
 
         Depending on what is installed, default order is: torch -> fftw -> numpy
 
@@ -236,11 +240,11 @@ def ifft(spec, n_fft, axis=0, fft_method=None):
     if fft_method == 'torch':
         return torch.fft.ifft(torch.from_numpy(spec), n=n_fft, dim=axis).numpy()
 
-    elif fft_method == 'numpy':
-        return np.fft.ifft(spec, n=n_fft, axis=axis)
-
     elif fft_method == 'fftw':
         return fftw.ifft(spec, n=n_fft, axis=axis, **FFTW_KWARGS_DEFAULT)
+
+    elif fft_method == 'numpy':
+        return np.fft.ifft(spec, n=n_fft, axis=axis)
 
     elif fft_method == 'scipy':
         return sp.fft.ifft(spec, n=n_fft, axis=axis)

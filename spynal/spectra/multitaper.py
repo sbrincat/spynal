@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """ Multitaper spectral analysis """
 from math import floor, ceil, sqrt
+from psutil import virtual_memory
 import numpy as np
 
 from scipy.signal.windows import dpss
@@ -12,6 +13,9 @@ from spynal.spectra.utils import next_power_of_2, get_freq_sampling, get_freq_le
                                  complex_to_spec_type, phase, axis_index_slices
 from spynal.spectra.utils import fft
 from spynal.spectra.helpers import _extract_triggered_data
+
+# Compute total RAM on system. Used for efficiently running spectral algorithms.
+TOTAL_MEMORY = virtual_memory().total
 
 
 def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
@@ -59,10 +63,6 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 
     pad : bool, default: True
         If True, zero-pads data to next power of 2 length
-
-    fft_method : str, default: 'torch' (if available)
-        Which underlying FFT implementation to use. Options: 'torch', 'fftw', 'numpy'
-        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
 
     Returns
     -------
@@ -173,7 +173,7 @@ def multitaper_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
 def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='complex',
                            freq_range=None, removeDC=True, time_width=0.5, freq_width=4,
                            n_tapers=None, spacing=None, tapers=None, keep_tapers=False,
-                           pad=True, fft_method=None, max_chunk_size=1e9, **kwargs):
+                           pad=True, fft_method=None, max_chunk_size=0.01, **kwargs):
     """
     Compute multitaper time-frequency spectrogram for continuous (eg LFP)
     or point process (eg spike) data
@@ -223,11 +223,10 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     pad : bool, default: True
         If True, zero-pads data to next power of 2 length
 
-    fft_method : str, default: 'torch' (if available)
-        Which underlying FFT implementation to use. Options: 'torch', 'fftw', 'numpy'
-        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
-
-    max_chunk_size : int, default: TODO
+    max_chunk_size : int, default: 0.01 (1% of total RAM)
+        Maximum size in memory of data to compute spectrogram of at one time. Data larger than
+        this will be split into non-overlapping chunks. Given in terms of fraction of total
+        system memory (default=1% of total RAM).
 
     Returns
     -------
@@ -249,8 +248,8 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     - Mitra & Pesaran 1999 https://doi.org/10.1016/S0006-3495(99)77236-X
     - Jarvis & Mitra 2001 https://doi.org/10.1162/089976601300014312
     """
-
     if axis < 0: axis = data.ndim + axis
+    max_chunk_size *= TOTAL_MEMORY  # Convert to actual memroy size in byyes
 
     # Convert spike timestamp data to boolean spike train format
     if (data_type == 'spike') and (_spike_data_type(data) == 'timestamp'):
@@ -285,6 +284,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     # If data is small enough, just compute spectrogram of it all in one step
     if data_size_total <= max_chunk_size:
+        #   print("%.1f/%.1f \tNO CHUNKS" % (data_size_total/(1024**3), max_chunk_size/(1024**3)))
         # Extract time-windowed version of data -> (n_timepts_per_win,n_timewins,n_dataseries)
         data = _extract_triggered_data(data, smp_rate, win_starts, [0,window])
 
@@ -314,7 +314,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                 idxs = slice(i_chunk*n_timepts_per_chunk, (i_chunk+1)*n_timepts_per_chunk)
             else:
                 idxs = slice(i_chunk*n_timepts_per_chunk, n_timepts)
-            # Slices to index into time axis of `spec`, with ':' on all other axes    
+            # Slices to index into time axis of `spec`, with ':' on all other axes
             slices = axis_index_slices(2 if keep_tapers else 1, idxs, spec.ndim)
 
             # Extract time-windowed version of data -> (n_timepts_per_win,n_timewins,n_dataseries)

@@ -12,7 +12,8 @@ from spynal.spectra.helpers import _undo_standardize_array_newaxis
 
 
 def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex', freqs=None,
-                     removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0, **kwargs):
+                     removeDC=True, wavelet='morlet', wavenumber=6, pad=False, buffer=0,
+                     fft_method=None, **kwargs):
     """
     Compute continuous wavelet transform of data, then averages across timepoints to
     reduce it down to a frequency spectrum.
@@ -54,7 +55,7 @@ def wavelet_spectrum(data, smp_rate, axis=0, data_type='lfp', spec_type='complex
     spec, freqs, _ = wavelet_spectrogram(data, smp_rate, axis=axis, data_type=data_type,
                                          spec_type=spec_type, freqs=freqs, removeDC=removeDC,
                                          wavelet=wavelet, wavenumber=wavenumber, pad=pad,
-                                         buffer=buffer, **kwargs)
+                                         buffer=buffer, fft_method=fft_method, **kwargs)
 
     # Take mean across time axis (which is now shifted +1 b/c of frequency axis)
     return spec.mean(axis=axis+1), freqs
@@ -88,10 +89,6 @@ def wavelet_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='comp
     downsmp: int, default: 1 (no downsampling)
         Factor to downsample time sampling by (after spectral analysis).
         eg, smp_rate=1000 (dt=0.001), downsmp=10 -> smpRateOut=100 (dt=0.01)
-
-    fft_method : str, default: 'torch' (if available)
-        Which underlying FFT/iFFT implementation to use. Options: 'torch', 'fftw', 'numpy'
-        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
 
     Returns
     -------

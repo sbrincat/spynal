@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from scipy.stats import bernoulli
 
 from spynal.utils import set_random_seed, iarange
-from spynal.spectra.spectra import spectrum, power_spectrogram, itpc
+from spynal.spectra.spectra import power_spectrogram, itpc
 from spynal.spectra.utils import fft, ifft, simulate_oscillation
 from spynal.plots import plot_line_with_error_fill
 
@@ -512,7 +512,7 @@ def itpc_test_battery(methods=('wavelet','multitaper','bandfilter'),
                     # If saving plots to file, let's not leave them all open
                     if 'plot_dir' in kwargs: plt.close('all')
 
-
+# import pdb
 def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
                   n_ffts=tuple(2**iarange(10,15)), n_chnls=(1,10,100),
                   n_trials=100, n_reps=5, seed=1):
@@ -541,6 +541,7 @@ def test_fft_time(spec_method, fft_methods=('torch','fftw','scipy','numpy'),
                     set_random_seed(rep)
                     data = np.random.rand(n_fft,n_chnl,n_trials)
 
+                    # pdb.set_trace()
                     start_time = time.time()
                     if spec_method == 'fft':
                         fft(data, n_fft=n_fft, axis=0, fft_method=fft_method)
@@ -598,13 +599,14 @@ def test_chunk_size(fft_methods=('torch','fftw','scipy','numpy'),
             for rep in range(n_reps):
 
                 # Reorder each loop to avoid any weird order effects
-                for chunk_size in chunk_sizes: # TEMP [np.random.permutation(len(chunk_sizes))]:
+                for chunk_size in [np.random.permutation(len(chunk_sizes))]:
                     print(fft_method, n_fft, round(chunk_size,3), rep)
                     chunk_size_bytes = chunk_size*memory_total
 
                     # Regenerate new data each loop to avoid weird caching effects
                     set_random_seed(rep)
                     data = np.random.rand(n_fft,n_chnl,n_trials)
+                    print(n_fft,n_chnl,n_trials,data.shape)
 
                     start_time = time.time()
                     power_spectrogram(data, 1000, axis=0, method='multitaper',
@@ -621,7 +623,7 @@ def test_chunk_size(fft_methods=('torch','fftw','scipy','numpy'),
         plt.subplot(len(n_ffts),1,j+1)
         plot_line_with_error_fill(chunk_sizes, means.sel(n_fft=n_fft).values.T,
                                   sds.sel(n_fft=n_fft).values.T)
-        plt.legend(chunk_sizes)
+        plt.legend(fft_methods)
         plt.title("nfft = %d" % n_fft)
         plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
         if n_fft == n_ffts[-1]:

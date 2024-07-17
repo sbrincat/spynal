@@ -154,6 +154,10 @@ def spectrum(data, smp_rate, axis=0, method='multitaper', data_type='lfp', spec_
         If True, subtracts off mean DC component across `axis`, making signals zero-mean
         before spectral analysis.
 
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT/iFFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
+
     **kwargs :
         All other kwargs passed directly to method-specific spectrum function
 
@@ -223,6 +227,10 @@ def spectrogram(data, smp_rate, axis=0, method='wavelet', data_type='lfp', spec_
         If True, subtracts off mean DC component across `axis`, making signals zero-mean
         before spectral analysis.
 
+    fft_method : str, default: 'torch' (if available)
+        Which underlying FFT/iFFT implementation to use. Options: 'torch', 'fftw', 'numpy'
+        Defaults to torch if it's installed, then to FFTW if pyfftw is installed, then to Numpy.
+
     **kwargs :
         All other kwargs passed directly to method-specific spectrogram function
 
@@ -275,7 +283,8 @@ def power_spectrum(data, smp_rate, axis=0, method='multitaper', fft_method=None,
 
     See :func:`spectrum` for details
     """
-    return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power', fft_method=fft_method, **kwargs)
+    return spectrum(data, smp_rate, axis=axis, method=method, spec_type='power',
+                    fft_method=fft_method, **kwargs)
 
 
 def power_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None, **kwargs):
@@ -284,7 +293,8 @@ def power_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None,
 
     See :func:`spectrogram` for details
     """
-    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power', fft_method=fft_method, **kwargs)
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='power',
+                       fft_method=fft_method, **kwargs)
 
 
 def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None, **kwargs):
@@ -293,13 +303,15 @@ def phase_spectrogram(data, smp_rate, axis=0, method='wavelet', fft_method=None,
 
     See :func:`spectrogram` for details
     """
-    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase', fft_method=fft_method, **kwargs)
+    return spectrogram(data, smp_rate, axis=axis, method=method, spec_type='phase',
+                       fft_method=fft_method, **kwargs)
 
 
 # =============================================================================
 # Other spectral analysis functions
 # =============================================================================
-def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis=None, **kwargs):
+def itpc(data, smp_rate, axis=0, trial_axis=-1, method='wavelet', itpc_method='PLV',
+         fft_method=None, **kwargs):
     """
     Intertrial phase clustering (ITPC) measures frequency-specific phase locking of continuous
     neural activity (eg LFPs) to trial events. A spectral analog (roughly) of evoked potentials.
@@ -321,6 +333,9 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
 
     axis : int, default: 0 (1st axis)
         Axis of `data` to do spectral analysis on (usually time dimension).
+
+    trial_axis : int, default: -1 (last axis)
+        Axis of `data` to compute mean across in order to calculate ITPC (usually trials).
 
     method : {'multitaper','wavelet','bandfilter'}, default: 'wavelet'
         Specific underlying spectral analysis method to use:
@@ -377,7 +392,8 @@ def itpc(data, smp_rate, axis=0, method='wavelet', itpc_method='PLV', trial_axis
     if method == 'multitaper': kwargs.update(keep_tapers=True)
 
     # Compute spectrogram using given method
-    spec,freqs,timepts = spec_fun(data, smp_rate, axis=axis, spec_type='complex', **kwargs)
+    spec,freqs,timepts = spec_fun(data, smp_rate, axis=axis, spec_type='complex',
+                                  fft_method=fft_method, **kwargs)
     # Account for new frequency (and/or taper) axis prepended before time axis
     n_new_axes = 2 if method == 'multitaper' else 1
     if trial_axis >= axis: trial_axis += n_new_axes
