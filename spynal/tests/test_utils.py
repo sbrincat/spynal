@@ -234,10 +234,12 @@ def test_correlation(two_sample_data, corr_type, result, result2):
 def test_set_random_seed(rand_func):
     """ Unit tests for test_random_seed() """
     # Generate unseeded random number using given random number generator
+    set_random_seed()
     unseeded = rand_func()
 
     # Seed random number generators and generate seeded random number
-    seed = set_random_seed()
+    seed = 1
+    set_random_seed(seed)
     seeded = rand_func()
 
     # Generate seeded random number with same seed

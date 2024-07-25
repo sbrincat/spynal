@@ -7,7 +7,7 @@ high-level API functions. Lower-level functions can be found in the other sync m
 
 Overview
 --------
-Contains functionality for computing oscillatory neural synchrony between pairs of 
+Contains functionality for computing oscillatory neural synchrony between pairs of
 continuous signals (LFPs/EEGs/etc.) or between pairs of spiking and continuous signals
 (ie spike-LFP pair).
 
@@ -19,9 +19,9 @@ relative phases of a signal pair (eg phase difference between LFP pair or spike-
 
 Input data (for most functions) can either be raw data or data already spectrally-transformed
 (using either functionality in the `spynal.spectra` module or users' own custom code). In either
-case, any synchrony method can be combined with any underlying spectral method (eg wavelet, 
+case, any synchrony method can be combined with any underlying spectral method (eg wavelet,
 multitaper, or bandfilter).
- 
+
 NOTE: Unlike other spynal functions that can run in parallel across multiple channels
 ("mass-univariate" analysis), these functions are currently set up to compute synchrony
 on only a single pair of channels (2 LFPs or spike/LFP pair) at once.
@@ -73,7 +73,6 @@ import numpy as np
 
 from spynal.utils import set_random_seed
 from spynal.spectra.utils import simulate_oscillation
-from spynal.randstats.sampling import jackknifes
 from spynal.sync.coherence import coherence, spike_field_coherence
 from spynal.sync.phasesync import plv, ppc, spike_field_plv, spike_field_ppc
 
@@ -280,7 +279,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
         If lfpdata is spectral, this has same shape as lfpdata, but time axis reduced
         to n_timewins and with `axis` (and taper_axis as well for multitaper) reduced
         to length 1 if `keepdims` is True or removed if `keepdims` is False.
-        
+
         If lfpdata is raw, this has the same shape as described above for spectral data,
         but with a new frequency axis (and also a taper axis if `spec_method`='multitaper`)
         inserted immediately before `time_axis`.
@@ -398,5 +397,3 @@ def simulate_multichannel_oscillation(n_chnls, *args, **kwargs):
         data[:,:,chnl] = chnl_data
 
     return data
-
-
