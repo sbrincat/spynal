@@ -270,7 +270,6 @@ def test_spike_field_coupling(spike_field_pair, method, spec_method, result):
     freqs_shape = (n_freqs,2) if spec_method == 'bandfilter' else (n_freqs,)
     timepts     = np.arange(lfpdata.shape[-1]) / smp_rate
     sync_shape  = (1, n_freqs, n_timepts)
-    # DEL if spec_method == 'multitaper': sync_shape = (*sync_shape[:2], sync_shape[-1])
     if spec_method == 'multitaper': sync_shape = (*sync_shape[:2], 1, sync_shape[-1])
 
     extra_args  = dict(fft_method='numpy')

@@ -587,7 +587,6 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
         if 'freqs' not in kwargs:       kwargs['freqs'] = ((2,6),(6,10),(10,22),(22,42),(42,86))
 
     if ('buffer' not in kwargs) and (spec_method != 'multitaper'): kwargs['buffer'] = 1.0
-    # TEMP if 'buffer' not in kwargs: kwargs['buffer'] = 1.0
 
     for i,value in enumerate(test_values):
         # print("Running test value %d/%d: %.2f" % (i+1,n_values,value))
