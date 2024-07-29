@@ -296,7 +296,7 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
 
     # For larger data that might saturate RAM, break into temporal chunks for spectral analysis
     else:
-        # Number of timepoints (windows) who's memory size fits in 1 chunk
+        # Number of timepoints (windows) whose memory size fits in 1 chunk
         n_timepts_per_chunk = int(floor(max_chunk_size / data_size_per_t))
         # Resulting number of chunks in total data (round up to get final, possibly partial, chunk)
         n_chunks = int(ceil(n_timepts / n_timepts_per_chunk))
