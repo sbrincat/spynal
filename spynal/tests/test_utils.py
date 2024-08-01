@@ -5,11 +5,11 @@ from math import pi
 import numpy as np
 
 from spynal.tests.data_fixtures import one_sample_data, two_sample_data, one_way_data, \
-                                       two_way_data, MISSING_ARG_ERRS
+                                       two_way_data, simulate_dataset, MISSING_ARG_ERRS
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                          set_random_seed, randperm, interp1, setup_sliding_windows, \
-                         correlation, rank_correlation, \
+                         correlation, rank_correlation, condition_mean, condition_apply, \
                          gaussian, gaussian_2d, gaussian_nd, is_symmetric, is_positive_definite, \
                          index_axis, standardize_array, undo_standardize_array, \
                          data_labels_to_data_groups, data_groups_to_data_labels, \
@@ -225,6 +225,55 @@ def test_correlation(two_sample_data, corr_type, result, result2):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         r = corr_func(data[labels==0,:], data[labels==1,:], foo=None)
+
+
+@pytest.mark.parametrize('method, funcstr, result',
+                         [('mean',  'mean', 4.6184),
+                          ('apply', 'mean', 4.6184),
+                          ('apply', 'std',  0.7157)])
+def test_condition_apply(method, funcstr, result):
+    """ Unit tests for condition_mean()/condition_apply() """
+    n_trials, n_conds, n_chnls = 10, 4, 6
+    data, labels = simulate_dataset(n=n_trials, n_chnls=n_chnls, n_conds=n_conds, seed=1)
+    data_orig = data.copy()
+
+    if method == 'apply':
+        func = np.mean if funcstr == 'mean' else np.std
+        cfunc = lambda data,labels,**kwargs: condition_apply(data, labels, function=func, **kwargs)
+    else:
+        cfunc = lambda data,labels,**kwargs: condition_mean(data, labels, **kwargs)
+
+    # Basic test of shape, value of output
+    kwargs = {}
+    out,conds_out = cfunc(data, labels, **kwargs)
+    print(method, funcstr, out[0,0])
+    assert np.array_equal(data, data_orig)
+    assert out.shape == (n_conds,n_chnls)
+    assert (conds_out == np.arange(n_conds)).all()
+    assert np.isclose(out[0,0], result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistency with multi-d data
+    data_stack = np.reshape(data, (-1,int(n_chnls/2),2))
+    out,conds_out = cfunc(data_stack, labels, **kwargs)
+    assert out.shape == (n_conds,n_chnls/2,2)
+    assert np.isclose(out[0,0,0], result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistency with transposed data
+    kwargs = {'axis':-1}
+    out,conds_out = cfunc(data.T, labels, **kwargs)
+    assert out.shape == (n_chnls,n_conds)
+    assert np.isclose(out[0,0], result, rtol=1e-4, atol=1e-4)
+
+    # Test for consistency with explicit condition subset selection
+    kwargs = {'axis':0, 'conditions':[0,1]}
+    out,conds_out = cfunc(data, labels, **kwargs)
+    assert out.shape == (2,n_chnls)
+    assert (conds_out == [0,1]).all()
+    assert np.isclose(out[0,0], result, rtol=1e-4, atol=1e-4)
+
+    # Ensure that passing a nonexistent/misspelled kwarg raises an error
+    with pytest.raises(MISSING_ARG_ERRS):
+        out = cfunc(data, labels, foo=None)
 
 
 # =============================================================================

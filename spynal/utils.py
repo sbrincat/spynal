@@ -16,22 +16,25 @@ Function list
 -------------
 Basic statistics
 ^^^^^^^^^^^^^^^^
-- zscore :            Mass univariate Z-score data along given axis (or whole array)
-- fisherz :           Fisher Z transform to make correlation data ~normally distributed.
-- inverse_fisherz :   Inverse Fisher Z transform to get Fisher-z'd data back to correlations.
-- fano :              Fano factor (variance/mean) of data
-- cv :                Coefficient of Variation (SD/mean) of data
-- cv2 :               Local Coefficient of Variation (Holt 1996) of data
-- lv :                Local Variation (Shinomoto 2009) of data
+- zscore :              Mass univariate Z-score data along given axis (or whole array)
+- fisherz :             Fisher Z transform to make correlation data ~normally distributed.
+- inverse_fisherz :     Inverse Fisher Z transform to get Fisher-z'd data back to correlations
+- fano :                Fano factor (variance/mean) of data
+- cv :                  Coefficient of Variation (SD/mean) of data
+- cv2 :                 Local Coefficient of Variation (Holt 1996) of data
+- lv :                  Local Variation (Shinomoto 2009) of data
 
-- one_sample_tstat :  Mass univariate 1-sample t-statistic
-- paired_tstat :      Mass univariate paired-sample t-statistic
-- two_sample_tstat :  Mass univariate 2-sample t-statistic
-- one_way_fstat :     Mass univariate 1-way F-statistic
-- two_way_fstat :     Mass univariate 2-way (with interaction) F-statistic
+- one_sample_tstat :    Mass univariate 1-sample t-statistic
+- paired_tstat :        Mass univariate paired-sample t-statistic
+- two_sample_tstat :    Mass univariate 2-sample t-statistic
+- one_way_fstat :       Mass univariate 1-way F-statistic
+- two_way_fstat :       Mass univariate 2-way (with interaction) F-statistic
 
-- correlation :       Pearson product-moment correlation btwn two variables
-- rank_correlation :  Spearman rank correlation btwn two variables
+- correlation :         Pearson product-moment correlation btwn two variables
+- rank_correlation :    Spearman rank correlation btwn two variables
+
+- condition_mean :      Compute mean of data within multiple conditions/classes along given axis
+- condition_apply :     Compute arbitrary function of data within multiple conditions/classes
 
 Numerical utility functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -269,6 +272,7 @@ def fano(data, axis=None, ddof=0, keepdims=True):
     if fano_.size == 1: fano_ = fano_.item()
     return fano_
 
+
 fano_factor = fano
 """ Alias of :func:`fano`. See there for details """
 
@@ -317,6 +321,7 @@ def cv(data, axis=None, ddof=0, keepdims=True):
 
     if CV.size == 1: CV = CV.item()
     return CV
+
 
 coefficient_of_variation = cv
 """ Alias of :func:`cv`. See there for details """
@@ -722,7 +727,7 @@ def two_way_fstat(data, labels, axis=0, groups=None):
     # Groups (between-group) Sums of Squares for each term
     SS_groups = []
     for term in range(n_terms):
-        SS_groups.append( np.zeros(SS_shape) )
+        SS_groups.append(np.zeros(SS_shape))
 
         for group in groups[term]:
             group_bool = labels[:,term] == group
@@ -755,8 +760,8 @@ def two_way_fstat(data, labels, axis=0, groups=None):
 
     if axis != -1:
         df_groups = df_groups.reshape((*np.ones((axis,),dtype=int),
-                                     n_terms,
-                                     *np.ones((SS_groups.ndim-axis-1,),dtype=int)))
+                                       n_terms,
+                                       *np.ones((SS_groups.ndim-axis-1,),dtype=int)))
 
     return  (SS_groups/df_groups) / (SS_error/df_error)    # F statistic
 
@@ -801,23 +806,24 @@ def correlation(data1, data2, axis=None, keepdims=True):
     assert data1.shape == data2.shape, ValueError("data1 and data2 must have same shape")
 
     # Center each data array around its mean (along given axis or across entire array)
-    mean1 = data1.mean(axis=axis,keepdims=True)
-    mean2 = data2.mean(axis=axis,keepdims=True)
+    data1 -= data1.mean(axis=axis, keepdims=True)
+    data2 -= data2.mean(axis=axis, keepdims=True)
 
-    data1_c = data1 - mean1
-    data2_c = data2 - mean2
+    # Numerator = cov(x,y) = sum((x - xbar)(y - ybar))
+    cov = (data1 * data2).sum(axis=axis, keepdims=keepdims)
 
-    # Compute normalization terms for each data array
-    norm1 = (data1_c**2).sum(axis=axis,keepdims=keepdims)
-    norm2 = (data2_c**2).sum(axis=axis,keepdims=keepdims)
+    # Denominator = sqrt(sum(x1^2) * sum(x2^2))
+    sd1 = (data1 * data1).sum(axis=axis, keepdims=keepdims)
+    sd2 = (data2 * data2).sum(axis=axis, keepdims=keepdims)
 
     # Compute correlation r = cross-product / sqrt(each auto-product)
-    r = (data1_c*data2_c).sum(axis=axis,keepdims=keepdims) / np.sqrt(norm1*norm2)
+    r = cov / np.sqrt(sd1*sd2)
 
-    # Deal with any possible floating point errors that push r outside [-1,1]
-    r = np.maximum(np.minimum(r,1.0), -1.0)
+    # Clip correlation to range [-1,+1] to fix any floating point errors
+    r = np.clip(r, -1, 1)
+
     # For vector-valued data, extract value from scalar array -> float for output
-    if r.size == 1: r = r.item()
+    if isinstance(r,np.ndarray) and (r.size == 1): r = r.item()
 
     return r
 
@@ -869,6 +875,108 @@ def rank_correlation(data1, data2, axis=None, keepdims=True):
 
     # Compute Spearman rho = standard Pearson correlation on data ranks
     return correlation(data1_ranks, data2_ranks, axis=axis, keepdims=keepdims)
+
+
+def condition_mean(data, labels, axis=0, conditions=None):
+    """
+    Compute mean of data within multiple conditions/classes/data groups along given axis.
+    Implements "split-apply-combine" paradigm in Numpy.
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data to compute condition means of. Axis `axis` should correspond to observations
+        (eg trials) to compute condition means across, while rest of axis(s) can be any independent
+        data series (channels, time points, frequencies, etc.) that will be averaged separately.
+
+    labels : array-like, shape=(n_obs,)
+        List of condition labels to use to group `data` into conditions to compute mean within.
+        Must be same length as data.shape along dimension `axis`
+
+    axis : int, default: 0 (first axis)
+        Axis of data array to compute mean along, usually corresponding to trials/observations
+
+    conditions : array-like, shape=(n_conds,), default: np.unique(labels) (all distinct values)
+        Which condition/group labels from `labels` to use. Useful for computing means of a subset
+        of conditions in `labels` or ensuring a specific order to conditions.
+
+    Returns
+    -------
+    cond_means : ndarray, shape=(...,n_conds,...)
+        Within-condition means of `data` across `axis`. Same shape as `data`, but with `axis`
+        reduced to length n_conds.
+
+    conditions : ndarray, shape=(n_conds,)
+        Ordered list of condition labels in `labels` used to compute `cond_means`.
+    """
+    assert data.shape[axis] == len(labels), \
+        "Length of `labels` (%d) must equal length of `data` (%d) along `axis`" % \
+        (len(labels),data.shape[axis])
+
+    if conditions is None:  conditions = np.unique(labels)
+    else:                   conditions = np.asarray(conditions)
+
+    # Split data into conditions based on `labels` and take mean of each group across `axis`
+    cond_means = [index_axis(data, axis, labels==condition).mean(axis=axis, keepdims=True)
+                  for condition in conditions]
+    cond_means = np.concatenate(cond_means, axis=axis)
+
+    return cond_means, conditions
+
+
+def condition_apply(data, labels, axis=0, conditions=None, function=np.mean, **kwargs):
+    """
+    Compute given arbitrary function of data within multiple conditions/classes along given axis.
+    Implements "split-apply-combine" paradigm in Numpy.
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n_obs,...)
+        Data to compute given within-condition function of.
+        Axis `axis` should correspond to observations (eg trials) to compute function
+        across, while rest of axis(s) can be any independent data series
+        (channels, time points, frequencies, etc.) that will be computed separately.
+
+    labels : array-like, shape=(n_obs,)
+        List of condition labels to use to group `data` into condition to compute function within.
+        Must be same length as data.shape along dimension `axis`
+
+    axis : int, default: 0 (first axis)
+        Axis of data array to compute function along, usually corresponding to trials/observations
+
+    conditions : array-like, shape=(n_conds,), default: np.unique(labels) (all distinct values)
+        Which condition/group labels from `labels` to use. Useful for computing function of a subset
+        of conditions in `labels` or ensuring a specific order to conditions.
+
+    function : callable, default: np.mean
+        Any callable function that computes a reduction along a 1D array: (n_obs,) -> (1,)
+
+    **kwargs
+        All other keyword args passed directly to `function`
+
+    Returns
+    -------
+    cond_results : ndarray, shape=(...,n_conds,...)
+        Within-condition function computation results of `data` across `axis`.
+        Same shape as `data`, but with `axis` reduced to length n_conds.
+
+    conditions : ndarray, shape=(n_conds,)
+        Ordered list of condition labels in `labels` used to compute `cond_results`.
+    """
+    assert data.shape[axis] == len(labels), \
+        "Length of `labels` (%d) must equal length of `data` (%d) along `axis`" % \
+        (len(labels),data.shape[axis])
+
+    if conditions is None:  conditions = np.unique(labels)
+    else:                   conditions = np.asarray(conditions)
+
+    # Split data into groups based on `labels` and compute function of each group across `axis`
+    cond_results = [np.apply_along_axis(function, axis, index_axis(data,axis,labels==cond),
+                                        keepdims=True, **kwargs)
+                    for cond in conditions]
+    cond_results = np.concatenate(cond_results, axis=axis)
+
+    return cond_results, conditions
 
 
 # =============================================================================
@@ -1154,8 +1262,8 @@ def gaussian_nd(points, center=None, width=None, covariance=None, amplitude=1.0,
     # If `covariance` is input, use that (with some checks)
     if covariance is not None:
         assert covariance.shape == (n_dims,n_dims), \
-            ValueError("`covariance` must have shape (n_dims,n_dims): (%d,%d) not (%d,%d)" % \
-                        (n_dims,n_dims,*covariance.shape))
+            ValueError("`covariance` must have shape (n_dims,n_dims): (%d,%d) not (%d,%d)" %
+                       (n_dims,n_dims,*covariance.shape))
         if check:
             assert is_positive_definite(covariance, semi=True), \
                 ValueError("`covariance` must be symmetric, positive semi-definite matrix")

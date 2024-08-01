@@ -20,12 +20,12 @@ import matplotlib.pyplot as plt
 from patsy import dmatrix
 
 from spynal.tests.data_fixtures import simulate_dataset
-from spynal.utils import set_random_seed
+from spynal.utils import set_random_seed, condition_mean
 from spynal.info import neural_info, neural_info_2groups
 
 
 def test_neural_info(method, test='gain', test_values=None, distribution='normal',
-                     arg_type='label', n_reps=100, seed=None, 
+                     arg_type='label', n_reps=100, seed=None,
                      do_tests=True, do_plots=False, plot_dir=None, **kwargs):
     """
     Basic testing for functions estimating neural information.
@@ -35,16 +35,17 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 
     For test failures, raises an error or warning (depending on value of `do_tests`).
     Optionally plots summary of test results.
-    
+
     Parameters
     ----------
     method : str
         Name of information function to test: 'pev'|'dprime'|'auroc'|'mutual_information'|'decode'
+        Can also test condition_mean function using 'condmean'.
         Can also set to specific 'pev' model type: 'anova1' | 'anova2' | 'regress'
 
     test : str, default: 'gain'
         Type of test to run. Options:
-        
+
         - 'gain' : Tests multiple values for between-condition response difference (gain).
             Checks for monotonically increasing information.
         - 'spread' : Tests multiple values for distribution spread (SD).
@@ -58,7 +59,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
         - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
         - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
@@ -69,7 +70,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 
     arg_type : str, default: 'label'
         Which input-argument version of info computing function to use:
-        
+
         - 'label'   : Standard version with data,labels arguments
         - '2groups' : Binary contrast version with data1,data2 arguments
 
@@ -91,7 +92,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     **kwargs :
         All other keyword args passed as-is to `simulate_dataset` or information estimation
         function, as appropriate
-                
+
     Returns
     -------
     info : ndarray, shape=(n_values,)
@@ -181,10 +182,18 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
             # For regression model, convert labels list -> design matrix, append intercept term
             if method == 'regress': labels = dmatrix('1 + C(vbl1,Sum)',{'vbl1':labels})
 
-            if arg_type == '2groups':
+            # Compute difference btwn condition means
+            if method == 'condmean':
+                cond_means, _ = condition_mean(data, labels, conditions=[0,1])
+                info[i_value,i_rep] = np.diff(cond_means, axis=0)
+
+            # 2-group interface to (some) information methods
+            elif arg_type == '2groups':
                 info[i_value,i_rep] = neural_info_2groups(data[labels==groups[0]],
                                                           data[labels==groups[1]],
                                                           method=method_, **kwargs)
+
+            # (data, labels) interface to (all) information methods
             else:
                 info[i_value,i_rep] = neural_info(data, labels, method=method_, **kwargs)
 
@@ -206,22 +215,22 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     # 'gain' : Test if information increases monotonically with between-group gain
     if test == 'gain':
         evals = [((np.diff(info) >= 0).all(),
-                    "Information doesn't increase monotonically with btwn-cond mean diff")]
+                  "Information doesn't increase monotonically with btwn-cond mean diff")]
 
     # 'spread' : Test if information decreases monotonically with within-group spread
     elif test in ['spread','spreads','sd']:
         evals = [((np.diff(info) <= 0).all(),
-                    "Information doesn't decrease monotonically with within-cond spread increase")]
+                  "Information doesn't decrease monotonically with within-cond spread increase")]
 
     # 'n' : Test if information is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
         evals = [(info.ptp() < sd.max(),
-                    "Information has larger than expected range across n's (likely biased by n)")]
+                  "Information has larger than expected range across n's (likely biased by n)")]
 
     # 'bias': Test if information is not > baseline if gain = 0, for varying n
     elif test == 'bias':
         evals = [(((info - baseline) < sd).all(),
-                    "Information is above baseline for no mean difference between conditions")]
+                  "Information is above baseline for no mean difference between conditions")]
 
     passed = True
     for cond,message in evals:
@@ -235,7 +244,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
     return info, sd, passed
 
 
-def info_test_battery(methods=('pev','dprime','auroc','mutual_information','decode'),
+def info_test_battery(methods=('pev','dprime','auroc','mutual_information','decode','condmean'),
                       tests=('gain','spread','n','bias'), do_tests=True, **kwargs):
     """
     Run a battery of given tests on given neural information computation methods
@@ -244,7 +253,7 @@ def info_test_battery(methods=('pev','dprime','auroc','mutual_information','deco
     ----------
     methods : array-like of str, default: ('pev','dprime','auroc','mutual_information','decode')
         List of neural information methods to test.
-                
+
     tests : array-like of str
         List of tests to run. Certain combinations of methods,tests are skipped, as they are not
         expected to pass (ie 'n_trials','bias' tests skipped for biased metric 'mutual_info').
@@ -254,7 +263,7 @@ def info_test_battery(methods=('pev','dprime','auroc','mutual_information','deco
         Set=True to evaluate test results against expected values and raise an error if they fail
 
     **kwargs :
-        Any other kwargs passed directly to test_neural_info()        
+        Any other kwargs passed directly to test_neural_info()
     """
     if isinstance(methods,str): methods = [methods]
     if isinstance(tests,str): tests = [tests]
