@@ -21,7 +21,7 @@ requirements = [
 
 setuptools.setup(
     name='spynal',
-    version='0.1.3',
+    version='0.1.4',
     description='Simple Python Neural Analysis Library',
     long_description=long_description,
     long_description_content_type='text/markdown',
