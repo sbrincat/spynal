@@ -274,7 +274,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     def _custom_bin_count(data, bins):
         """ Count spikes in any arbitrary custom bins """
         return np.asarray([((start <= data) & (data < end)).sum()
-                        for (start,end) in bins], dtype='uint16')
+                           for (start,end) in bins], dtype='uint16')
 
     # For standard bins, can use histogram algorithm
     if std_bins:
@@ -321,6 +321,7 @@ def bin_rate(data, lims=None, width=50e-3, step=None, bins=None, output='rate',
     if (data_type == 'bool') and (axis != rates.ndim): rates = np.moveaxis(rates,-1,axis)
 
     return rates, bins
+
 
 psth = bin_rate
 """ Alias of :func:`bin_rate`. See there for details. """
@@ -473,7 +474,7 @@ def density(data, lims=None, width=None, step=1e-3, kernel='gaussian', buffer=No
     # Downsampling factor necessary to convert initial sampling rate to final desired sampling
     downsmp = int(round(step/dt))
     assert (downsmp >= 1) and np.isclose(downsmp, step/dt), \
-        ValueError("<step> must be an integer multiple of %.3f (for %d ms sampling)" % \
+        ValueError("<step> must be an integer multiple of %.3f (for %d ms sampling)" %
                    (dt,int(dt*1000)))
 
 
@@ -645,13 +646,14 @@ def isi(data, axis=-1, timepts=None):
 
     return ISIs
 
+
 interspike_interval = isi
 """ Alias of :func:`isi`. See there for details. """
 
 
-#==============================================================================
+# =============================================================================
 # Spike rate and inter-spike interval statistics functions
-#==============================================================================
+# =============================================================================
 def rate_stats(rates, stat='Fano', axis=None, **kwargs):
     """
     Compute given statistic on spike rates of one or more spike trains
@@ -822,9 +824,9 @@ def burst_fract(ISIs, crit=0.020):
     return (ISIs < crit).sum() / ISIs.size
 
 
-#==============================================================================
+# =============================================================================
 # Spike waveform statistics functions
-#==============================================================================
+# =============================================================================
 def waveform_stats(spike_waves, stat='width', axis=0, **kwargs):
     """
     Compute given statistic on one or more spike waveforms of one or more spike trains
@@ -1482,9 +1484,9 @@ def pool_electrode_units(data_sua, electrodes, axis=-1, elec_set=None,
         return data_mua
 
 
-#==============================================================================
+# =============================================================================
 # Plotting functions
-#==============================================================================
+# =============================================================================
 def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=None, **kwargs):
     """
     Generate raster plot of spike times
@@ -1523,7 +1525,7 @@ def plot_raster(data, ax=None, graphics=None, color='0.25', height=1.0, events=N
         - Bitmapped (aka raster) graphics using :func:plt.imshow. Full raster plot rendered as
             single (unmanipulatable) image, but plots much faster. (Note: "raster graphics" is a
             term from computer graphics that is unrelated to "raster plots" in electrophysiology.)
-        
+
         NOTE: In some cases, a substantial number of spikes "disappear" from bitmap plots. This
         seems to happen when plotting into smaller figures (eg inline/within-IDE plots or
         default-size separate-window figures), and when these figures are save to bitmap-based
@@ -1823,7 +1825,7 @@ def simulate_spike_rates(gain=5.0, offset=5.0, n_conds=2, n_trials=1000,
     if not scalar_gain:
         gain = np.asarray(gain)
         assert len(gain) == n_conds, \
-            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
+            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)"
                        % (len(gain), n_conds))
 
     # Create (n_trials,) vector of group labels (ints in set 0-n_conds-1)
@@ -1901,7 +1903,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     if seed is not None: set_random_seed(seed)
 
     assert data_type in ['timestamp','bool'], \
-        ValueError("Unsupported value '%s' given for <data_type>. Should be 'timestamp' or 'bool'" \
+        ValueError("Unsupported value '%s' given for <data_type>. Should be 'timestamp' or 'bool'"
                    % data_type)
 
     # Is gain scalar-valued or array-like?
@@ -1910,7 +1912,7 @@ def simulate_spike_trains(gain=5.0, offset=5.0, n_conds=2, n_trials=1000, time_r
     if not scalar_gain:
         gain = np.asarray(gain)
         assert len(gain) == n_conds, \
-            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
+            ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)"
                        % (len(gain), n_conds))
 
     # Create (n_trials,) vector of group labels (ints in set 0-n_conds-1)
@@ -2025,9 +2027,9 @@ def simulate_spike_waveforms(trough_time=0.3e-3, peak_time=0.75e-3, trough_amp=0
     return waveforms, timepts
 
 
-#==============================================================================
+# =============================================================================
 # Other helper functions
-#==============================================================================
+# =============================================================================
 def _spike_data_type(data):
     """
     Determine what type of spiking data we have:

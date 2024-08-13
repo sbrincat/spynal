@@ -2,7 +2,7 @@
 """ Oscillatory coherence analysis """
 import numpy as np
 
-from spynal.utils import axis_index_slices, setup_sliding_windows
+from spynal.utils import axis_index_slices
 from spynal.randstats.sampling import jackknifes
 from spynal.randstats.utils import jackknife_to_pseudoval
 from spynal.sync.helpers import _sync_raw_to_spectral, _sfc_raw_to_spectral
@@ -33,7 +33,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     **kwargs :
         Any other keyword args passed as-is to spectrogram() function.
     """
-    assert not((single_trial is not None) and return_phase), \
+    assert not ((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
 
     assert (single_trial is None) or (single_trial in ['pseudo','richter']), \
@@ -60,13 +60,13 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     if (transform is None) or callable(transform):
         pass
     elif isinstance(transform,str):
-        transform = transform.lower()    
+        transform = transform.lower()
         if transform in ['z','ztransform']:
             transform = lambda coh: ztransform_coherence(coh, df)
         else:
             raise ValueError("Unsupported value '%s' set for <transform>" % transform)
     else:
-        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None" \
+        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None"
                         % type(transform))
 
     # Compute cross-spectrum and auto-spectrum of each channel
@@ -100,7 +100,7 @@ def coherence(data1, data2, axis=0, return_phase=False, transform=None, single_t
     # Standard across-trial coherence estimator
     if single_trial is None:
         coh, dphi = _cross_auto_to_coh(cross_spec, auto_spec1, auto_spec2, reduce_axes,
-                                        return_phase, transform, keepdims)
+                                       return_phase, transform, keepdims)
 
     # Single-trial coherence estimator using jackknife resampling method
     else:

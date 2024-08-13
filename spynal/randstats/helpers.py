@@ -6,13 +6,10 @@ import numpy as np
 from spynal.utils import one_sample_tstat, two_sample_tstat, one_way_fstat, two_way_fstat, \
                          correlation, rank_correlation
 
-#==============================================================================
-# Utility functions
-#==============================================================================
 
-#==============================================================================
+# =============================================================================
 # Private helper functions
-#==============================================================================
+# =============================================================================
 def _tail_to_compare(tail):
     """ Convert string specifier to callable function implementing it """
     warn("Helper function _tail_to_compare() is deprecated. Use randstats.tail_to_compare()")

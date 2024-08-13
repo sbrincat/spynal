@@ -53,7 +53,7 @@ from spynal.helpers import _isint, _merge_dicts
 
 # Lambda returns list of all settable attributes of given plotting object
 # Find all methods starting with 'set_***', strip out the 'set_', and place in a list
-_settable_attributes = lambda obj: ['_'.join(attr.split('_')[1:]) for attr in dir(obj) \
+_settable_attributes = lambda obj: ['_'.join(attr.split('_')[1:]) for attr in dir(obj)
                                     if attr.startswith('set_')]
 
 # Create list of all settable attributes/parameters of plotting objects/functions used in module
@@ -259,8 +259,8 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
         ValueError("`x` and `y` must be 1-dimensional (x ~ %d-d, y ~ %d-d)" % (x.ndim, y.ndim))
     assert data.ndim == 2, ValueError("data must be 2-dimensional (%d-d data given)" % data.ndim)
     assert data.shape == (len(y),len(x)), \
-        ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)" \
-                    % (*data.shape,len(y),len(x)))
+        ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)"
+                   % (*data.shape,len(y),len(x)))
 
     # Set axis to plot into (default to current axis)
     if ax is None: ax = plt.gca()
@@ -376,8 +376,8 @@ def plot_lineseries(x, y, data, ax=None, scale=1.5, color='C0', origin='upper',
 
     assert data.ndim == 2, ValueError("data must be 2-dimensional (%d-d data given)" % data.ndim)
     assert data.shape == (len(y),len(x)), \
-        ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)" \
-                    % (*data.shape,len(y),len(x)))
+        ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)"
+                   % (*data.shape,len(y),len(x)))
 
     # If y is numeric, use it to plot y-axis; otherwise (eg if string labels) use 0:n_lines-1
     y_plot = y if isnumeric(y) else np.arange(n_lines)
@@ -732,7 +732,7 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
             elif len(value) == 3:   handle = plot_three_lines(value, axis)
             else:
                 raise ValueError("Each value in values must be scalar|2-tuple|3-tuple (not len=%d)"
-                                % len(value))
+                                 % len(value))
 
             handles.append(handle)
 
@@ -783,7 +783,7 @@ def _hash_kwargs(args_dict, attr_lists):
                 break
 
         # If we failed to find a match in any attribute list, raise an error
-        if found == False:
+        if found is False:
             raise AttributeError("Incorrect or misspelled variable in keyword args: %s" % key)
 
     return tuple(hashed_attrs)
@@ -806,8 +806,8 @@ def _set_plot_colors(color, n_plot_objects):
             color = np.tile(color, (n_plot_objects,))
         else:
             assert len(color) == n_plot_objects, \
-                ValueError("Color must have one value per plot obect (line/fill/etc)" \
-                           " or a single value that is used for all plot objects" \
+                ValueError("Color must have one value per plot obect (line/fill/etc)"
+                           " or a single value that is used for all plot objects"
                            " (%d colors/%d objects)" % (len(color),n_plot_objects))
 
     return color

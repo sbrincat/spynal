@@ -69,7 +69,7 @@ def _isbinary(x):
     """ Test whether variable contains only binary values in set {True,False,0,1} """
     x = np.asarray(x)
     return (x.dtype == bool) or \
-           (np.issubdtype(x.dtype,np.number) and \
+           (np.issubdtype(x.dtype,np.number) and
             np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
 
 
@@ -213,7 +213,7 @@ def _standardize_to_axis_end(data, axis=-1):
         Data array of arbitrary shape.
 
     axis : int, default: -1
-        Axis of data to move to axis -1 for subsequent analysis. 
+        Axis of data to move to axis -1 for subsequent analysis.
 
     Returns
     -------

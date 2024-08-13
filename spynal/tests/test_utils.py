@@ -192,14 +192,17 @@ def test_parametric_stats(two_way_data, stat_func, result):
 def test_correlation(two_sample_data, corr_type, result, result2):
     """ Unit tests for correlation() and rank_correlation() functions """
     data, labels = two_sample_data
-    data_orig = data.copy()
+    data1, data2 = data[labels==0,0], data[labels==1,0]
+    data1_orig = data1.copy()
+    data2_orig = data2.copy()
 
     corr_func = correlation if corr_type == 'pearson' else rank_correlation
 
     # Basic test of shape, value of output
-    r = corr_func(data[labels==0,0], data[labels==1,0], keepdims=False)
+    r = corr_func(data1, data2, keepdims=False)
     print(np.round(r,2), type(r))
-    assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data1,data1_orig)     # Ensure input data isn't altered by function
+    assert np.array_equal(data2,data2_orig)
     assert np.isscalar(r)
     assert np.isclose(r, result, rtol=1e-2, atol=1e-2)
 

@@ -96,7 +96,7 @@ Plotting
 
 Dependencies
 ------------
-- pyfftw :              Python wrapper around FFTW, the speedy FFT library
+- torch (suggested) :   Library for fast tensor operations on GPUs
 
 Function reference
 ------------------

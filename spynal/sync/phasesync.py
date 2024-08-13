@@ -44,7 +44,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
     """
     assert data1.shape[axis] == data2.shape[axis], \
         ValueError("data1,data2 must have same number of observations (trials)")
-    assert not((single_trial is not None) and return_phase), \
+    assert not ((single_trial is not None) and return_phase), \
         ValueError("Cannot do both single_trial AND return_phase together")
 
     if axis < 0: axis = data1.ndim + axis
@@ -71,7 +71,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
         else:
             raise ValueError("Unsupported value '%s' set for <transform>" % transform)
     else:
-        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None" \
+        raise TypeError("Unsupported type '%s' for <transform>. Use string or function or None"
                         % type(transform))
 
     # Compute normalized cross-spectrum btwn the two channels
@@ -135,6 +135,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
     if return_phase:    return  PLV, freqs, timepts, dphi
     else:               return  PLV, freqs, timepts
 
+
 # Alias function with full name
 phase_locking_value = plv
 """ Alias of :func:`plv`. See there for details. """
@@ -176,6 +177,7 @@ def ppc(data1, data2, axis=0, return_phase=False, single_trial=None,
                single_trial=single_trial, spec_method=spec_method, data_type=data_type,
                smp_rate=smp_rate,  time_axis=time_axis, taper_axis=taper_axis,
                keepdims=keepdims, **kwargs)
+
 
 # Alias function with full name
 pairwise_phase_consistency = ppc
@@ -463,6 +465,7 @@ def spike_field_ppc(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     else:
         PLV,freqs,timepts,n = spike_field_plv(spkdata, lfpdata, **extra_args)
         return plv_to_ppc(PLV,n), freqs, timepts, n.squeeze()
+
 
 # Alias function with full name
 spike_field_pairwise_phase_consistency = spike_field_ppc

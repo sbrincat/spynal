@@ -4,7 +4,7 @@ import numpy as np
 
 from spynal.utils import index_axis
 from spynal.spectra.spectra import spectrogram
- 
+
 
 def _infer_data_type(data):
     """ Infer type of data signal given -- 'raw' (real) | 'spectral' (complex) """
@@ -62,8 +62,8 @@ def _sfc_raw_to_spectral(spkdata, lfpdata, smp_rate, axis, time_axis, taper_axis
         # Spike and field data required to have same type (both raw or spectral) for coherence
         if method == 'coherence':
             assert spk_data_type == lfp_data_type, \
-                ValueError("Spiking (%s) and LFP (%s) data must have same data type" % \
-                            (spk_data_type,lfp_data_type))
+                ValueError("Spiking (%s) and LFP (%s) data must have same data type" %
+                           (spk_data_type,lfp_data_type))
         # Spike data must be raw (not spectral) for phase-based methods
         else:
             assert _infer_data_type(spkdata) == 'raw', \
@@ -119,8 +119,8 @@ def _sfc_raw_to_spectral(spkdata, lfpdata, smp_rate, axis, time_axis, taper_axis
             # Set up indexing to preserve axes before/after time axis,
             # but insert n_new_axis just before it
             slicer = [slice(None)]*time_axis + \
-                    [np.newaxis]*n_new_axes + \
-                    [slice(None)]*(spkdata.ndim-time_axis)
+                     [np.newaxis]*n_new_axes + \
+                     [slice(None)]*(spkdata.ndim-time_axis)
             # Insert singleton dimension(s) into spkdata to match freq/taper dim(s) in lfpdata
             spkdata = spkdata[tuple(slicer)]
 

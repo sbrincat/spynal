@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """ Functions for loading from and saving to Matlab v7 (and earlier) MAT files using scipy.io """
-import numpy as np
-
 import scipy.io
 
-from spynal.matIO.helpers import _v7_matlab_type, _process_v7_object, \
-                                 _is_structured_array, _structuredarray_to_dict, \
-                                 _structuredarray_to_dataframe, DEBUG
+from spynal.matIO.helpers import _v7_matlab_type, _process_v7_object, DEBUG
 
 
 
@@ -52,7 +48,7 @@ def _load7(filename, variables=None, typemap=None, extract_items=None, order='Ma
         if vbl in extract_items:                extract_item = extract_items[vbl]
         # Otherwise, if variable type is listed in <extract_items>, use associated value
         elif matlab_vbl_type in extract_items:  extract_item = extract_items[matlab_vbl_type]
-        # Otherwise, just use value for 'array' as generic value for all other (eg scalar) types        
+        # Otherwise, just use value for 'array' as generic value for all other (eg scalar) types
         else:                                   extract_item = extract_items['array']
         if DEBUG: print("'%s'" % vbl, matlab_vbl_type, python_vbl_type, extract_item)
 
@@ -80,4 +76,3 @@ def _save7(filename, variables, **kwargs):
     Uses scipy.io.savemat to save data
     """
     scipy.io.savemat(filename,variables,**kwargs)
-

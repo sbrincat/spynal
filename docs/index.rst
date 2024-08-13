@@ -30,7 +30,7 @@ The library is based on several underlying design principles:
 - **Consistency** -- Functions have a uniform, familiar interface of the form:
     ``analysis(data, labels, axis, extra_param=value)``
 - **Modularity** -- Users can pick and choose specific functionality without buy-in to an entire ecosystem
-    or processing chain. Developers can add new methods as plug-in options.
+    or processing chain. Developers can add new analysis methods as plug-in options.
 - **Well-documented** -- Function docstrings explain their usage and the format of
     input arguments and returned outputs
 - **Foolproof** -- Function parameters default to values typical for neural analysis.

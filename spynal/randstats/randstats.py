@@ -77,11 +77,9 @@ Function reference
 
 # TODO  Parallelize resampling loops! (using joblib?)
 
-from math import sqrt
 import numpy as np
 
-from spynal.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups, \
-                         correlation
+from spynal.utils import set_random_seed, axis_index_slices, data_labels_to_data_groups
 from spynal.randstats.sampling import bootstraps
 from spynal.randstats.permutation import one_sample_randomization_test, \
                                          paired_sample_permutation_test, \
@@ -1021,4 +1019,3 @@ def two_sample_confints(data1, data2, axis=0, stat='meandiff', confint=0.95, n_r
 
     if return_stats:    return confints, stat_obs, stat_resmp
     else:               return confints
-

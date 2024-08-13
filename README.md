@@ -1,6 +1,6 @@
 [![DOI](https://zenodo.org/badge/296102080.svg)](https://zenodo.org/badge/latestdoi/296102080)
 
-# spynal: Simple Python Neural Analysis Library
+# spynal: the Simple Python Neural Analysis Library
 Tools for preprocessing and basic analysis of systems/cognitive neurophysiology data in Python  
 
 Covers typical preprocessing and basic analysis steps in neural analysis workflows.
@@ -9,7 +9,7 @@ accessible and easy-to-use for people migrating to Python from Matlab or other s
 programming languages.  
 
 ### Features include:
-**Simplicity**: Easy-to-use procedural interface; no OOP or complicated data/params structures  
+**Simplicity**: Easy-to-use procedural interface; no OOP or complicated data/parameter structures  
 **Consistency**: Consistent function signature ~ `analysis(data, labels, axis, extra_param=value)`  
 **Modularity**: Can use specific functionality without buy-in to an entire processing chain  
 **Foolproof**: Extensive documentation and checking for proper function inputs  
@@ -24,15 +24,15 @@ programming languages.
 **info** — Measures of neural information about task/behavior variables  
 **randstats** — Nonparametric randomization, permutation, and bootstrap statistics  
 **plots** — Generation of common plot types; plotting utilities  
-**utils** — Numerical and general purpose utilities  
+**utils** — Numerical, statistical, and general purpose utilities  
 
-Full documentation can be found at: https://spynal.readthedocs.io/en/latest/  
+Full documentation can be found at [readthedocs](https://spynal.readthedocs.io/en/latest/)  
 
 
 ## Download & installation instructions
-NOTE: Currently, spynal can only be installed against Python<=3.11, due to changes in the Import
-Manager in Python 3.12 that have not been accounted for in all dependent packages. For details,
-see this Stack Overflow answer: https://stackoverflow.com/a/77364602.
+*NOTE: Currently, spynal can only be installed against Python<=3.11, due to changes in the Import
+Manager in Python 3.12 that have not been accounted for in all dependent packages.
+See [here](https://stackoverflow.com/a/77364602) for details.*
 
 Users can either install the most recent stable release using pip or
 install the latest updates from the Github repository
@@ -59,7 +59,7 @@ Recommended for developers and for users that would like access to the latest up
 ## Usage
 You should now be able to directly import spynal and its modules/functions in your code/notebooks like so:  
     import spynal  
-    import spynal as spy  
+    import spynal as sp  
     import spynal.spectra as spectra  
     from spynal.spectra import spectrogram  
 

@@ -1,5 +1,8 @@
 Installation
 ============
+*NOTE: Currently, spynal can only be installed against Python<=3.11, due to changes in the Import
+Manager in Python 3.12 that have not been accounted for in all dependent packages.
+See [here](https://stackoverflow.com/a/77364602) for details.*
 
 Users can install the most recent stable release using pip or install the latest updates from the Github repository
 
@@ -37,6 +40,6 @@ its modules/functions in your code/notebooks in any of the standard Python ways:
 .. code-block:: python
 
     import spynal  
-    import spynal as spy  
+    import spynal as sp  
     import spynal.spectra as spectra  
     from spynal.spectra import spectrogram  

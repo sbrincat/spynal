@@ -513,8 +513,8 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
                             decoder.decision_function(data[test_idxs,:,i_series]) \
                             if n_classes > 2 else \
                             decoder.decision_function(data[test_idxs,:,i_series])[:,np.newaxis]
-                                
-                            
+
+
 
         # Take the mean across all cross-validation folds
         accuracy = np.mean(acc_folds, axis=1)
@@ -588,7 +588,7 @@ def _check_cv_object(cv):
     """ Ensure we actually have an sklearn(-like) cross-validator object """
     assert _has_method(cv,'split') or (cv is None), \
         TypeError("Unsupported type (%s) for cv. Use string | scikit model_selection Splitter object"
-                    % type(cv))
+                   % type(cv))
 
 
 # =============================================================================
@@ -769,6 +769,7 @@ def mutual_info(data, labels, axis=0, bins=None, resp_entropy=None, groups=None,
         if not keepdims: info = info.squeeze(axis=axis)
 
     return info
+
 
 mutual_information = mutual_info
 """ Alias of :func:`mutual_info`. See there for details. """
@@ -1004,8 +1005,8 @@ def _dprime_2groups(data1, data2, axis=0, signed=True, keepdims=True):
     d = data1.mean(axis=axis, keepdims=keepdims) - data2.mean(axis=axis, keepdims=keepdims)
 
     # Compute group std dev's
-    sd1	= data1.std(axis=axis, ddof=1, keepdims=keepdims)
-    sd2	= data2.std(axis=axis, ddof=1, keepdims=keepdims)
+    sd1 = data1.std(axis=axis, ddof=1, keepdims=keepdims)
+    sd2 = data2.std(axis=axis, ddof=1, keepdims=keepdims)
     # Compute pooled standard deviation across two groups, using standard formula
     sd_pooled = np.sqrt( ((n1-1)*sd1**2 + (n2-1)*sd2**2) / (n1+n2-2) )
 
@@ -1113,7 +1114,7 @@ def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=
         # TODO ADD anovan model: elif labels.shape[1] > 3:                   model = 'anovan'
         # Otherwise, could be ANOVA2, ANOVAn, regress ... dangerous to assume
         else:
-            raise ValueError("Could not determine appropriate linear model.\n" \
+            raise ValueError("Could not determine appropriate linear model.\n"
                              "Please set explicitly using <model> argument.")
 
         print("Assuming '%s' linear model based on given <labels> labels/design matrix" % model)
@@ -1134,6 +1135,7 @@ def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=
                        return_stats=return_stats, keepdims=keepdims, **kwargs)
     else:
         raise ValueError("'%s' model is not supported for computing PEV" % model)
+
 
 percent_explained_variance = pev
 """ Alias of :func:`pev`. See there for details. """
@@ -1814,6 +1816,7 @@ def _R_squared(SS_model, SS_total):
     """
     return SS_model / SS_total
 
+
 # Alias _R_squared as eta_squared -- same formula
 eta_squared = _R_squared
 """ Alias of :func:`_R_squared`. See there for details. """
@@ -1827,6 +1830,7 @@ def _R_squared_partial(SS_model, SS_error):
     Formula :   pev = SS_model / (SS_model + SS_error)
     """
     return SS_model / (SS_model + SS_error)
+
 
 # Alias _R_squared_partial as _eta_squared_partial -- same formula
 _eta_squared_partial = _R_squared_partial

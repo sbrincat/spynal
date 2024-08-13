@@ -6,7 +6,7 @@ Overview
 --------
 Functionality includes:
 
-- basic statistics: z-scoring, t/F-stats, SNR measures (Fano,CV,etc.), correlation
+- basic statistics: z-scoring, t/F-stats, SNR measures (Fano,CV,etc.), correlation, condition mean
 - numerical methods: interpolation, setting random seed
 - functions to reshape data arrays and dynamically index into specific array axes
 - functions for dealing w/ Numpy "object" arrays (similar to Matlab cell arrays)
@@ -806,8 +806,9 @@ def correlation(data1, data2, axis=None, keepdims=True):
     assert data1.shape == data2.shape, ValueError("data1 and data2 must have same shape")
 
     # Center each data array around its mean (along given axis or across entire array)
-    data1 -= data1.mean(axis=axis, keepdims=True)
-    data2 -= data2.mean(axis=axis, keepdims=True)
+    # Note: This also creates copies so variables in calling function don't get overwritten
+    data1 = data1 - data1.mean(axis=axis, keepdims=True)
+    data2 = data2 - data2.mean(axis=axis, keepdims=True)
 
     # Numerator = cov(x,y) = sum((x - xbar)(y - ybar))
     cov = (data1 * data2).sum(axis=axis, keepdims=keepdims)
