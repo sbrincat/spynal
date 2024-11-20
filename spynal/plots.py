@@ -49,7 +49,7 @@ from matplotlib.patches import Polygon
 from matplotlib.colors import ListedColormap, LinearSegmentedColormap
 
 from spynal.utils import isnumeric, isarraylike
-from spynal.helpers import _isint, _merge_dicts
+from spynal.helpers import _isint, _merge_dicts, _isbinary
 
 # Lambda returns list of all settable attributes of given plotting object
 # Find all methods starting with 'set_***', strip out the 'set_', and place in a list
@@ -203,7 +203,8 @@ def plot_line_with_error_fill(x, data, err=None, ax=None, color=None, events=Non
     return lines, patches, ax
 
 
-def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
+def plot_heatmap(x, y, data, signif=None, signif_method='contour',
+                 ax=None, clim=None, events=None, **kwargs):
     """
     Plot 2D data as a heatmap (aka pseudocolor) plot in given axis
 
@@ -217,9 +218,24 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     y : array-like, shape=(n_y,)
         Sampling vector for data dimension to be plotted along y-axis
 
-    data  : ndarray, shape=(n_y,n_x)
+    data : ndarray, shape=(n_y,n_x), dtype=float
         Data to plot on color axis. NOTE: Data array must be 2d,
         with data to be plotted on y-axis the first dimension and the x-axis data 2nd.
+
+    signif : ndarray, shape=(n_y,n_x), dtype=bool
+        Binary significance data associated with heatmapped data. Must be same shape,
+        with same axes as `data`. Plotted either as overlaid contours or alpha transparency.
+
+    signif_method : {'contour','alpha'}, default: 'contour'
+        How to plot associated significance data (if input). Options:
+
+        - 'contour' : Plot overlaid contour using :func:plt.contour at borders between
+        significant and non-significant datapoints. Contour properties can be modified by
+        passing `color` or `linewidth` as keyword args.
+        - 'alpha' : Plot areas of significance as an alpha (transparency) mask. Significant
+        datapoints are plotted without any masking; non-signifcant datapoints are plotted
+        at alpha=0.33 (1/3 of full strength). Alpha mask properties can be modified by
+        passing `alpha` (ranging from 0=non-signif invisible to 1=no effect) as keyword arg.
 
     ax : Pyplot Axis object, default: plt.gca() (current axis)
         Axis to plot into.
@@ -261,6 +277,13 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     assert data.shape == (len(y),len(x)), \
         ValueError("data (%d,%d) must have dimensions (len(y),len(x)) = (%d,%d)"
                    % (*data.shape,len(y),len(x)))
+    if signif is not None:
+        assert np.all(signif.shape == data.shape), \
+            "`signif` (%d,%d) must have same shape/dimensions as `data` (%d,%d)" % \
+            (*signif.shape,*data.shape)
+        assert _isbinary(signif), "Signifance data must be boolean-valued (0/1)"
+        assert signif_method in ['contour','alpha','transparency'], \
+            ValueError("Unsupported value '%s' set for `signif_method`" % signif_method)
 
     # Set axis to plot into (default to current axis)
     if ax is None: ax = plt.gca()
@@ -277,15 +300,29 @@ def plot_heatmap(x, y, data, ax=None, clim=None, events=None, **kwargs):
     ylim = [y[0]-dy/2, y[-1]+dy/2]
 
     # Sort any keyword args to their appropriate plotting object
-    axes_args, imshow_args, line_args = _hash_kwargs(kwargs,
-                                                     [AXES_PARAMS, IMSHOW_PARAMS, PLOT_PARAMS])
+    imshow_args, line_args, axes_args = _hash_kwargs(kwargs,
+                                                     [IMSHOW_PARAMS,PLOT_PARAMS,AXES_PARAMS])
+
+    # Add arg to plot significance as an alpha (transparency) mask
+    if (signif is not None) and (signif_method in ['alpha','transparency']):
+        alpha = imshow_args.pop('alpha',0.33)
+        imshow_args['alpha'] = signif.astype(float)*(1-alpha) + alpha
+
     # Merge any input parameters with default values
     axes_args = _merge_dicts(dict(xlim=xlim, ylim=ylim), axes_args)
     imshow_args = _merge_dicts(dict(extent=[*xlim,*ylim], vmin=clim[0], vmax=clim[1],
                                     cmap='viridis', origin='lower', aspect='auto',
                                     interpolation='none'), imshow_args)
 
+    # Plot the heatmap using imshow
     img = ax.imshow(data, **imshow_args)
+
+    # Plot overlaid contours demarcating boundaries of significant regions
+    if (signif is not None) and (signif_method == 'contour'):
+        color = line_args.pop('color',[1,1,1])
+        linewidth = line_args.pop('linewidth',0.5)
+        ax.contour(x, y, signif.astype(float), levels=[0.5],
+                   colors=[color], linewidths=linewidth)
 
     ax.set(**axes_args) # Set axes parameters
 

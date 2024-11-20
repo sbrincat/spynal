@@ -199,7 +199,7 @@ def spike_field_coupling(spkdata, lfpdata, axis=0, method='PPC', return_phase=Fa
                          data_type=None, spec_method='multitaper', smp_rate=None,
                          keepdims=True, **kwargs):
     """
-    Computs measure of pairwise coupling between a pair of spike and continuous (eg LFP)
+    Compute measure of pairwise coupling between a pair of spike and continuous (eg LFP)
     raw or spectral (time-frequency) data, using given estimation method
 
     Parameters

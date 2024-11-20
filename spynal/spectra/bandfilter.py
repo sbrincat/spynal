@@ -172,7 +172,10 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
         assert freqs is not None, \
             ValueError("Must input a value for either filter <params> or band <freqs>")
 
-        freqs   = np.asarray(freqs)  # Convert freqs to (n_freqbands,2)
+        # Convert freqs to (n_freqbands,2)
+        freqs   = np.asarray(freqs)
+        if freqs.ndim == 1: freqs = freqs[np.newaxis,:]
+
         # Set any freqs > Nyquist equal to Nyquist
         freqs[freqs > smp_rate/2] = smp_rate/2
         n_freqs = freqs.shape[0]
@@ -211,8 +214,8 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     n_timepts_in,n_series = data.shape
 
     # Time indexes to extract from spectrogram for output (accounting for buffer, downsampling)
-    time_idxs_out   = np.arange(buffer,n_timepts_in-buffer,downsmp)
-    n_timepts_out   = len(time_idxs_out)
+    time_idxs_out = np.arange(buffer,n_timepts_in-buffer,downsmp)
+    n_timepts_out = len(time_idxs_out)
 
     if removeDC: data = remove_dc(data,axis=0)
 
@@ -228,10 +231,12 @@ def bandfilter_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
                            hilbert(bandfilt[time_idxs_out,:],axis=0)
 
     # Convert to desired output spectral signal type
-    spec    = complex_to_spec_type(spec,spec_type)
+    spec = complex_to_spec_type(spec,spec_type)
 
     if vector_data: spec = spec.squeeze(axis=-1)
     spec = _undo_standardize_array_newaxis(spec,data_shape,axis=axis)
+    # If only 1 frequency band, remove singleton frequency axis
+    if n_freqs == 1: spec = spec.squeeze(axis=axis)
 
     timepts = time_idxs_out.astype(float)/smp_rate  # Convert time sampling from samples -> s
 
