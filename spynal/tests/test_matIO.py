@@ -211,8 +211,8 @@ def _array_tests(data):
     """ Tests for array variables """
     assert isinstance(data['num_array'], np.ndarray)
     assert np.issubdtype(data['num_array'].dtype, float)
-    assert data['num_array'].shape == (4,3,2)
-    assert (data['num_array'] == np.arange(1,25).reshape((4,3,2),order='F')+0.1).all()
+    assert data['num_array'].shape == (1,2,3)
+    assert (data['num_array'] == np.arange(1,7).reshape((1,2,3),order='F')+0.1).all()
 
     assert isinstance(data['cell_array'], np.ndarray)
     assert np.issubdtype(data['cell_array'].dtype, object)

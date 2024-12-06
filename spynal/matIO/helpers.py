@@ -548,11 +548,12 @@ def _process_v7_object(obj, matlab_vbl_type=None, python_vbl_type=None, extract_
             converted = converted.item()
 
         else:
-            # Squeeze out any singleton axes, eg: Reshape (1,n) ndarrays -> (n,) vectors
-            converted = converted.squeeze()
+            # Squeeze out singleton axis from vector-valued arrays,
+            #  eg: Reshape (1,n) or (n,1) ndarrays -> (n,) vectors
+            if converted.ndim == 2: converted = converted.squeeze()
 
             # Permute array axes if 'PYTHON'/'C'/'ROWMAJOR' order requested
-            if transpose: converted = converted.T
+            elif transpose: converted = converted.T
 
     return converted
 
@@ -563,13 +564,13 @@ def _v7_matlab_type(obj):
     if isinstance(obj,scipy.io.matlab.mio5_params.MatlabOpaque):
         warn("Can't convert Matlab 'object' type (unknown proprietary data type). Returning None.")
         return 'class'
-    
+
     # Matlab scalar structs are returned as (1,1) Numpy structured arrays
     elif _is_structured_array(obj) and (obj.size == 1): return 'struct'
-    
+
     # Matlab struct arrays are returned as (m,n) Numpy structured arrays
     elif _is_structured_array(obj) and (obj.size > 1):  return 'structarray'
-    
+
     elif isinstance(obj,np.ndarray):
         # Cell arrays are returned as object arrays
         if obj.dtype == object:                                         return 'cell'
@@ -577,7 +578,7 @@ def _v7_matlab_type(obj):
         elif _isbinary(obj) and len(obj) > 1 and not (obj == 0).all():  return 'logical'
         # General numeric array
         else:                                                           return 'array'
-        
+
     else:
         raise TypeError("Undetermined type of variable:", obj)
 

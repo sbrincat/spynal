@@ -25,7 +25,7 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
     #    (eg original order of struct fields)
     #  For newest versions of h5py/HDF5, specifying 'locking' behavior may be necessary
     #    but is not an option in older versions)
-    extra_args = {}    
+    extra_args = {}
     if h5py.__version__ >= '2.9.0':
         extra_args['track_order'] = True
     if (h5py.__version__ >= '3.5.0') and  (h5py.version.hdf5_version >= '1.12.1'):
@@ -118,7 +118,7 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
             elif matlab_vbl_type == 'char':
                 if DEBUG: print('\t'*level, "char")
                 converted = _convert_string(obj)    # Convert ints -> str (for both types)
-                
+
                 # Convert string -> array of char's (for Matlab char arrays)
                 # Strings (weirdly) come out as row vectors of ints
                 is_str = (obj.ndim == 2) and (obj.shape[1] == 1)
@@ -155,7 +155,7 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
                 warn("Can't convert Matlab '%s' type (unknown proprietary data type). \
                       Returning None." % matlab_vbl_type)
                 converted = None
-                
+
             # Matlab numerical arrays -- straight copy to Numpy ndarray of appropriate dtype
             else:
                 if DEBUG: print('\t'*level, "numerical", obj.size, extract_item)
@@ -163,8 +163,9 @@ def _load73(filename, variables=None, typemap=None, extract_items=None, order='C
 
             # Note: Only do the following for variables output as arrays (ie not strings/scalars)
             if isinstance(converted,np.ndarray):
-                # Squeeze out any singleton axes, eg: Reshape (1,n) ndarrays -> (n,) vectors
-                converted = converted.squeeze()
+                # Squeeze out singleton axis from vector-valued arrays,
+                #  eg: Reshape (1,n) or (n,1) ndarrays -> (n,) vectors
+                if converted.ndim == 2: converted = converted.squeeze()
 
                 # Permute array axes if 'MATLAB'/column-major order requested
                 if transpose: converted = converted.T

@@ -112,12 +112,12 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_items=
         All Matlab variables -- even scalar-valued ones -- are loaded as arrays. This argument
         determines whether scalar-valued variables are returned as length-1 arrays (False) or
         the single item is extracted from the array and returned as its specific dtype (True).
-        
+
         Can be given as a single bool value to be used for *all* loaded variables or as a
         dict that maps names of Matlab variable types or specific Matlab variable names to bools.
-        
+
         Default: extract scalar items, except for loaded Matlab cell arrays / Python object arrays,
-        where it can break downstream code to have some array elements extracted, but others 
+        where it can break downstream code to have some array elements extracted, but others
         remaining contained in (sub)arrays (eg spike timestamp lists with a single spike for some
         trials/units).
 
@@ -174,14 +174,14 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_items=
         for vbl in variables:
             if isinstance(data[vbl], np.ndarray):       # Numpy array variables
                 vblstr = vbl + ' : numpy.array(' + \
-                        ''.join('%3d,' % x for x in data[vbl].shape) + ')' + \
-                        (' of type %s' % data[vbl].dtype)
+                         ''.join('%3d,' % x for x in data[vbl].shape) + ')' + \
+                         (' of type %s' % data[vbl].dtype)
             elif isinstance(data[vbl], pd.DataFrame):   # Pandas DataFrame variables
                 vblstr = vbl + ' : pandas.DataFrame with columns[' + \
-                        ''.join('%s,' % x for x in data[vbl].keys()) + ']'
+                         ''.join('%s,' % x for x in data[vbl].keys()) + ']'
             elif isinstance(data[vbl], dict):           # dict variables (Matlab structs)
                 vblstr = vbl + ' : dict with keys[' + \
-                        ''.join('%s,' % x for x in data[vbl].keys()) + ']'
+                         ''.join('%s,' % x for x in data[vbl].keys()) + ']'
             else:                                       # Scalar variables (float/int/string)
                 vblstr = vbl
             vblstr = vblstr + '\n'
@@ -190,6 +190,7 @@ def loadmat(filename, variables=None, typemap=None, asdict=False, extract_items=
     if asdict:                  return data
     elif len(variables) == 1:   return data[variables[0]]
     else:                       return tuple(data[vbl] for vbl in variables)
+
 
 load = loadmat
 """ Alias of :func:`loadmat`. See there for details. """
@@ -223,6 +224,7 @@ def whomat(filename, verbose=True):
     if verbose: print(variables)
 
     return variables
+
 
 who = whomat
 """ Alias of :func:`whomat`. See there for details. """
@@ -274,6 +276,7 @@ def savemat(filename, variables, version=None, **kwargs):
     # Use scipy.io.savemat() to save v7 MAT-files
     else:
         _save7(filename, variables, **kwargs)
+
 
 save = savemat
 """ Alias of :func:`savemat`. See there for details. """
