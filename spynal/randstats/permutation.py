@@ -338,7 +338,7 @@ def one_way_permutation_test(data, labels, axis=0, stat='F', tail='right', group
 
     # If groups set in args, remove any observations not represented in <groups>
     else:
-        idxs = np.in1d(labels, groups)
+        idxs = np.isin(labels, groups)
         if idxs.sum() != N:
             labels  = labels[idxs]
             data    = data[axis_index_slices(axis, idxs, ndim)]

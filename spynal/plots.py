@@ -863,10 +863,13 @@ def _maximize_figure():
     # Method depends on which Matplotlib backend you are using
     backend = get_backend()
     if 'qt' in backend.lower():     # QT backend
-        manager.resize(manager.window.maximumWidth(), manager.window.maximumHeight())
+        manager.window.showMaximized()
     elif 'tk' in backend.lower():   # TkAgg backend
         manager.resize(*manager.window.maxsize())
     elif 'wx' in backend.lower():   # WX backend
         manager.frame.Maximize(True)
+    # This should work for any backend, but is a bit wonky (covers task bar, can't minimize fig)
     else:
-        warn("Unsupported Matplotlib backend '%s'. Could not maximize figure." % backend)
+        warn("Unsupported Matplotlib backend '%s'. Maximized figs may be difficult to work with."
+             % backend)
+        manager.full_screen_toggle()

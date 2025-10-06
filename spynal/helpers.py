@@ -70,7 +70,7 @@ def _isbinary(x):
     x = np.asarray(x)
     return (x.dtype == bool) or \
            (np.issubdtype(x.dtype,np.number) and
-            np.all(np.in1d(x,[0,0.0,1,1.0,True,False])))
+            np.all(np.isin(x,[0,0.0,1,1.0,True,False])))
 
 
 def _has_method(obj, method):

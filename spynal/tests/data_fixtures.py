@@ -194,7 +194,7 @@ def spiking_oscillation(oscillation):
     data = oscillation
 
     # Convert continuous oscillation to probability (range 0-1)
-    data = (data - data.min()) / data.ptp()
+    data = (data - data.min()) / np.ptp(data)
     data = data**2  # Sparsen high rates some
 
     # Use probabilities to generate Bernoulli random variable at each time point
@@ -323,12 +323,12 @@ def simulate_dataset(gain=5.0, offset=5.0, n_conds=2, n=100, n_chnls=1, distribu
         spreads = spreads*np.ones((n_conds,)) if np.isscalar(spreads) else np.asarray(spreads)
 
     assert len(gains) == n_conds, \
-        ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)" \
-                    % (len(gains), n_conds))
+        ValueError("Vector-valued <gain> must have length == n_conds (%d != %d)"
+                   % (len(gains), n_conds))
 
     assert len(spreads) == n_conds, \
-        ValueError("Vector-valued <spreads> must have length == n_conds (%d != %d)" \
-                    % (len(spreads), n_conds))
+        ValueError("Vector-valued <spreads> must have length == n_conds (%d != %d)"
+                   % (len(spreads), n_conds))
 
     assert (correlation >= -1) and (correlation <= 1), \
         ValueError("Correlation must be in range [-1,+1] (%.2f input)" % correlation)

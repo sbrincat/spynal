@@ -120,13 +120,13 @@ def test_plot_heatmap(oscillation):
     assert np.allclose(img.get_array().data, data)
 
     # Also test colorbar() function
-    cbar = colorbar(mappable=img, ax=ax, size=0.02, pad=0.02)
-    cbar = colorbar(mappable=img)
+    colorbar(mappable=img, ax=ax, size=0.02, pad=0.02)
+    colorbar(mappable=img)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         img, _ = plot_heatmap(timepts, channels, data, foo=None)
-        cbar = colorbar(mappable=img, ax=ax, foo=None)
+        colorbar(mappable=img, ax=ax, foo=None)
 
 
 # =============================================================================
@@ -136,7 +136,7 @@ def test_full_figure():
     """ Unit tests for full_figure() function """
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        fig = full_figure(foo=None)
+        full_figure(foo=None)
 
     plt.close('all')
 
@@ -188,4 +188,3 @@ def test_imports():
     # Import specific function from module
     from spynal.plots import full_figure
     full_figure
-

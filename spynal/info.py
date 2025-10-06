@@ -414,7 +414,7 @@ def decode(data, labels, axis=0, feature_axis=1, decoder='LDA', cv='auto', seed=
 
     # If groups set in args, remove any observations not represented in <groups>
     else:
-        idxs = np.in1d(labels,groups)
+        idxs = np.isin(labels,groups)
         if idxs.sum() != data.shape[0]:
             labels  = labels[idxs]
             data    = data[idxs,...]
@@ -683,7 +683,7 @@ def mutual_info(data, labels, axis=0, bins=None, resp_entropy=None, groups=None,
 
     # If groups set in args, remove any observations not represented in <groups>
     else:
-        idxs = np.in1d(labels,groups)
+        idxs = np.isin(labels,groups)
         if idxs.sum() != data.shape[0]:
             labels  = labels[idxs]
             data    = data[idxs,...]
@@ -1100,6 +1100,11 @@ def pev(data, labels, axis=0, model=None, omega=True, as_pct=True, return_stats=
     exp_var = pev(data,labels,return_stats=False)
 
     exp_var,stats = pev(data,labels,return_stats=True)
+
+    References
+    ----------
+    - Snyder & Lawson (1993) https://doi.org/10.1080/00220973.1993.10806594
+    - https://en.wikipedia.org/wiki/Effect_size
     """
     if not isinstance(labels,DesignMatrix): labels = np.asarray(labels)
     if axis < 0: axis = data.ndim + axis
@@ -1235,7 +1240,7 @@ def anova1(data, labels, axis=0, omega=True, groups=None, gm_method='mean_of_obs
 
     # Remove any observations not represented in <groups>
     else:
-        idxs = np.in1d(labels,groups)
+        idxs = np.isin(labels,groups)
         if idxs.sum() != data.shape[0]:
             labels  = labels[idxs]
             data    = data[idxs,:]

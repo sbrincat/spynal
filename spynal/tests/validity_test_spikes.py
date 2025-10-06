@@ -198,11 +198,11 @@ def test_rate(method, test='rate', test_values=None, data_type='timestamp', n_tr
     # 'mean' : Test if estimated rate increases monotonically with actual simulated rate
     if test in ['rate','mean']:
         evals = [((np.diff(grand_means) >= 0).all(),
-                    "Estimated rate does not inccrease monotonically with simulated rate")]
+                  "Estimated rate does not inccrease monotonically with simulated rate")]
 
     # 'n' : Test if stat is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
-        evals = [(grand_means.ptp() < grand_sems.max(),
+        evals = [(np.ptp(grand_means) < grand_sems.max(),
                   "Estimated rate has larger than expected range across n's (likely biased by n)")]
 
     passed = True
@@ -337,7 +337,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
                     distribution=distribution, seed=None)
     # Override defaults with any simulation-related params passed to function
     for arg in sim_args:
-        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)    
+        if arg in kwargs: sim_args[arg] = kwargs.pop(arg)
 
     if test in ['mean','rate','gain']:
         test_values = [1,2,5,10,20] if test_values is None else test_values
@@ -387,7 +387,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
             evals = [((np.diff(stat_means) <= 0).all(),
                       "%s does not decrease monotonically with increase in mean" % stat)]
         elif distribution == 'poisson':
-            evals = [(stat_means.ptp() < stat_sds.max(),
+            evals = [(np.ptp(stat_means) < stat_sds.max(),
                       "%s has larger than expected range for increase in mean of Poisson data"
                       % stat)]
 
@@ -398,7 +398,7 @@ def test_rate_stats(stat, test='mean', test_values=None, distribution='poisson',
 
     # 'n' : Test if stat is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
-        evals = [(stat_means.ptp() < stat_sds.max(),
+        evals = [(np.ptp(stat_means) < stat_sds.max(),
                   "%s has larger than expected range across n's (likely biased by n)" % stat)]
 
     passed = True
@@ -563,7 +563,7 @@ def test_isi_stats(stat, test='mean', test_values=None, n_reps=100,
     # Determine if test actually produced the expected values
     # 'mean' : Test if stat remains ~ same for Poisson
     if test == 'mean':
-        evals = [(stat_means.ptp() < stat_sds.max(),
+        evals = [(np.ptp(stat_means) < stat_sds.max(),
                  "%s has larger than expected range for increase in mean of Poisson data" % stat)]
 
     passed = True
@@ -772,7 +772,7 @@ def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
             evals = [((np.diff(stat_means) > 0).all(),
                       "%s does not increase monotonically with increase in spike width" % stat)]
         else:
-            evals = [(stat_means.ptp() < stat_sds.max(),
+            evals = [(np.ptp(stat_means) < stat_sds.max(),
                       "%s has larger than expected range for changes in spike width" % stat)]
 
     # 'trough_width' : Test if trough_width stat increases monotonically, other stats don't
@@ -781,7 +781,7 @@ def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
             evals = [((np.diff(stat_means) > 0).all(),
                       "%s does not increase monotonically with increase in trough width" % stat)]
         else:
-            evals = [(stat_means.ptp() < stat_sds.max(),
+            evals = [(np.ptp(stat_means) < stat_sds.max(),
                       "%s has larger than expected range for changes in trough width" % stat)]
 
     # 'peak_width' : Test if repolarization stat increases monotonically, other stats don't
@@ -790,7 +790,7 @@ def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
             evals = [((np.diff(stat_means) > 0).all(),
                       "%s does not increase monotonically with increase in peak width" % stat)]
         else:
-            evals = [(stat_means.ptp() < stat_sds.max(),
+            evals = [(np.ptp(stat_means) < stat_sds.max(),
                       "%s has larger than expected range for changes in peak width" % stat)]
 
     # 'trough_amp' : Test if amp_ratio stat increases monotonically, other stats don't
@@ -799,7 +799,7 @@ def test_waveform_stats(stat, test='width', test_values=None, n_spikes=100,
             evals = [((np.diff(stat_means) > 0).all(),
                       "%s does not increase monotonically with increase in trough amp" % stat)]
         else:
-            evals = [(stat_means.ptp() < stat_sds.max(),
+            evals = [(np.ptp(stat_means) < stat_sds.max(),
                       "%s has larger than expected range for changes in trough amp" % stat)]
 
     passed = True
@@ -846,7 +846,7 @@ def waveform_stat_test_battery(stats=('width','trough_width','repol','amp_ratio'
             _,_,passed = test_waveform_stats(stat, test=test, do_tests=do_tests, **kwargs)
 
             print('%s (test ran in %.1f s)' %
-                    ('PASSED' if passed else 'FAILED', time.time()-t1))
+                  ('PASSED' if passed else 'FAILED', time.time()-t1))
             if 'plot_dir' in kwargs: plt.close('all')
 
 

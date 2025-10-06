@@ -10,7 +10,6 @@ FUNCTIONS
 
 """
 import os
-import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -246,4 +245,3 @@ def test_plot_heatmap(plot_dir=None):
     plot_heatmap(timepts, channels, data, events=events)
     plt.title('Edge event markers')
     if plot_dir is not None: plt.savefig(os.path.join(plot_dir,'plot_heatmap-edge_events.png'))
-

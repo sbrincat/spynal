@@ -50,7 +50,7 @@ def spike_field_pair(oscillation_pair):
     spkdata,lfpdata = oscillation_pair[:,:,0], oscillation_pair[:,:,1]
 
     # Convert continuous oscillation to probability (range 0-1)
-    spkdata = (spkdata - spkdata.min()) / spkdata.ptp()
+    spkdata = (spkdata - spkdata.min()) / np.ptp(spkdata)
     spkdata = spkdata**2  # Sparsen high rates some
 
     # Use probabilities to generate Bernoulli random variable at each time point

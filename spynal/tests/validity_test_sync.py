@@ -66,7 +66,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'synchrony' : Relative phase SD's (~inverse of synchrony). Default: [pi,pi/2,pi/4,pi/8,0]
         - 'frequency' : Frequencies to test. Default: [4,8,16,32,64]
         - 'relphase' :  Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
@@ -96,7 +96,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
 
     seed : int, default: 1 (reproducible random numbers)
         Random generator seed for repeatable results. Set=None for fully random numbers.
-       
+
     - Following args set param's for sim, may be overridden by <test_values> depending on test -
     phi_sd  Scalar. SD (rad) for phase diff of 2 signals if test != 'synchrony'. Default: pi/2
     dphi    Scalar. Phase difference (rad) of 2 simulated signals if test != 'relphase'. Default: 0
@@ -112,7 +112,7 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
 
     **kwargs :
         All other keyword args passed to synchrony estimation function
- 
+
     Returns
     -------
     syncs : ndarray, shape=(n_freqs,n_timepts,n_values)
@@ -202,9 +202,9 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
         # bivariate measure of synchrony -> (n_freqs,n_timepts)
         if single_trial is None:
             sync,freqs,timepts,phase = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
-                                                spec_method=spec_method, smp_rate=smp_rate,
-                                                time_axis=0, return_phase=True,
-                                                single_trial=single_trial, **kwargs)
+                                                 spec_method=spec_method, smp_rate=smp_rate,
+                                                 time_axis=0, return_phase=True,
+                                                 single_trial=single_trial, **kwargs)
         else:
             sync,freqs,timepts = synchrony(data[:,:,0], data[:,:,1], axis=1, method=method,
                                            spec_method=spec_method, smp_rate=smp_rate,
@@ -387,8 +387,8 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
                 plt.plot(xplot, test_freq_results, marker='o')
                 plt.ylim(ylim)
             plt.xlabel('Phase SD' if test == 'synchrony' else test)
-            plt.ylabel('frequency' if test in ['frequency','freq'] and variable == 'sync' else \
-                        variable)
+            plt.ylabel('frequency' if test in ['frequency','freq'] and variable == 'sync' else
+                       variable)
             if i_vbl == 0:
                 plt.title("%s %s %s test" % (spec_method,method,test), horizontalalignment='left')
         plt.show()
@@ -401,33 +401,33 @@ def test_synchrony(method, pair_type='lfp-lfp', test='frequency', test_values=No
     # 'synchrony' : Test if synchrony strength increases monotonically with simulated synchrony
     if test in ['synchrony','strength','coupling']:
         evals = [((np.diff(test_freq_syncs) > 0).all(),
-                    "Estimated sync strength does not increase monotonically with simulated sync")]
+                  "Estimated sync strength does not increase monotonically with simulated sync")]
 
     # 'frequency' : check if frequency of peak synchrony matches simulated target frequency
     elif test in ['frequency','freq']:
         evals = [((np.diff(peak_freqs) > 0).all(),
-                    "Estimated peak freq does not increase monotonically with expected freq")]
+                  "Estimated peak freq does not increase monotonically with expected freq")]
 
     # 'amplitude','phase','ampratio' : Test if synchrony is ~ same for all values
     elif test in ['amplitude','amp', 'phase','phi', 'ampratio','amp_ratio','damp']:
-        evals = [(test_freq_syncs.ptp() < 0.1,
-                    "Estimated sync has larger than expected range across tested %s value" % test)]
+        evals = [(np.ptp(test_freq_syncs) < 0.1,
+                  "Estimated sync has larger than expected range across tested %s value" % test)]
 
     # 'relphase' : Test if sync strength is ~ same for all values, phase increases monotonically
     elif test in ['relphase','rel_phase','dphi']:
         circ_subtract = lambda data1,data2: np.angle(np.exp(1j*data1) / np.exp(1j*data2))
         circ_diff = lambda data: circ_subtract(data[1:],data[:-1])
 
-        evals = [(test_freq_syncs.ptp() < 0.1,
-                    "Estimated sync has larger than expected range across tested %s value" % test)]
+        evals = [(np.ptp(test_freq_syncs) < 0.1,
+                  "Estimated sync has larger than expected range across tested %s value" % test)]
         if single_trial is None:
             evals.append(((circ_diff(test_freq_phases) > 0).all(),
                          "Estimated sync phase does not increase monotonic with sim'd relative phase"))
 
     # 'n' : Test if synchrony is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
-        evals = [(test_freq_syncs.ptp() < 0.1,
-                    "Estimated sync has > expected range across n's (likely biased by n)")]
+        evals = [(np.ptp(test_freq_syncs) < 0.1,
+                  "Estimated sync has > expected range across n's (likely biased by n)")]
 
     passed = True
     for cond,message in evals:
@@ -460,7 +460,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
 
     test : str, default: 'frequency'
         Type of test to run. Options:
-        
+
         - 'synchrony' : Tests multiple values of btwn-condition difference in synchrony strength
             (by manipulating phase SD of one signal). Checks for monotonic increase of information.
         - 'relphase' : Tests multiple values of btwn-condition difference in relative phase.
@@ -470,7 +470,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'synchrony' : Relative phase SDs (~inverse of synchrony strength). Default: [pi,pi/2,pi/4,pi/8,0]
         - 'relphase' : Relative phases to test. Default: [-pi,-pi/2,0,pi/2,pi]
         - 'ampratio' : Amplitude ratios to test. Default: [1,2,4,8]
@@ -481,7 +481,7 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
 
     single_trial_method : str, default: 'pseudo'
         What type of single-trial synchrony estimator to compute:
-        
+
         - 'pseudo' : single-trial estimates using jackknife pseudovalues
         - 'richter' : single-trial estimates using actual jackknifes as in Richter & Fries 2015
 
@@ -600,10 +600,10 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
         # Compute single-trial time-frequency/spectrogram representation of data and
         # bivariate measure of synchrony -> (n_freqs,n_timepts,n_trials)
         sync,freqs,timepts = synchrony(data[:,:,0], data[:,:,1], axis=1, method=sync_method,
-                                        spec_method=spec_method, smp_rate=smp_rate,
-                                        time_axis=0, return_phase=False,
-                                        single_trial=single_trial_method, keepdims=False,
-                                        **kwargs)
+                                       spec_method=spec_method, smp_rate=smp_rate,
+                                       time_axis=0, return_phase=False,
+                                       single_trial=single_trial_method, keepdims=False,
+                                       **kwargs)
 
         n_freqs,n_timepts,_ = sync.shape
         if freqs.ndim == 2:
@@ -687,8 +687,8 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
                           freq_transform(freq)
             plt.plot([target_freq,target_freq], ylim, '-', color=colors[i], linewidth=0.5)
             plt.text(flim[1]-0.05*np.diff(flim), ylim[1]-(i+1)*0.05*np.diff(ylim),
-                        np.round(value,decimals=2), color=colors[i], fontweight='bold',
-                        horizontalalignment='right')
+                     np.round(value,decimals=2), color=colors[i], fontweight='bold',
+                     horizontalalignment='right')
         plt.xlim(flim)
         plt.ylim(ylim)
         plt.xticks(freq_ticks,freq_tick_labels)
@@ -707,12 +707,12 @@ def test_sync_info(sync_method, pair_type='lfp-lfp', test='sync', test_values=No
     # 'synchrony' : Test if information increases monotonically with simulated cond synchrony diff
     if test in ['sync','synchrony','strength','coupling']:
         evals = [((np.diff(test_freq_infos) > 0).all(),
-                    "Estimated information does not increase monotonically with simulated sync diff")]
+                  "Estimated information does not increase monotonically with simulated sync diff")]
 
     # 'relphase','ampratio' : Test if information is ~ same for all values
     elif test in ['relphase','rel_phase','dphi', 'ampratio','amp_ratio','damp']:
-        evals = [(test_freq_infos.ptp() < 0.1,
-                    "Estimated information has larger than expected range across tested %s value" % test)]
+        evals = [(np.ptp(test_freq_infos) < 0.1,
+                  "Estimated information has larger than expected range across tested %s value" % test)]
 
     passed = True
     for cond,message in evals:
@@ -741,17 +741,17 @@ def synchrony_test_battery(methods=('PPC','PLV','coherence'),
     ----------
     methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
         List of synchrony computation methods to test.
-                
+
     tests : array-like of str, default: ('synchrony','relphase','ampratio','frequency','amplitude','phase','n')
-        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        List of tests to run. Note: certain combinations of methods,tests are skipped,
         as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
-                
+
     spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
-        List of underlying spectral analysis methods to test.                
+        List of underlying spectral analysis methods to test.
 
     trial_methods : array-like of str or None, default: (None,'richter','pseudo')
         List of single-trial estimate methods to test (set=None to run
-        usual trial-reduced synchrony methods instead of single-trial).                
+        usual trial-reduced synchrony methods instead of single-trial).
 
     do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
@@ -787,16 +787,16 @@ def synchrony_test_battery(methods=('PPC','PLV','coherence'),
                                                 do_tests=do_tests_, **kwargs)
 
                     print('%s (test ran in %.1f s)'
-                        % ('PASSED' if passed else 'FAILED', time.time()-t1))
+                          % ('PASSED' if passed else 'FAILED', time.time()-t1))
 
                     # If saving plots to file, let's not leave them all open
                     if 'plot_dir' in kwargs: plt.close('all')
 
 
 def spike_field_test_battery(methods=('PPC','PLV','coherence'),
-                           tests=('synchrony','relphase','ampratio','frequency','amplitude','phase','n'),
-                           spec_methods=('wavelet','multitaper','bandfilter'),
-                           do_tests=True, **kwargs):
+                             tests=('synchrony','relphase','ampratio','frequency','amplitude','phase','n'),
+                             spec_methods=('wavelet','multitaper','bandfilter'),
+                             do_tests=True, **kwargs):
     """
     Run a battery of given tests on given oscillatory spike-field coupling computation methods
 
@@ -804,13 +804,13 @@ def spike_field_test_battery(methods=('PPC','PLV','coherence'),
     ----------
     methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
         List of synchrony computation methods to test.
-                
+
     tests : array-like of str, default: ('synchrony','relphase','frequency','amplitude','phase','n')
-        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        List of tests to run. Note: certain combinations of methods,tests are skipped,
         as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
-                
+
     spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
-        List of underlying spectral analysis methods to test.                
+        List of underlying spectral analysis methods to test.
 
     do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
@@ -860,24 +860,24 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
     ----------
     methods : array-like of str, default: ('PPC','PLV','coherence') (all supported methods)
         List of synchrony computation methods to test.
-                
+
     tests : array-like of str, default: ('synchrony','relphase','ampratio')
-        List of tests to run. Note: certain combinations of methods,tests are skipped, 
+        List of tests to run. Note: certain combinations of methods,tests are skipped,
         as they are not expected to pass (ie 'ampratio' tests skipped for coherence method)
-                
+
     spec_methods : array-like of str, default: ('wavelet','multitaper','bandfilter')
-        List of underlying spectral analysis methods to test.                
+        List of underlying spectral analysis methods to test.
 
     trial_methods : array-like of str or None, default: (None,'richter','pseudo')
         List of single-trial estimate methods to test (set=None to run
-        usual trial-reduced synchrony methods instead of single-trial).                
+        usual trial-reduced synchrony methods instead of single-trial).
 
     do_tests : bool. Set=True to evaluate test results against expected values and
                 raise an error if they fail. Default: True
 
     **kwargs :
         All other keyword args passed to synchrony estimation function
-            
+
     **kwargs :
         Any other keyword passed directly to test_sync_info()
     """
@@ -901,7 +901,7 @@ def sync_info_test_battery(methods=('PPC','PLV','coherence'),
                                                 do_tests=do_tests, **kwargs)
 
                     print('%s (test ran in %.1f s)'
-                        % ('PASSED' if passed else 'FAILED', time.time()-t1))
+                          % ('PASSED' if passed else 'FAILED', time.time()-t1))
 
                     # If saving plots to file, let's not leave them all open
                     if 'plot_dir' in kwargs: plt.close('all')
@@ -918,7 +918,7 @@ def _amp_phase_to_complex(amp,theta):
 def _continuous_to_spiking(data):
     """ Convert continuous data to thresholded spiking response """
     # Convert continuous oscillation to probability (range 0-1)
-    data = (data - data.min()) / data.ptp()
+    data = (data - data.min()) / np.ptp(data)
     data = data**2  # Sparsen high rates some
 
     # Use probabilities to generate Bernoulli random variable at each time point

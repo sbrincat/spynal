@@ -193,8 +193,8 @@ def test_power(method, test='frequency', test_values=None, spec_type='power', ff
 
         # HACK Convert continuous oscillatory data into spike train (todo find better method)
         if spikes:
-            data = (data - data.min()) / data.ptp() # Convert to 0-1 range ~ spike probability
-            data = data**2                          # Sparsify probabilies (decrease rates)
+            data = (data - data.min()) / np.ptp(data)   # Convert to 0-1 range ~ spike probability
+            data = data**2                              # Sparsify probabilies (decrease rates)
             # Use probabilities to generate Bernoulli random variable at each time point
             data = bernoulli.ppf(0.5, data).astype(bool)
 
@@ -372,7 +372,7 @@ def test_power(method, test='frequency', test_values=None, spec_type='power', ff
     # 'phase' : Test if power is ~ constant across phase
     elif test in ['phase','phi']:
         crit = 0.2 if do_itpc else test_freq_errs.max()
-        evals = [(test_freq_means.ptp() < crit,
+        evals = [(np.ptp(test_freq_means) < crit,
                   "Estimated %s has larger than expected range across different simulated phases"
                   % spec_type)]
 
@@ -383,14 +383,14 @@ def test_power(method, test='frequency', test_values=None, spec_type='power', ff
             evals = [((np.diff(test_freq_means) < 0).all(),
                       "Estimated ITPC does not decrease monotonically with simulated phase SD")]
         else:
-            evals = [(test_freq_means.ptp() < test_freq_errs.max(),
+            evals = [(np.ptp(test_freq_means) < test_freq_errs.max(),
                       "Estimated %s has larger than expected range across simulated phase SDs"
                       % spec_type)]
 
     # 'n' : Test if power is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
         crit = 0.2 if do_itpc else test_freq_errs.max()
-        evals = [(test_freq_means.ptp() < crit,
+        evals = [(np.ptp(test_freq_means) < crit,
                   "Estimated %s has larger than expected range across n's (likely biased by n)"
                   % spec_type)]
 

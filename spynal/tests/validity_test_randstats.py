@@ -16,8 +16,6 @@ Function list
 - confint_test_battery :    Runs standard battery of tests of confidence interval functions
 """
 import os
-import time
-from math import ceil
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -46,7 +44,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     Parameters
     ----------
     stat : str
-        Type of statistical test to evaluate: 
+        Type of statistical test to evaluate:
         'one_sample'|'paired_sample'|'paired_sample_assoc'| 'two_sample'|'one_way'|'two_way'
 
     method : str
@@ -54,7 +52,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
 
     test : str, default: 'gain'
         Type of test to run. Options:
-        
+
         - 'gain' : Tests multiple values for btwn-cond response difference (gain).
             Checks for monotonically increasing stat/decreasing p value.
         - 'spread' : Tests multiple values for distribution spread (SD).
@@ -66,14 +64,14 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
         - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
         - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
 
     term : int, default: 0
         Which model term to modify for testing 2-way stats (unused for other stats).
-        0,1 = main effects, 2 = interaction. 
+        0,1 = main effects, 2 = interaction.
 
     distribution : str, default: 'normal'
         Name of distribution to simulate data from. Options: 'normal' | 'poisson'
@@ -105,7 +103,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     means : dict, {str : ndarray. shape=(n_values,)}
         Mean results (across independent test runs) of variables output from randomization tests
         for each tested value. Each key/value pair corressponds to a computed statistic variable:
-        
+
         - 'signif' :    Binary signficance decision (at criterion <alpha>)
         - 'p' :         p values
         - 'log_p' :     p values negative log-transformed -log10(p) to increase with effect size
@@ -137,7 +135,7 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
         elif term == 2: gain_pattern = np.asarray([0,1,1,0])
     else:
         gain_pattern = 1
-        
+
     sim_args = dict(gain=5.0*gain_pattern, offset=0.0, spreads=10.0, n_conds=n_conds, n=100,
                     distribution=distribution, correlation=0, seed=None)
     # Override defaults with any simulation-related params passed to function
@@ -181,11 +179,11 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     if 'n_resamples' not in kwargs: kwargs['n_resamples'] = 100
 
     n_terms = 3 if stat == 'two_way' else 1
-    results = dict(signif = np.empty((n_terms,len(test_values),n_reps),dtype=bool),
-                   p = np.empty((n_terms,len(test_values),n_reps)),
-                   log_p = np.empty((n_terms,len(test_values),n_reps)),
-                   stat_obs = np.empty((n_terms,len(test_values),n_reps)),
-                   stat_resmp = np.empty((n_terms,len(test_values),n_reps)))
+    results = dict(signif=np.empty((n_terms,len(test_values),n_reps),dtype=bool),
+                   p=np.empty((n_terms,len(test_values),n_reps)),
+                   log_p=np.empty((n_terms,len(test_values),n_reps)),
+                   stat_obs=np.empty((n_terms,len(test_values),n_reps)),
+                   stat_resmp=np.empty((n_terms,len(test_values),n_reps)))
 
     resmp_axis = -1 if stat == 'two_way' else 0
 
@@ -254,68 +252,67 @@ def test_randstats(stat, method, test='gain', test_values=None, term=0, distribu
     if test == 'gain':
         if stat != 'paired_sample_assoc':
             evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                        "Significance does not increase monotonically with btwn-cond mean diff"),
-                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                        "p values do not decrease monotonically with btwn-cond mean diff"),
-                    ((np.diff(means['stat_obs'][term,:]) > 0).all(),
-                        "Statistic does not increase monotonically with btwn-cond mean diff"),
-                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
-                        "Resampled stat has larger than expected range with btwn-cond mean diff")]
+                      "Significance does not increase monotonically with btwn-cond mean diff"),
+                     ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                      "p values do not decrease monotonically with btwn-cond mean diff"),
+                     ((np.diff(means['stat_obs'][term,:]) > 0).all(),
+                      "Statistic does not increase monotonically with btwn-cond mean diff"),
+                     (np.ptp(means['stat_resmp'][term,:]) <= sds['stat_resmp'][term,:].max(),
+                      "Resampled stat has larger than expected range with btwn-cond mean diff")]
         else:
             evals = [] # todo should we test for no change here?
-            
+
     # 'spread' : Test if p val's increase and stat decreases monotonically with within-group spread
     elif test in ['spread','spreads','sd']:
         if stat != 'paired_sample_assoc':
             evals = [((np.diff(means['signif'][term,:]) > 0).all(),
-                        "Signif does not decrease monotonically with within-cond spread increase"),
-                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                        "p values do not increase monotonically with within-cond spread increase"),
-                    ((np.diff(means['stat_obs'][term,:]) < 0).all(),
-                        "Statistic does not decrease monotonically with within-cond spread increase"),
-                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'].max(),
-                        "Resampled stat has > than expected range with within-cond spread increase")]
+                      "Signif does not decrease monotonically with within-cond spread increase"),
+                     ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                      "p values do not increase monotonically with within-cond spread increase"),
+                     ((np.diff(means['stat_obs'][term,:]) < 0).all(),
+                      "Statistic does not decrease monotonically with within-cond spread increase"),
+                     (np.ptp(means['stat_resmp'][term,:]) <= sds['stat_resmp'].max(),
+                      "Resampled stat has > than expected range with within-cond spread increase")]
         else:
             evals = [] # todo should we test for no change here?
 
     # 'n' : Test if p values decrease, but statistic is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
         evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                    "Significance does not increase monotonically with n"),
+                  "Significance does not increase monotonically with n"),
                  ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                    "p values do not decrease monotonically with n"),
+                  "p values do not decrease monotonically with n"),
                  ((np.diff(means['stat_obs'][term,:]) >= 0).all(),
-                    "Statistic does not decrease monotonically with n"),
-                 (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'].max(),
-                    "Resampled stat has > expected range across n's (likely biased by n)")]
+                  "Statistic does not decrease monotonically with n"),
+                 (np.ptp(means['stat_resmp'][term,:]) <= sds['stat_resmp'].max(),
+                  "Resampled stat has > expected range across n's (likely biased by n)")]
         if stat == 'paired_sample_assoc': del evals[2]
-        
+
     # 'bias': Test that statistic is not > 0 and p value ~ alpha if gain = 0, for varying n
     elif test == 'bias':
         evals = [(((np.abs(means['signif'][term,:].mean()) - alpha) < sds['signif'][term,:]).all(),
-                    "Signif different from expected pct (%.1f) when no mean diff between conds"
-                    % alpha),
+                  "Signif different from expected pct (%.1f) when no mean diff between conds" % alpha),
                  (((np.abs(means['p'][term,:].mean()) - 0.5) < sds['p'][term,:]).all(),
-                    "p values are different from expected (0.5) when no mean diff between conds"),
+                  "p values are different from expected (0.5) when no mean diff between conds"),
                  ((np.abs(means['stat_obs'][term,:]) < sds['stat_obs'][term,:]).all(),
-                    "Statistic is above 0 when no mean diff between conds")]
+                  "Statistic is above 0 when no mean diff between conds")]
 
     # 'correlation': Test that correlation stat monotonically increases with correction,
     # that other statistics are ~ same for all values of correlation
     elif test == 'correlation':
         if stat == 'paired_sample_assoc':
             evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                        "Significance does not increase monotonically with correlation"),
-                    ((np.diff(means['log_p'][term,:]) >= 0).all(),
-                        "p values do not decrease monotonically with correlation"),
-                    ((np.diff(means['stat_obs'][term,:]) > 0).all(),
-                        "Statistic does not increase monotonically with correlation"),
-                    (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
-                        "Resampled stat has larger than expected range with correlation")]                     
+                      "Significance does not increase monotonically with correlation"),
+                     ((np.diff(means['log_p'][term,:]) >= 0).all(),
+                      "p values do not decrease monotonically with correlation"),
+                     ((np.diff(means['stat_obs'][term,:]) > 0).all(),
+                      "Statistic does not increase monotonically with correlation"),
+                     (np.ptp(means['stat_resmp'][term,:]) <= sds['stat_resmp'][term,:].max(),
+                      "Resampled stat has larger than expected range with correlation")]
         else:
             evals = [] # todo Should we test for no change otherwise
-            
-        
+
+
     passed = True
     for cond,message in evals:
         if not cond:    passed = False
@@ -344,10 +341,10 @@ def stat_test_battery(stats=('one_sample','paired_sample','paired_sample_assoc',
 
     methods : array-like of str, default: ('permutation','bootstrap') (all supported methods)
         List of resampling paradigms to run.
-                
+
     tests : array-like of str, default: ('gain','spread','n','bias','correlation')
         List of tests to run.
-                
+
     do_tests : bool, default: True
         Set=True to evaluate test results against expected values and raise an error if they fail
 
@@ -394,7 +391,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
 
     For test failures, raises an error or warning (depending on value of `do_tests`).
     Optionally plots summary of test results.
-    
+
     Parameters
     ----------
     stat : str
@@ -402,7 +399,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
 
     test : str, default: 'gain'
         Type of test to run. Options:
-        
+
         - 'gain' : Tests multiple values for btwn-cond response difference (gain).
             Checks for monotonically increasing confints.
         - 'spread' : Tests multiple values for distribution spread (SD).
@@ -414,7 +411,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
 
     test_values : array-like, shape=(n_values,), dtype=str
         List of values to test. Interpretation and defaults are test-specific:
-        
+
         - 'gain' :      Btwn-condition response differences (gains). Default: [1,2,5,10,20]
         - 'spread' :    Gaussian SDs for each response distribution. Default: [1,2,5,10,20]
         - 'n'/'bias' :  Trial numbers. Default: [25,50,100,200,400,800]
@@ -423,7 +420,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
         Name of distribution to simulate data from. Options: 'normal' | 'poisson'
 
     confint : float, default: 0.95 (95% CI)
-        Confidence interval to compute (1-alpha). 
+        Confidence interval to compute (1-alpha).
 
     do_tests : bool, default: True
         Set=True to evaluate test results against expected values and raise an error if they fail
@@ -446,7 +443,7 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     means : dict, {str : ndarray. shape=(n_values,)}
         Mean results (across independent test runs) of variables output from randomization tests
         for each tested value. Each key/value pair corressponds to a computed statistic variable:
-        
+
         - 'signif' :       Binary signficance decision (at criterion <alpha>)
         - 'p' :            p values (actually -log10(p) so increases with effect size)
         - 'stat_obs' :     Observed evaluatation statistic values
@@ -515,11 +512,11 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     if 'n_resamples' not in kwargs: kwargs['n_resamples'] = 100
 
     n_terms = 3 if stat == 'two_way' else 1
-    results = dict(confints = np.empty((n_terms,2,len(test_values),n_reps)),
-                   ci_diff = np.empty((n_terms,len(test_values),n_reps)),
-                   signif = np.empty((n_terms,len(test_values),n_reps),dtype=bool),
-                   stat_obs = np.empty((n_terms,len(test_values),n_reps)),
-                   stat_resmp = np.empty((n_terms,len(test_values),n_reps)))
+    results = dict(confints=np.empty((n_terms,2,len(test_values),n_reps)),
+                   ci_diff=np.empty((n_terms,len(test_values),n_reps)),
+                   signif=np.empty((n_terms,len(test_values),n_reps),dtype=bool),
+                   stat_obs=np.empty((n_terms,len(test_values),n_reps)),
+                   stat_resmp=np.empty((n_terms,len(test_values),n_reps)))
 
     resmp_axis = -1 if stat == 'two_way' else 0
 
@@ -592,46 +589,46 @@ def test_confints(stat, test='gain', test_values=None, distribution='normal', co
     # 'gain' : Test if statistic and significance increases monotonically with between-group gain
     if test == 'gain':
         evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                    "Significance does not increase monotonically with btwn-cond mean diff"),
-                 (means['ci_diff'][term,:].ptp() < sds['ci_diff'][term,:].max(),
-                    "Confints have larger than expected range with btwn-cond mean diff"),
+                  "Significance does not increase monotonically with btwn-cond mean diff"),
+                 (np.ptp(means['ci_diff'][term,:]) < sds['ci_diff'][term,:].max(),
+                  "Confints have larger than expected range with btwn-cond mean diff"),
                  ((np.diff(means['stat_obs'][term,:]) > 0).all(),
-                    "Statistic does not increase monotonically with btwn-cond mean diff"),
+                  "Statistic does not increase monotonically with btwn-cond mean diff"),
                  ((np.diff(means['stat_resmp'][term,:]) > 0).all(),
-                    "Resampled statistic does not increase monotonically with btwn-cond mean diff")]
+                  "Resampled statistic does not increase monotonically with btwn-cond mean diff")]
         # Confidence intervals not expected to change with mean for 1-sample data, so remove test
         if stat == 'one_sample': evals.pop(1)
 
     # 'spread' : Test if confints increase and stat decreases monotonic with within-group spread
     elif test in ['spread','spreads','sd']:
         evals = [((np.diff(means['signif'][term,:]) > 0).all(),
-                    "Signif does not decrease monotonically with within-cond spread increase"),
+                  "Signif does not decrease monotonically with within-cond spread increase"),
                  ((np.diff(means['ci_diff'][term,:]) > 0).all(),
-                    "Confints do not increase monotonically with within-cond spread increase"),
+                  "Confints do not increase monotonically with within-cond spread increase"),
                  ((np.diff(means['stat_obs'][term,:]) < 0).all(),
-                    "Statistic does not decrease monotonically with within-cond spread increase"),
+                  "Statistic does not decrease monotonically with within-cond spread increase"),
                  ((np.diff(means['stat_resmp'][term,:]) < 0).all(),
-                    "Resampled stat does not decrease monotonic with within-cond spread increase")]
+                  "Resampled stat does not decrease monotonic with within-cond spread increase")]
 
     # 'n' : Test if confints decrease, but statistic is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
         evals = [((np.diff(means['signif'][term,:]) >= 0).all(),
-                    "Significance does not increase monotonically with n"),
+                  "Significance does not increase monotonically with n"),
                  ((np.diff(means['ci_diff'][term,:]) <= 0).all(),
-                    "Confints do not decrease monotonically with n"),
-                 (means['stat_obs'][term,:].ptp() <= sds['stat_obs'][term,:].max(),
-                    "Statistic has larger than expected range with n"),
-                 (means['stat_resmp'][term,:].ptp() <= sds['stat_resmp'][term,:].max(),
-                    "Resampled statistic has larger than expected range with n")]
+                  "Confints do not decrease monotonically with n"),
+                 (np.ptp(means['stat_obs'][term,:]) <= sds['stat_obs'][term,:].max(),
+                  "Statistic has larger than expected range with n"),
+                 (np.ptp(means['stat_resmp'][term,:]) <= sds['stat_resmp'][term,:].max(),
+                  "Resampled statistic has larger than expected range with n")]
 
     # 'bias': Test that statistic is not > 0 and p value ~ alpha if gain = 0, for varying n
     elif test == 'bias':
         evals = [((means['confints'][term,0,:] < 0).all() & (0 < means['confints'][term,1,:]).all(),
-                    "Confints don't overlap with 0 when no mean diff between conditions"),
+                  "Confints don't overlap with 0 when no mean diff between conditions"),
                  ((np.abs(means['stat_obs'][term,:]) < sds['stat_obs'][term,:].max()).all(),
-                    "Statistic is above 0 when no mean diff between conditions"),
+                  "Statistic is above 0 when no mean diff between conditions"),
                  ((np.abs(means['stat_resmp'][term,:]) < sds['stat_resmp'][term,:].max()).all(),
-                    "Resampled statistic is above 0 when no mean diff between conditions")]
+                  "Resampled statistic is above 0 when no mean diff between conditions")]
 
     passed = True
     for cond,message in evals:
@@ -654,14 +651,14 @@ def confint_test_battery(stats=['one_sample','paired_sample','two_sample'],
     ----------
     stats : array-like of str, default: ['one_sample','paired_sample','two_sample']
         List of statistical tests to evaluate.
-                
+
 
     tests : array-like of str, default: ('gain','n','bias') (all supported tests)
         List of tests to run.
-                
+
     tests : array-like of str, default: ('gain','spread','n','bias','correlation')
         List of tests to run.
-                
+
     do_tests : bool, default: True
         Set=True to evaluate test results against expected values and raise an error if they fail
 

@@ -1000,7 +1000,7 @@ def set_random_seed(seed=None):
     """
     if seed is None:            seed = int(time.time()*1000.0) % (2**32 - 1)
     # Convert string seeds to int's (convert each char->ascii and sum them)
-    elif isinstance(seed,str):  seed = np.sum([ord(c) for c in seed])
+    elif isinstance(seed,str):  seed = int(np.sum([ord(c) for c in seed]))
 
     # Set Numpy random number generator
     np.random.seed(seed)

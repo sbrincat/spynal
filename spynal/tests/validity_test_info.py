@@ -224,7 +224,7 @@ def test_neural_info(method, test='gain', test_values=None, distribution='normal
 
     # 'n' : Test if information is ~ same for all values of n (unbiased by n)
     elif test in ['n','n_trials']:
-        evals = [(info.ptp() < sd.max(),
+        evals = [(np.ptp(info) < sd.max(),
                   "Information has larger than expected range across n's (likely biased by n)")]
 
     # 'bias': Test if information is not > baseline if gain = 0, for varying n

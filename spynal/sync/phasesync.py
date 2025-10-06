@@ -234,9 +234,9 @@ def spike_field_plv(spkdata, lfpdata, axis=0, time_axis=None, taper_axis=None,
     max_axis_mismatch = 2 if spec_method == 'multitaper' else 1
     assert (spkdata.ndim == lfpdata.ndim) and \
            ((np.array(spkdata.shape) != np.array(lfpdata.shape)).sum() <= max_axis_mismatch), \
-        ValueError("Spiking data " + str(spkdata.shape) +
-                   " must have same size/shape as LFP data " + str(lfpdata.shape) +
-                   " (w/ singleton to match freq [and taper] axis)")
+           ValueError("Spiking data " + str(spkdata.shape) +
+                      " must have same size/shape as LFP data " + str(lfpdata.shape) +
+                      " (w/ singleton to match freq [and taper] axis)")
     if (timepts is None) and ((timewins is not None) or (lims is not None)):
         assert smp_rate is not None, \
             ValueError("If no value is input for <timepts>, must input value for <smp_rate>")
