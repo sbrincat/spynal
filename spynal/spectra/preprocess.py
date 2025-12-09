@@ -1,6 +1,6 @@
 
 # -*- coding: utf-8 -*-
-""" Preprocessing functions for LFP/EEG/continuous data and spectral analysis """
+""" Preprocessing functions for LFP/EEG/continuous data """
 import numpy as np
 
 from sklearn.linear_model import LinearRegression
@@ -150,7 +150,7 @@ def realign_data(data, align_times, time_range, timepts, time_axis=0, trial_axis
     return realigned
 
 
-def realign_data_on_event(data, event_data, event, timepts, align_times, time_range,
+def realign_data_on_event(data, event_data, event, timepts, time_range,
                           time_axis=0, trial_axis=-1):
     """
     Convenience wrapper around `realign_data` for relaligning to a given

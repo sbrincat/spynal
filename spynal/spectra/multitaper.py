@@ -335,7 +335,6 @@ def multitaper_spectrogram(data, smp_rate, axis=0, data_type='lfp', spec_type='c
     return spec, freqs, timepts
 
 
-
 def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     """
     Compute Discrete Prolate Spheroidal Sequence (DPSS) tapers for use in
@@ -379,7 +378,7 @@ def compute_tapers(smp_rate, time_width=0.5, freq_width=4, n_tapers=None):
     n_samples = int(round(time_width*smp_rate))
 
     # Compute the tapers for given window length and time-freq product
-    # Note: dpss() normalizes by sum of squares; x sqrt(smp_rate)
+    # Note: dpss() normalizes by sum of squares; multiplying by sqrt(smp_rate)
     #       converts this to integral of squares (see Chronux function dpsschk())
     # Note: You might imagine you'd want sym=False, but sym=True gives same values
     #       as Chronux dpsschk() function...

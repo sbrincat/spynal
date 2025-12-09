@@ -175,6 +175,8 @@ def fft(data, n_fft=None, axis=0, fft_method=None):
         if HAS_TORCH:   fft_method = 'torch'
         elif HAS_FFTW:  fft_method = 'fftw'
         else:           fft_method = 'numpy'
+    else:
+        fft_method = fft_method.lower()
 
     if fft_method == 'torch':
         return torch.fft.fft(torch.from_numpy(data), n=n_fft, dim=axis).numpy()
