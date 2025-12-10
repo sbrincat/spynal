@@ -102,8 +102,10 @@ def realign_data(data, align_times, time_range, timepts, time_axis=0, trial_axis
         array has same shape as input data.
     """
     assert time_range is not None, \
-        "Desired time range to extract from each trial must be given in  `time_range`"
-    assert timepts is not None, "Data time sampling vector must be given in `timepts`"
+        ValueError("Desired time range to extract from each trial must be given in  `time_range`")
+    assert len(time_range) == 2, \
+        ValueError("`time_range` must an array-like variable of length 2 (start,end)")
+    assert timepts is not None, TypeError("Data time sampling vector must be given in `timepts`")
 
     timepts     = np.asarray(timepts)
     align_times = np.asarray(align_times)
@@ -127,9 +129,11 @@ def realign_data(data, align_times, time_range, timepts, time_axis=0, trial_axis
     trial_range_smps = align_smps[:,np.newaxis] + range_smps[np.newaxis,:]
 
     assert (trial_range_smps[:,0] >= 0).all(), \
-        "Some requested time epochs extend before start of data"
+        ValueError("Some requested time epochs extend before start of data (%.3f < %.3f)" %
+                   (align_times.min()-time_range[0], timepts[0]))
     assert (trial_range_smps[:,1] < len(timepts)).all(), \
-        "Some requested time epochs extend beyond end of data"
+        ValueError("Some requested time epochs extend beyond end of data (%.3f > %.3f)" %
+                   (align_times.max()+time_range[1], timepts[-1]))
 
     n_timepts_out   = range_smps[1] - range_smps[0] + 1
     return_shape    = (n_timepts_out, *(data.shape[1:]))
@@ -150,7 +154,7 @@ def realign_data(data, align_times, time_range, timepts, time_axis=0, trial_axis
     return realigned
 
 
-def realign_data_on_event(data, event_data, event, timepts, time_range,
+def realign_data_on_event(data, event_data, event, time_range, timepts,
                           time_axis=0, trial_axis=-1):
     """
     Convenience wrapper around `realign_data` for relaligning to a given
@@ -170,7 +174,7 @@ def realign_data_on_event(data, event_data, event, timepts, time_range,
     align_times = event_data[event]
 
     # Compute the realignment and return
-    return realign_data(data, timepts, align_times, time_range,
+    return realign_data(data, align_times, time_range, timepts,
                         time_axis=time_axis, trial_axis=trial_axis)
 
 
@@ -277,7 +281,8 @@ def remove_evoked(data, axis=0, method='mean', design=None, return_evoked=False)
     # Regress data on given design matrix and return residuals
     elif method == 'regress':
         assert design.ndim in [1,2], \
-            "Design matrix <design> must be matrix-like (2d) or vector-like (1d)"
+            ValueError("Design matrix `design` must be matrix-like (2d) or vector-like (1d)")
+        if design.ndim == 1: design = design[:,np.newaxis]
 
         # Only fit explicit intercept if design doesn't already have a constant (intercept) column in it
         has_constant_col = np.any(np.all(design==1, axis=0))

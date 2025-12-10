@@ -720,7 +720,7 @@ def plot_spectrum(freqs, data, ax=None, ylim=None, color=None, **kwargs):
 
     lines, _, ax = plot_line_with_error_fill(freqs, data, ax=ax, ylim=ylim, color=color, **kwargs)
 
-    plt.grid(axis='both',color=[0.75,0.75,0.75],linestyle=':')
+    ax.grid(axis='both', color=[0.75,0.75,0.75], linestyle=':')
     ax.set_xticks(fticks)
     ax.set_xticklabels(fticklabels)
     # No need to return list of lists if only plotting one data series
@@ -772,7 +772,7 @@ def plot_spectrogram(timepts, freqs, data, ax=None, clim=None, cmap='viridis', *
     img, ax = plot_heatmap(timepts, freqs, data, ax=ax, clim=clim, cmap=cmap,
                            origin='lower', **kwargs)
 
-    plt.grid(axis='y',color=[0.75,0.75,0.75],linestyle=':')
+    ax.grid(axis='y', color=[0.75,0.75,0.75], linestyle=':')
     ax.set_yticks(fticks)
     ax.set_yticklabels(fticklabels)
 

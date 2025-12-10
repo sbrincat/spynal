@@ -697,6 +697,8 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
         plt.plot/fill outputs for each marker plotted, in the same order as input.
         Allows access to properties of marker lines/fills.
     """
+    # If markers given as {label:value} dict, extract the values
+    if isinstance(values,dict): values = [value for value in values.values()]
     if isinstance(values,float) or _isint(values): values = [values]
     xlim_input = xlim is not None
     ylim_input = ylim is not None
@@ -774,6 +776,52 @@ def plot_markers(values, axis='x', ax=None, xlim=None, ylim=None,
             handles.append(handle)
 
     return ax, handles
+
+
+def scale_axes_to_data(axs, axis='x'):
+    """
+    Adjust axis bounds (physical dimensions) for multiple subplots that plot different
+    ranges of same data, so scale of plotted data matches across them.
+
+    For example, when plotting time series data aligned to multiple different events,
+    with different ranges of data in each subplot, the plots will naively all come out
+    the same physical size, which implies the same data dimension will have different
+    scaling across the plots. This fixes that issues by rescaling the physical dimensions
+    of plots to match the data scale of the subplot with the largest data range in the given set.
+
+    Parameters
+    ----------
+    axs : array-like, shape=(n_axes,) of Pyplot Axis objects
+         Set of subplot axes to rescale physically so data scale matches
+
+    axis : str, default: 'x'
+        Which plot axis ('x' or 'y') to rescale. Usually will be 'x' for time series data.
+
+    Actions
+    -------
+    Changes axis position bounds property for one or more axes in `axs`
+    """
+    assert axis in ['x','y'], \
+        ValueError("Unsupported value '%s' set for `axis`. Must be 'x' or 'y'" % axis)
+
+    # Get x or y-axis range of each axis (subplot) in set
+    if axis == 'x': ranges = [np.diff(ax.get_xlim()).item() for ax in axs]
+    else:           ranges = [np.diff(ax.get_ylim()).item() for ax in axs]
+    # Find largest range across all axes (subplots)
+    max_range = np.max(ranges)
+
+    # For all other axes, scale axis size so proportional to data in largest-range axis
+    for i in range(len(axs)):
+        if ranges[i] != max_range:
+            bounds = axs[i].get_position().bounds   # Original axis location
+
+            # Rescale axis so data matches that of largest-range axis (and optionally shift)
+            if axis == 'x':
+                bounds = [bounds[0], bounds[1], (ranges[i]/max_range)*bounds[2], bounds[3]]
+            else:
+                bounds = [bounds[0], bounds[1], bounds[2], (ranges[i]/max_range)*bounds[3]]
+
+            axs[i].set_position(bounds) # Set rescaled axis location
 
 
 # =============================================================================
