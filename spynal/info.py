@@ -922,6 +922,11 @@ def dprime(data, labels, axis=0, signed=True, groups=None, keepdims=True):
     increases monotonically with the difference btwn group means and inversely with
     the pooled std deviation.
 
+    NOTE: To enforce a specific sign for the results, it is strongly advised to use
+    the `groups` argument. The returned dprime values will reflect the groups[0] - groups[1]
+    difference. Otherwise, the difference order (and resulting sign) is based on the
+    sorted done by taking the :func:`np.unique()` of the input `labels`.
+
     Computation is performed over trial/observation `axis`, in mass-univariate
     fashion across data series in all other data dimensions (channels, time points,
     frequencies, etc.).

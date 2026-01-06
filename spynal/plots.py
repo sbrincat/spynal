@@ -29,6 +29,7 @@ Plotting utilities
 - make_colormap :               Create custom colormap and register name for further use
 - colorbar :                    Create colorbar without messing up parent axis size/shape
 - plot_markers :                Plot set of markers (eg to mark trial event times) on given axis(s)
+- scale_axes_to_data :          Ensure plots with same data have same physical dimensions
 
 Function reference
 ------------------

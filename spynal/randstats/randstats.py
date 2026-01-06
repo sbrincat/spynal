@@ -68,6 +68,20 @@ Confidence intervals
 - paired_sample_confints :      Bootstrap confidence intervals for any paired-sample stat
 - two_sample_confints :         Bootstrap confidence intervals for any two-sample stat
 
+Sampling
+^^^^^^^^
+- permutations :                Generate random permutations (shuffles)
+- bootstraps :                  Generate random bootstrap samples (resampling w/ replacement)
+- jackknifes :                  Generate jackknife samples (exclude each observation in turn)
+- subsets :                     Generate random length-k subsets (resampling w/o replacement)
+- signs :                       Generate random binary variables (eg for sign tests)
+
+Utilites
+^^^^^^^^
+- resamples_to_pvalue :         Compute p value from observed and resampled statistic values
+- confint_to_indexes :          Return indexes into resampled stats corresponding to given confints
+- jackknife_to_pseudoval :      Compute single-trial pseudovalues from LOO jackknife estimates
+
 Function reference
 ------------------
 """

@@ -4,7 +4,7 @@ Random sample generators for randomization, permutation (shuffle), and bootstrap
 
 Function reference
 ------------------
-- permutations :                Generate random permutations (resampling w/o replacement)
+- permutations :                Generate random permutations (shuffles)
 - bootstraps :                  Generate random bootstrap samples (resampling w/ replacement)
 - signs :                       Generate random binary variables (eg for sign tests)
 - jackknifes :                  Generate jackknife samples (exclude each observation in turn)
@@ -146,9 +146,9 @@ def jackknifes(n, n_resamples=None, seed=None):
 def subsets(n, k, n_resamples=9999, seed=None):
     """
     Yield generator with a set of `n_resamples` random length-k subsets of integers 0:n-1.
-    
+
     Random sampling version of "n-choose-k" function.
-    
+
     Parameters
     ----------
     n : int
