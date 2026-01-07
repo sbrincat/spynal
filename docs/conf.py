@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath('../spynal'))
 # Note: scikit people demand we use 'scikit-learn' now, but my docs won't compile
 # unless I import it as 'sklearn' here, so I dunno...?
 autodoc_mock_imports = ['numpy','scipy','pandas','matplotlib','h5py','hdf5storage',
-                        'patsy','scikit-learn','sklearn','torch','xarray','spynal']
+                        'patsy','scikit-learn','sklearn','pyfftw','torch','xarray','spynal']
 
 
 # -- Project information -----------------------------------------------------
@@ -62,7 +62,7 @@ add_module_names = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'nature' # 'furo' 
+html_theme = 'nature' # 'furo'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

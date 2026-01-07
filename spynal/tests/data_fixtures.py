@@ -19,6 +19,12 @@ Fixtures for generating test data of different data schemes
 
 Fixtures for generating circular/angular test data
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- one_sample_circ_data : Simulate one-sample (single-condition) circular data
+- paired_circ_data : Simulate paired samples of circular-circular data
+- paired_circ_linear_data : Simulate paired samples of circular-linear data
+- one_sample_circ_data_parametered : One-sample circ data in deg or rad x circular or axial
+- paired_circ_data_parametered : Paired circ-circ data in deg or rad x circular or axial
+- paired_circ_linear_data_parametered : Paired circ-linear data in deg or rad x circular or axial
 
 Fixtures for generating oscillatory test data
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -254,7 +260,7 @@ def paired_circ_data_parametered(paired_circ_data):
 
 
 @pytest.fixture(scope='session')
-def paired_circ_linear_parametered(paired_circ_linear_data):
+def paired_circ_linear_data_parametered(paired_circ_linear_data):
     """
     "Meta-fixture" that returns paired-sample circular (rads vs degs) and linear data x
     (periodic on full circle vs axially symmetric)

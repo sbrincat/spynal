@@ -10,6 +10,7 @@ Function reference by module
     modules/spectra
     modules/sync
     modules/info
+    modules/circstats
     modules/randstats
     modules/plots
     modules/utils

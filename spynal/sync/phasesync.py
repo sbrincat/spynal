@@ -26,7 +26,7 @@ def plv(data1, data2, axis=0, return_phase=False, transform=None, single_trial=N
         dphi = phase(data1) - phase(data2)
         PLV  = abs( trial_mean(exp(i*dphi)) )
 
-    Only parameters differing from :func:`synchrony` are described here.
+    Only parameters differing from :func:`.synchrony` are described here.
 
     Parameters
     ----------

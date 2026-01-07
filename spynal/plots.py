@@ -231,12 +231,13 @@ def plot_heatmap(x, y, data, signif=None, signif_method='contour',
         How to plot associated significance data (if input). Options:
 
         - 'contour' : Plot overlaid contour using :func:plt.contour at borders between
-        significant and non-significant datapoints. Contour properties can be modified by
-        passing `color` or `linewidth` as keyword args.
+                      significant and non-significant datapoints. Contour properties can be
+                      modified by passing `color` or `linewidth` as keyword args.
         - 'alpha' : Plot areas of significance as an alpha (transparency) mask. Significant
-        datapoints are plotted without any masking; non-signifcant datapoints are plotted
-        at alpha=0.33 (1/3 of full strength). Alpha mask properties can be modified by
-        passing `alpha` (ranging from 0=non-signif invisible to 1=no effect) as keyword arg.
+                    datapoints are plotted without any masking; non-signifcant datapoints are
+                    plotted at alpha=0.33 (1/3 of full strength). Alpha mask properties can be
+                    modified by passing `alpha` (ranging from 0=non-signif invisible to
+                    1=no effect) as keyword arg.
 
     ax : Pyplot Axis object, default: plt.gca() (current axis)
         Axis to plot into.
