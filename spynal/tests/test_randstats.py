@@ -2,8 +2,7 @@
 import pytest
 import numpy as np
 
-from spynal.tests.data_fixtures import one_sample_data, two_sample_data, \
-                                       one_way_data, two_way_data, MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.utils import one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, data_labels_to_data_groups
 from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_test_labels, \
@@ -368,7 +367,7 @@ def test_one_way_test(one_way_data, method, result_p, result_obs, result_resmp):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = one_way_test(data, labels, axis=0, method=method, seed=1,
-                                            n_resamples=n_resamples, return_stats=True, foo=None)
+                                               n_resamples=n_resamples, return_stats=True, foo=None)
 
 
 @pytest.mark.parametrize('method, result_p, result_obs, result_resmp',
@@ -469,7 +468,7 @@ def test_two_way_test(two_way_data, method, result_p, result_obs, result_resmp):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         p, stat_obs, stat_resmp = two_way_test(data, labels, axis=0, method=method, seed=1,
-                                            n_resamples=n_resamples, return_stats=True, foo=None)
+                                               n_resamples=n_resamples, return_stats=True, foo=None)
 
 @pytest.mark.parametrize('method, result_ci, result_obs, result_resmp',
                          [('bootstrap', (8.53,12.18), 10.35, 10.36)])
@@ -555,7 +554,7 @@ def test_one_sample_confints(one_sample_data, method, result_ci, result_obs, res
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = one_sample_confints(data, axis=0, n_resamples=n_resamples,
-                                                    seed=1, return_stats=True, foo=None)
+                                                       seed=1, return_stats=True, foo=None)
 
 
 @pytest.mark.parametrize('stat, method, result_ci, result_obs, result_resmp',
@@ -618,7 +617,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
 
     # Test for consistent output with transposed data dimensionality
     ci, stat_obs, stat_resmp = test_func(data1.T, data2.T, axis=-1, n_resamples=n_resamples,
-                                                   seed=1, return_stats=True)
+                                         seed=1, return_stats=True)
     assert np.array_equal(data1,data1_orig)     # Ensure input data not altered by func
     assert np.array_equal(data2,data2_orig)
     assert ci.shape == (n_chnls,2)
@@ -660,13 +659,13 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples,
-                                            seed=1, return_stats=True, foo=None)
+                                             seed=1, return_stats=True, foo=None)
 
 def test_imports():
     """ Test different import methods for randstats module """
     # Import entire package
     import spynal
-    spynal.randstats.bootstrap.one_sample_bootstrap_test    
+    spynal.randstats.bootstrap.one_sample_bootstrap_test
     spynal.randstats.one_sample_bootstrap_test
     # Import module
     import spynal.randstats as rand

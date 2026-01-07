@@ -5,8 +5,7 @@ import numpy as np
 import xarray as xr
 
 from spynal.utils import iarange
-from spynal.tests.data_fixtures import oscillation, bursty_oscillation, spiking_oscillation, \
-                                       oscillatory_data, MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
 from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs
@@ -17,7 +16,7 @@ from spynal.spectra.utils import get_freq_sampling,fft, ifft, one_sided_to_two_s
 # Unit tests for spectral analysis functions
 # =============================================================================
 @pytest.mark.parametrize('fft_method', ['torch','fftw','scipy','numpy'])
-def test_fft(oscillation, fft_method):
+def test_fft(fft_method):
     """ Unit tests for low-level FFT functions """
     n_fft = 1000
     n_trials = 4
@@ -286,7 +285,6 @@ def test_itpc(oscillation, itpc_method, method, result):
     data = oscillation
     data_orig = data.copy()
     smp_rate = 1000
-    n_trials = 4
 
     method_to_n_freqs   = {'wavelet': 26, 'multitaper':257, 'bandfilter': 3, 'burst':4}
     method_to_n_timepts = {'wavelet': 1000, 'multitaper':2, 'bandfilter': 1000}
@@ -371,9 +369,9 @@ def test_realign_data(oscillation):
 
     # Realign to 2 distinct times, then concatenate together and test if same
     realigned1 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
-                                timepts=timepts, time_axis=0, trial_axis=-1)
+                              timepts=timepts, time_axis=0, trial_axis=-1)
     realigned2 = realign_data(data, 0.5*np.ones((n_trials,)), time_range=(0,0.499),
-                                timepts=timepts, time_axis=0, trial_axis=-1)
+                              timepts=timepts, time_axis=0, trial_axis=-1)
     realigned = np.concatenate((realigned1,realigned2), axis=0)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert realigned.shape == data.shape
@@ -381,9 +379,9 @@ def test_realign_data(oscillation):
 
     # Test for consistent output with transposed data dimensionality
     realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
-                                timepts=timepts, time_axis=-1, trial_axis=0)
+                              timepts=timepts, time_axis=-1, trial_axis=0)
     realigned2 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(0,0.499),
-                                timepts=timepts, time_axis=-1, trial_axis=0)
+                              timepts=timepts, time_axis=-1, trial_axis=0)
     realigned = np.concatenate((realigned1,realigned2), axis=-1)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert realigned.shape == data.T.shape
@@ -538,7 +536,7 @@ def test_pool_freq_bands(oscillation, variable_type, pooler, result):
 
     # Test for consistent output with different data array shape (3rd axis)
     spec2 = np.tile(spec[:,:,:,np.newaxis],(1,1,2)) if variable_type == 'numpy' else \
-            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
+        xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
     band_spec = pool_freq_bands(spec2, bands, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert band_spec.shape == (n_bands, n_timepts, n_trials, 2)
@@ -605,7 +603,7 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
 
     # Test for consistent output with different data array shape (3rd axis)
     spec2 = np.tile(spec[:,:,:,np.newaxis],(1,1,2)) if variable_type == 'numpy' else \
-            xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
+        xr.concat((spec,spec), dim='channel').transpose('frequency','time','trial','channel')
     epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert epoch_spec.shape == (n_freqs, n_epochs, n_trials, 2)
@@ -614,7 +612,7 @@ def test_pool_time_epochs(oscillation, variable_type, pooler, result):
     # Test for consistent output with transposed data dimensionality
     if variable_type == 'numpy': extra_args['axis'] = 2
     spec2 = spec.transpose((0,2,1)) if variable_type == 'numpy' else \
-            spec.transpose('frequency','trial','time')
+        spec.transpose('frequency','trial','time')
     epoch_spec = pool_time_epochs(spec2, epochs, func=pooler, **extra_args)
     assert np.array_equal(spec,spec_orig)     # Ensure input data isn't altered by function
     assert epoch_spec.shape == (n_freqs, n_trials, n_epochs)
@@ -708,7 +706,6 @@ def test_one_sided_to_two_sided(oscillation):
     """ Unit tests for one_sided_to_two_sided() function """
     data = oscillation
     smp_rate = 1000
-    n_trials = 4
 
     # Basic test of shape, dtype, value of output.
     # Test values averaged over all timepts, freqs for 1st trial for simplicity

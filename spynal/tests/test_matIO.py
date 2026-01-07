@@ -90,7 +90,7 @@ def test_whomat(version):
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        data = whomat(filename, verbose=False, foo=None)
+        _ = whomat(filename, verbose=False, foo=None)
 
 
 @pytest.mark.parametrize('version', [('v7'), ('v73')])

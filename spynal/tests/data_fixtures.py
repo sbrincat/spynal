@@ -17,6 +17,9 @@ Fixtures for generating test data of different data schemes
 - one_way_data : Simulate set of 3-condition data along a single dimension
 - two_way_data : Simulate set of 4-condition data along two orthogonal dimensions
 
+Fixtures for generating circular/angular test data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 Fixtures for generating oscillatory test data
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 - oscillation : Simulate continuous (LFP/EEG-like) oscillatory data
@@ -34,6 +37,7 @@ Function reference
 """
 
 import pytest
+from math import pi
 import numpy as np
 
 from scipy.stats import norm, poisson, bernoulli
@@ -145,6 +149,139 @@ def two_way_data():
     labels[:,2] = np.hstack([i*np.ones((n,)) for i in range(n_groups)])
 
     return data, labels
+
+
+# =============================================================================
+# Fixtures for generating circular/angular test data
+# =============================================================================
+@pytest.fixture(scope='session')
+def one_sample_circ_data():
+    """ Generate set of 1-sample circular data in radians (range [0,2pi]) for unit tests """
+    set_random_seed(1) # Note: seed=1 makes data reproducibly match output of Matlab
+
+    n_obs, n_chnls = 50, 10
+    data = 2*pi*np.random.rand(n_obs, n_chnls)
+
+    return data
+
+
+@pytest.fixture(scope='session')
+def paired_circ_data():
+    """ Generate set of paired-sample circular data in radians (range [0,2pi]) for unit tests """
+    set_random_seed(1) # Note: seed=1 makes data reproducibly match output of Matlab
+
+    n_obs, n_chnls = 50, 10
+    data1 = 2*pi*np.random.rand(n_obs, n_chnls)
+    data2 = 2*pi*np.random.rand(n_obs, n_chnls)
+
+    return data1, data2
+
+
+@pytest.fixture(scope='session')
+def paired_circ_linear_data():
+    """ Generate set of paired-sample circular (radians, range [0,2pi]) and linear data """
+    set_random_seed(1) # Note: seed=1 makes data reproducibly match output of Matlab
+
+    n_obs, n_chnls = 50, 10
+    circ_data = 2*pi*np.random.rand(n_obs, n_chnls) # range [0,2pi]
+    linear_data = 100*np.random.rand(n_obs, n_chnls) - 50   # range [-50,+50]
+
+    return circ_data, linear_data
+
+
+@pytest.fixture(scope='session')
+def one_sample_circ_data_parametered(one_sample_circ_data):
+    """
+    "Meta-fixture" that returns 1-sample circular data in (radians vs degrees) x
+    (periodic on full circle vs axially symmetric)
+
+    Returns
+    -------
+    data : dict {str:ndarray}
+        Dictionary mapping data type to data values, for each type of circular data:
+        {'radians_circle','degrees_circle','radians_axial','degrees_axial'}
+
+    data2std : dict {str:func}
+        Dictionary mapping data type to lambda function used to transform data back to
+        standard 'radians_circle' type
+    """
+    data = one_sample_circ_data
+    data = {'radians_circle':   data,
+            'degrees_circle':   np.rad2deg(data),
+            'radians_axial':    data/2,
+            'degrees_axial':    np.rad2deg(data)/2}
+    data2std = {'radians_circle':   lambda data: data,
+                'degrees_circle':   lambda data: np.deg2rad(data),
+                'radians_axial':    lambda data: data*2,
+                'degrees_axial':    lambda data: np.deg2rad(data)*2}
+
+    return data, data2std
+
+
+@pytest.fixture(scope='session')
+def paired_circ_data_parametered(paired_circ_data):
+    """
+    "Meta-fixture" that returns paired-sample circular data in (radians vs degrees) x
+    (periodic on full circle vs axially symmetric)
+
+    Returns
+    -------
+    data1/2 : dict {str:ndarray}
+        Dictionaries mapping data type to data values, for each type of circular data:
+        {'radians_circle','degrees_circle','radians_axial','degrees_axial'}
+
+    data2std : dict {str:func}
+        Single dictionary mapping data type to lambda function used to transform data back to
+        standard 'radians_circle' type
+    """
+    data1, data2 = paired_circ_data
+
+    data1 = {'radians_circle':   data1,
+             'degrees_circle':   np.rad2deg(data1),
+             'radians_axial':    data1/2,
+             'degrees_axial':    np.rad2deg(data1)/2}
+    data2 = {'radians_circle':   data2,
+             'degrees_circle':   np.rad2deg(data2),
+             'radians_axial':    data2/2,
+             'degrees_axial':    np.rad2deg(data2)/2}
+
+    data2std = {'radians_circle':   lambda data: data,
+                'degrees_circle':   lambda data: np.deg2rad(data),
+                'radians_axial':    lambda data: data*2,
+                'degrees_axial':    lambda data: np.deg2rad(data)*2}
+
+    return data1, data2, data2std
+
+
+@pytest.fixture(scope='session')
+def paired_circ_linear_parametered(paired_circ_linear_data):
+    """
+    "Meta-fixture" that returns paired-sample circular (rads vs degs) and linear data x
+    (periodic on full circle vs axially symmetric)
+
+    Returns
+    -------
+    circ_data : dict {str:ndarray}
+        Dictionaries mapping data type to data values, for each type of data:
+        {'radians_circle','degrees_circle','radians_axial','degrees_axial'}
+    linear_data : ndarray
+        Linear data
+    data2std : dict {str:func}
+        Single dictionary mapping data type to lambda function used to transform data back to
+        standard 'radians_circle' type
+    """
+    circ_data, linear_data = paired_circ_linear_data
+
+    circ_data = {'radians_circle':   circ_data,
+                 'degrees_circle':   np.rad2deg(circ_data),
+                 'radians_axial':    circ_data/2,
+                 'degrees_axial':    np.rad2deg(circ_data)/2}
+    data2std = {'radians_circle':   lambda data: data,
+                'degrees_circle':   lambda data: np.deg2rad(data),
+                'radians_axial':    lambda data: data*2,
+                'degrees_axial':    lambda data: np.deg2rad(data)*2}
+
+    return circ_data, linear_data, data2std
 
 
 # =============================================================================

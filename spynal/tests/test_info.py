@@ -6,9 +6,7 @@ import pandas as pd
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from patsy import dmatrix
 
-
-from spynal.tests.data_fixtures import two_sample_data, one_way_data, two_way_data, \
-                                       MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.info import neural_info, neural_info_2groups, neural_info_ngroups
 
 
@@ -58,7 +56,7 @@ def test_two_sample_info(two_sample_data, method, params, result):
     info = neural_info(data, labels, axis=0, method=method, keepdims=False, **extra_args)
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == (n_chnls,)
-    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with 2-group form of neural computation function
     info = neural_info_2groups(data[labels==0,:], data[labels==1,:], axis=0, method=method,
@@ -201,7 +199,7 @@ def test_one_way_info(one_way_data, method, params, result):
     info = neural_info(data, labels, axis=0, method=method, keepdims=False, **extra_args)
     if method == 'decode':  assert isinstance(info,float)
     else:                   assert info.shape == (n_chnls,)
-    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)    
+    assert np.allclose(np.asarray(info).squeeze(), result, rtol=1e-2, atol=1e-2)
 
     # Test for consistent output with n-group form of neural computation function
     info = neural_info_ngroups(data[labels==0,:], data[labels==1,:], data[labels==2,:],
@@ -250,7 +248,7 @@ def test_one_way_info(one_way_data, method, params, result):
     if method == 'mutual_info':
         bins = np.histogram_bin_edges(data, bins='fd')
         bins = np.stack((bins[:-1],bins[1:]),axis=1)
-        extra_args ['bins'] = bins
+        extra_args['bins'] = bins
     info = neural_info(data[:,0], labels, axis=0, method=method, **extra_args)
     assert np.array_equal(data,data_orig)     # Ensure input data isn't altered by function
     assert isinstance(info,float)
@@ -299,16 +297,16 @@ def test_one_way_info(one_way_data, method, params, result):
 
 
 @pytest.mark.parametrize('method, interact, params, result',
-                         [('pev', False,    {'omega':True},     (( 8.55, 2.91,27.23,15.67),
+                         [('pev', False,    {'omega':True},     ((8.55,  2.91,27.23,15.67),
                                                                  (72.03,79.56,54.45,71.96))),
-                          ('pev', False,    {'omega':False},    (( 9.07, 3.36,27.80,16.02),
+                          ('pev', False,    {'omega':False},    ((9.07,  3.36,27.80,16.02),
                                                                  (72.84,80.33,55.14,72.48))),
-                          ('pev', True,     {'omega':True},     (( 8.54, 2.93,27.23,15.65),
+                          ('pev', True,     {'omega':True},     ((8.54,  2.93,27.23,15.65),
                                                                  (72.01,79.59,54.44,71.94),
-                                                                 ( 0.05, 0.99, 0.31,-0.25))),
-                          ('pev', True,     {'omega':False},    (( 9.07, 3.36,27.80,16.02),
-                                                                 (72.84,80.33,55.14,72.48),
-                                                                 ( 0.54, 1.41, 0.77, 0.07)))])
+                                                                 (0.05,  0.99, 0.31,-0.25))),
+                          ('pev', True,     {'omega':False},    ((9.07,  3.36,27.80,16.02),
+                                                                 (72.84, 80.33,55.14,72.48),
+                                                                 (0.54,  1.41, 0.77, 0.07)))])
 def test_two_way_info(two_way_data, method, interact, params, result):
     """ Unit tests for info func's for computing information for two-way (2-factor) data """
     data, labels = two_way_data
@@ -397,7 +395,7 @@ def test_two_way_info(two_way_data, method, interact, params, result):
             mu = [[[21.61,23.34,15.24,20.02], [28.92,27.08,29.84,30.76]],
                   [[14.90,16.08,12.26,13.97], [35.63,34.34,32.82,36.81]]]
         else:
-            F = [[18.60, 8.11,61.44,50.44], [149.45,194.08,121.84,228.22], [ 1.11, 3.40, 1.69, 0.21]]
+            F = [[18.60, 8.11,61.44,50.44], [149.45,194.08,121.84,228.22], [1.11, 3.40, 1.69, 0.21]]
             p = [[1.20e-4,7.24e-3,2.70e-9,2.41e-8],
                  [2.24e-14,4.52e-16,14.16e-13,3.70e-17],
                  [2.99e-1,7.33e-2,2.02e-1,6.52e-1]]

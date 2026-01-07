@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 import tempfile
 
-from spynal.tests.data_fixtures import oscillation, MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import MISSING_ARG_ERRS
 from spynal.plots import plot_line_with_error_fill, plot_lineseries, plot_heatmap, \
                          full_figure, savefig, make_colormap, colorbar
 

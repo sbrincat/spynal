@@ -524,7 +524,7 @@ def test_select_time_range(spike_data, data_type, result):
                     n_spikes += len(sel_data[trial,unit])
                     n_spikes2 += tbool[trial,unit].sum()
                     assert np.all((sel_data[trial,unit] >= time_range[0]) &
-                                (sel_data[trial,unit] <= time_range[1]))
+                                  (sel_data[trial,unit] <= time_range[1]))
             assert n_spikes == n_spikes2
 
         else:
@@ -625,7 +625,7 @@ def test_realign_data(spike_data, data_type):
         # Ensure that passing a nonexistent/misspelled kwarg raises an error
         with pytest.raises(MISSING_ARG_ERRS):
             realigned1 = realign_data(data.T, 0.5*np.ones((n_trials,)), time_range=(-0.5,-0.001),
-                                            timepts=timepts, time_axis=0, trial_axis=-1, foo=None)
+                                      timepts=timepts, time_axis=0, trial_axis=-1, foo=None)
 
 
 @pytest.mark.parametrize('data_type',
@@ -696,21 +696,21 @@ def test_plot_raster(spike_data, data_type, graphics):
     else:                           extra_args.update(lims=(0,1))
 
     # Basic test that call works
-    ax = plot_raster(data, **extra_args)
+    _ = plot_raster(data, **extra_args)
     assert data_checker(data,data_orig)     # Ensure input data not altered by func
 
     # Test that a few parameter tweaks work
-    ax = plot_raster(data, **extra_args, color=[0.25,0.25,0.25])
-    ax = plot_raster(data, **extra_args, color='tab:gray')
-    ax = plot_raster(data, **extra_args, height=0.75)
-    ax = plot_raster(data, **extra_args,
-                     events=[(100e-3,300e-3), 500e-3, (880e-3,900e-3,920e-3)])
+    _ = plot_raster(data, **extra_args, color=[0.25,0.25,0.25])
+    _ = plot_raster(data, **extra_args, color='tab:gray')
+    _ = plot_raster(data, **extra_args, height=0.75)
+    _ = plot_raster(data, **extra_args,
+                    events=[(100e-3,300e-3), 500e-3, (880e-3,900e-3,920e-3)])
     # Test with data from only one spike train
-    ax = plot_raster(data=data[0] if data_type == 'spike_timestamp' else data[0,:], **extra_args)
+    _ = plot_raster(data=data[0] if data_type == 'spike_timestamp' else data[0,:], **extra_args)
 
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
-        ax = plot_raster(data, **extra_args, foo=None)
+        _ = plot_raster(data, **extra_args, foo=None)
 
 
 def test_plot_mean_waveforms():

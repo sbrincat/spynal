@@ -4,8 +4,7 @@ import random
 from math import pi
 import numpy as np
 
-from spynal.tests.data_fixtures import one_sample_data, two_sample_data, one_way_data, \
-                                       two_way_data, simulate_dataset, MISSING_ARG_ERRS
+from spynal.tests.data_fixtures import simulate_dataset, MISSING_ARG_ERRS
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                          set_random_seed, randperm, interp1, setup_sliding_windows, \
@@ -313,16 +312,16 @@ def test_randperm():
     set_random_seed(1)
     out = randperm(n,k)
     assert np.array_equal(out, [3,2,0,1])
-    
+
     n,k = 4,2
     set_random_seed(1)
     out = randperm(n,k)
     assert np.array_equal(out, [3,2])
-    
+
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         randperm(n, k, foo=None)
-            
+
 def test_interp1():
     """ Unit tests for interp1() function """
     x = iarange(0,1,0.1)
@@ -625,7 +624,7 @@ def test_setup_sliding_windows():
 def test_object_array_functions(axis):
     """ Unit tests for concatenate_object_array, object_array_equal, object_array_compare """
     data = [[[1, 2],    [3, 4, 5]],
-            [[6, 7, 8], [9, 10]  ]]
+            [[6, 7, 8], [9, 10]]]
     data = np.asarray(data, dtype=object)
     data_orig = data.copy()
 
