@@ -22,6 +22,8 @@ programming languages.
 **spectra** — Spectral analysis and preprocessing of continuous data (LFP/EEG)   
 **sync** — Analysis of oscillatory neural synchrony (field-field and spike-field)  
 **info** — Measures of neural information about task/behavior variables  
+**multi** — Multivariate neural population analyses (eg manifolds, info geom, etc.)  
+**circstats** — Circular statistics for angular/directional/phase data  
 **randstats** — Nonparametric randomization, permutation, and bootstrap statistics  
 **plots** — Generation of common plot types; plotting utilities  
 **utils** — Numerical, statistical, and general purpose utilities  

@@ -25,6 +25,7 @@ This chart shows the layout of all public directories, modules, and submodules i
         ├── coherence.py                    # Coherence analysis
         └── phasesync.py                    # Phase-based synchrony analysis
     ├── info.py                         # Measures of neural information
+    ├── multi.py                        # Multivariate neural population analyses
     ├── circstats.py                    # Statistics for circular (eg angular) data
     ├── randstats/                      # Nonparametric randomization statistics
         ├── randstats.py                    # General interface to randomization statistics
