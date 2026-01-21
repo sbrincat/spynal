@@ -1654,7 +1654,7 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
         - 'deviance' : Deviance from a Von Mises maximum likelihood model ~ -sum(cos(errors)).
             Like SSE, also takes both precision and bias/accuracy into account.
 
-    grid : int or array-like or Iterator, default: (10 for gridsearch, 5 for optimization)
+    grid : int or array-like or Iterator, default: (see below)
         Determines the grid of parameter values used for model evaluation (gridsearch method) or
         for model fit starting points (optimization method). Can be specified in one of several
         ways, with increasing granularity of user control:
@@ -1666,6 +1666,11 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
             cross-product of all these value lists across all predictors.
         - Iterator : Iterator object corresponding to cross-product of all parameter lists as
             described above. Obtained, eg, as `itertools.product(*predictor_grid_values)`.
+
+        If no values are input, defaults to an int value that depends on the `fit_method` and
+        parameter type (beta coefficient vs constant/mean, if `fit_constant` is True):
+        - beta : 24/12/8 for gridsearch/hybrid/optimization
+        - constant : 15/5/5 for gridsearch/hybrid/optimization
 
     return_stats : bool, default: False
         If False, only returns fitted 'beta' coefficients and mean target value offset 'mu'.
@@ -1741,8 +1746,11 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
     y = wrap(circ_data, limits=(-pi,pi))
 
     # If no grid for grid search or for optimization starting points was input, generate one
-    if grid is None:
-        grid = 10 if fit_method in ['gridsearch','hybrid'] else 5
+    default_grid = grid is None
+    if default_grid:
+        if fit_method == 'gridsearch':      grid = 24
+        elif fit_method == 'hybrid':        grid = 12
+        elif fit_method == 'optimization':  grid = 8
 
     # Convert number of grid points to sample into actual grid (in not already done)
     if np.isscalar(grid):
@@ -1758,7 +1766,11 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
             grid.append(np.linspace(-1.5*sd_ratio, 1.5*sd_ratio, n_grid_pts))
         # Also include grid points for the mean angle/constant offset term
         if fit_constant:
-            grid.append(wrap(np.arange(0,2*pi,2*pi/n_grid_pts), limits=(-pi,pi)))
+            if default_grid:
+                n_constant_pts = 15 if fit_method == 'gridsearch' else 5
+            else:
+                n_constant_pts = n_grid_pts
+            grid.append(wrap(np.arange(0,2*pi,2*pi/n_constant_pts), limits=(-pi,pi)))
 
     # Compute cross-product of all grid values across all predictors (if not already done in input)
     grid_product = product(*grid) if not isinstance(grid, Iterator) else grid
@@ -1817,7 +1829,7 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
         all_fits = {'sample':[], 'beta':[], 'mu':[], 'error':[]}
 
     # For each sample in grid of search/starting points...
-    for i_sample, sample in enumerate(grid_product):
+    for sample in grid_product:
         sample = np.asarray(sample)
 
         # For optimization method, use sample as starting point for nonlinear fit of coeffs/mu
@@ -1853,8 +1865,7 @@ def circ_linear_regression(circ_data, linear_data, degrees=False, axial=False, f
 
     # For 'hybrid' fitting, run optimization on best-fit coefficients from gridsearch
     if fit_method == 'hybrid':
-        # beta = best_coeffs[:-1] if fit_constant else best_coeffs
-        start = (best_coeffs for _ in range(1))  # Hack best fit coefs/offset into an iterator
+        start = iter([best_coeffs])  # Hack best-fit coefs/offset into an iterator
         # Note: Data has already been converted to radians/non-axial, so don't set those here
         beta, mu = circ_linear_regression(circ_data, linear_data, degrees=False, axial=False,
                                           fit_constant=fit_constant, fit_method='optimization',

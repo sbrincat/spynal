@@ -303,3 +303,88 @@ def _undo_standardize_to_axis_end(data, data_shape, axis=-1):
         data = np.moveaxis(data,-1,axis)
 
     return data
+
+def _standardize_to_axis_0_3d(data, axis1, axis2, reshape):
+    """
+    Standardize multi-dimensional array to 3D stacked-matrix format, with axis1,axis2
+    shifted to axis 0,1 and optionally any other dimensions unrolled into a single 3rd axis.
+    """
+    # Shift axis1,2 -> axis=(0,1) (start of array dimensions)
+    if (axis1 == 1) and (axis2 == 0):
+        data = np.swapaxes(data, axis2, axis1)
+    elif (axis1 != 0) or (axis2 != 1):
+        data = np.moveaxis(data, (axis1,axis2), (0,1))
+
+    # Note: Unlike 2d analogs, we return data *after* after moving axis (easier to undo)
+    data_shape = data.shape
+    data_ndim = data.ndim
+
+    # Standardize data array to shape (n,m,n_matrices)
+    if (data_ndim == 3) or not reshape:  pass
+    elif data_ndim > 3:     data = data.reshape((data.shape[0],data.shape[1],-1))
+    elif data_ndim == 2:    data = data[:,:,np.newaxis]
+    elif data_ndim == 1:    data = data[:,np.newaxis,np.newaxis] # Weird usage, but ok
+
+    return data, data_shape, data_ndim
+
+
+def _standardize_to_axis_end_3d(data, axis1, axis2, reshape):
+    """
+    Standardize multi-dimensional array to 3D stacked-matrix format, with axis1,axis2
+    shifted to axis -2,-1 and optionally any other dimensions unrolled into a single 3rd axis.
+    """
+    # Shift axis1,2 -> axis=(-2,-1) (end of array dimensions)
+    if (axis1 == data.ndim-1) and (axis2 == data.ndim-2):
+        data = np.swapaxes(data, axis2, axis1)
+    elif (axis1 != data.ndim-2) or (axis2 != data.ndim-1):
+        data = np.moveaxis(data, (axis1,axis2), (data.ndim-2,data.ndim-1))
+
+    # Note: Unlike 2d analogs, we return data shape *after* moving axis (easier to undo)
+    data_shape = data.shape
+    data_ndim = data.ndim
+
+    # Standardize data array to shape (n_matrices,n,m)
+    if (data_ndim == 3) or not reshape:  pass
+    elif data_ndim > 3:     data = data.reshape((-1,data.shape[-2],data.shape[-1]))
+    elif data_ndim == 2:    data = data[np.newaxis,:,:]
+    elif data_ndim == 1:    data = data[np.newaxis,np.newaxis,:] # Weird usage, but ok
+
+    return data, data_shape, data_ndim
+
+
+def _undo_standardize_to_axis_0_3d(data, data_shape, data_ndim, axis1, axis2, reshape):
+    """
+    Undo effect of _standardize_to_axis_0_3d() -- reshapes data array from unwrapped
+    3D (stacked-matrix) form back to ~ original multi-dimensional form, with axis1,2
+    shifted back to original location (but allowing that data.shape[axis1,2] may have changed)
+    """
+    # Reshape "data series" axis back to original dimensionality
+    if (data_ndim > 3) and reshape:
+        data = data.reshape((1,1,*data_shape[2:]))
+
+    # Move/swap array axes to original locations
+    if (axis1 == 1) and (axis2 == 0):
+        data = np.swapaxes(data, axis1, axis2)
+    elif (axis1 != 0) or (axis2 != 1):
+        data = np.moveaxis(data, (0,1), (axis1,axis2))
+
+    return data
+
+
+def _undo_standardize_to_axis_end_3d(data, data_shape, data_ndim, axis1, axis2, reshape):
+    """
+    Undo effect of _standardize_to_axis_end_3d() -- reshapes data array from unwrapped
+    3D (stacked-matrix) form back to ~ original multi-dimensional form, with axis1,2
+    shifted back to original location (but allowing that data.shape[axis1,2] may have changed)
+    """
+    # Reshape "data series" axis back to original dimensionality
+    if (data_ndim > 3) and reshape:
+        data = data.reshape((*data_shape[:-2],1,1))
+
+    # Move/swap array axes to original locations
+    if (axis1 == data_ndim-1) and (axis2 == data_ndim-2):
+        data = np.swapaxes(data, axis1, axis2)
+    elif (axis1 != data.ndim-2) or (axis2 != data.ndim-1):
+        data = np.moveaxis(data, (data.ndim-2,data.ndim-1), (axis1,axis2))
+
+    return data

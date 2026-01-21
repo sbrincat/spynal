@@ -53,9 +53,10 @@ Data indexing and reshaping functions
 - axis_index_slices :   Generates list of slices for dynamic axis indexing
 - standardize_array :   Reshapes array to 2D w/ axis relevant for analysis at start or end
 - undo_standardize_array : Undoes effect of standardize_array after analysis
+- standardize_array_3d : Reshape multi-d array to standard 3d array (stacked matrix) form
+- undo_standardize_array_3d : Undo effect of standardize_array_3d (reshape to original shape)
 - data_labels_to_data_groups : Convert (data,labels) pair to tuple of (data_1,data_2,...,data_k)
 - data_groups_to_data_labels : Convert tuple of (data_1,data_2,...,data_k) to (data,labels) pair
-
 
 Other utilities
 ^^^^^^^^^^^^^^^
@@ -89,12 +90,15 @@ from scipy.interpolate import interp1d
 from scipy.stats import rankdata
 
 from spynal.helpers import _standardize_to_axis_0, _undo_standardize_to_axis_0, \
-                           _standardize_to_axis_end, _undo_standardize_to_axis_end, _isint
+                           _standardize_to_axis_end, _undo_standardize_to_axis_end, \
+                           _standardize_to_axis_0_3d, _undo_standardize_to_axis_0_3d, \
+                           _standardize_to_axis_end_3d, _undo_standardize_to_axis_end_3d, \
+                           _isint
 
 # =============================================================================
 # Basic statistics
 # =============================================================================
-def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
+def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None, reg_param=0,
            ddof=0, zerotol=1e-6, return_stats=False):
     """
     Z-score data along given axis (or over entire array)
@@ -123,12 +127,17 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
     timepts : array-like, shape=(n_timepts,), optional
         Time sampling vector for data. Only necessary if `time_range` is set, unused otherwise.
 
+    reg_param : float, default: 0.0
+        Can optionally regularize normalization by adding a small constant `reg_param` (eg 0.1)
+        to empirical std dev before zscore normalization
+
     ddof : int, default: 0
         Sets divisor for computing SD = N - ddof. Set=0 for max likelihood estimate,
         set=1 for unbiased (N-1 denominator) estimate
 
     zerotol : float, default: 1e-6
-        Any SD values < `zerotol` are treated as 0, and corresponding z-scores set = np.nan
+        Any SD values < `zerotol` are treated as 0, and corresponding z-scores set = np.nan.
+        This is only done if `reg_param` == 0.
 
     return_stats : bool, default: False
         If True, also returns computed mean, SD. If False, only returns z-scored data.
@@ -173,21 +182,25 @@ def zscore(data, axis=None, time_range=None, time_axis=None, timepts=None,
         mu = win_data.mean(axis=axis, keepdims=True)
         sd = win_data.std(axis=axis, ddof=ddof, keepdims=True)
 
+    # Optionally regularize normalization by adding a small constant to empirical SD
+    if reg_param != 0: sd = sd + reg_param
+
     # Compute z-score -- Subtract mean and normalize by SD
     data = (data - mu) / sd
 
     # Find any data values w/ sd ~ 0 and set data = NaN for those points
-    if axis is None:
-        if np.isclose(sd,0,rtol=zerotol): data = np.nan
-    else:
-        zero_points = np.isclose(sd,0,rtol=zerotol)
-        tiling = [1]*data.ndim
-        if np.isscalar(axis):
-            tiling[axis] = data.shape[axis]
+    if reg_param == 0:
+        if axis is None:
+            if np.isclose(sd,0,rtol=zerotol): data = np.nan
         else:
-            for ax in axis: tiling[ax] = data.shape[ax]
-        if time_range is not None: tiling[time_axis] = data.shape[time_axis]
-        data[np.tile(zero_points,tiling)] = np.nan
+            zero_points = np.isclose(sd,0,rtol=zerotol)
+            tiling = [1]*data.ndim
+            if np.isscalar(axis):
+                tiling[axis] = data.shape[axis]
+            else:
+                for ax in axis: tiling[ax] = data.shape[ax]
+            if time_range is not None: tiling[time_axis] = data.shape[time_axis]
+            data[np.tile(zero_points,tiling)] = np.nan
 
     if return_stats:    return data, mu, sd
     else:               return data
@@ -1596,6 +1609,131 @@ def undo_standardize_array(data, data_shape, axis=0, target_axis=0):
     else:                   return _undo_standardize_to_axis_end(data, data_shape, axis=axis)
 
 
+def standardize_array_3d(data, axis1=-2, axis2=-1, target_axis1=-2, target_axis2=-1, reshape=True):
+    """
+    Reshape multi-dimensional data array to standardized 3d array (stacked matrix) form,
+    with `axis1` shifted to `target_axis1`, and `axis2` shifted to `target_axis2`, and
+    optionally with all other axes reshaped into a single axis.
+
+    Used to standardize data for analysis. Use :func:`.undo_standardize_array_3d` to undo
+    these manipulations (post analysis).
+
+    Parameters
+    ----------
+    data : ndarray, shape=(...,n,...,m,...)
+        Data array of arbitrary shape.
+
+    axis1 : int, default: -2 (2nd to last axis)
+        Axis of data to move to `target_axis1` for subsequent analysis
+
+    axis2 : int, default: -1 (last axis)
+        Axis of data to move to `target_axis2` for subsequent analysis
+
+    target_axis1 : int, default: -2 (2nd to last axis)
+        Array axis to move `axis1` to for subsequent analysis.
+        NOTE: target_axis1,2 MUST be (0,1) (first two axes) or (-2,-1) (last two axes)
+
+    target_axis2 : int, default: -1 (last axis)
+        Array axis to move `axis2` to for subsequent analysis.
+
+    reshape : bool, default: True
+        If True, also reshapes array so all other axes are unrolled into a single axis.
+        If False, just moves axes to new locations without reshaping.
+
+    Returns
+    -------
+    data  : ndarray, shape=(k,n,m) or (m,n,k) (or (...,n,m) or (m,n,...))
+        Data array w/ `axis1` moved to `target_axis1`, `axis2` moved to `target_axis2`,
+        and (optionally, depending on `reshape`) all other axes unwrapped into single axis,
+        where k = prod(shape[axes != [axis1,axis2]])
+
+        Note: Even 1d (vector) data is expanded into 2d (n,1) | (1,n) array to
+        standardize for calling code.
+
+    data_shape : tuple, shape=(data.ndim,)
+        Original shape of input data array (data.shape)
+
+    data_ndim : int
+        Original dimensionality of input data array (data.ndim)
+    """
+    data = np.asarray(data)
+    if axis1 < 0: axis1 = data.ndim + axis1
+    if axis2 < 0: axis2 = data.ndim + axis2
+    if target_axis1 < 0: target_axis1 = data.ndim + target_axis1
+    if target_axis2 < 0: target_axis2 = data.ndim + target_axis2
+
+    assert (target_axis1,target_axis2) in [(0,1),(data.ndim-2,data.ndim-1)], \
+        ValueError("target_axis1,2 set=(%d,%d). Must be first two (0,1) or last two (-2,-1) axes"
+                   % (target_axis1,target_axis2))
+
+    if target_axis1 == 0:   return _standardize_to_axis_0_3d(data, axis1, axis2, reshape)
+    else:                   return _standardize_to_axis_end_3d(data, axis1, axis2, reshape)
+
+
+def undo_standardize_array_3d(data, data_shape, data_ndim, axis1=-2, axis2=-1,
+                              target_axis1=-2, target_axis2=-1, reshape=True):
+    """
+    Undo effect of :func:`.standardize_array_3d` -- optionally reshapes data array from unwrapped
+    3D (stacked matrix) form back to ~ original multi-dimensional form, with `axis1` and
+    `axis2` shifted back to original locations (but allowing that `data.shape[axis1]`
+    and/or `data.shape[axis2]` may have changed)
+
+    Used to reshape standardized data after is done.
+
+    Parameters
+    ----------
+    data : ndarray, shape=(axis_len,m) or (m,axis_len)
+        Standardized data array -- with `axis` moved to `target_axis`, and all
+        axes != `target_axis` unwrapped into single dimension, where
+        m = prod(shape[axes != axis])
+
+    data_shape : tuple, shape=(data_orig.ndim,)
+        Original shape of data array. Second output of :func:`.standardize_array_3d`.
+
+    data_ndim : int
+        Original dimensionality of data array. Third output of :func:`.standardize_array_3d`.
+
+    axis1 : int, default: -2 (2nd to last axis)
+        Axis of original data moved to `target_axis1`, which will be shifted
+        back to original axis
+        NOTE: target_axis1,2 MUST be (0,1) (first two axes) or (-2,-1) (last two axes)
+
+    axis2 : int, default: -1 (last axis)
+        Axis of original data moved to `target_axis2`, which will be shifted
+        back to original axis
+
+    target_axis1 : int, default: -2 (2nd to last axis)
+        Array axis `axis1` was moved to for subsequent analysis
+
+    target_axis2 : int, default: -1 (last axis)
+        Array axis `axis2` was moved to for subsequent analysis
+
+    reshape : bool, default: True
+        If True, also undoes reshaping of all other axes into a single axis.
+        If False, just undoes moving of axes to new locations without reshaping.
+
+    Returns
+    -------
+    data : ndarray, shape=(...,axis_len,...)
+        Data array reshaped back to original shape
+    """
+    data = np.asarray(data)
+    data_shape  = np.asarray(data_shape)
+    if axis1 < 0: axis1 = len(data_shape) + axis1
+    if axis2 < 0: axis2 = len(data_shape) + axis2
+    if target_axis1 < 0: target_axis1 = len(data_shape) + target_axis1
+    if target_axis2 < 0: target_axis2 = len(data_shape) + target_axis2
+
+    assert (target_axis1,target_axis2) in [(0,1),(data.ndim-2,data.ndim-1)], \
+        ValueError("target_axis1,2 set=(%d,%d). Must be first two (0,1) or last two (-2,-1) axes"
+                   % (target_axis1,target_axis2))
+
+    if target_axis1 == 0:
+        return _undo_standardize_to_axis_0_3d(data, data_shape, data_ndim, axis1, axis2, reshape)
+    else:
+        return _undo_standardize_to_axis_end_3d(data, data_shape, data_ndim, axis1, axis2, reshape)
+
+
 def data_labels_to_data_groups(data, labels, axis=0, groups=None, max_groups=None):
     """
     Convert (data,labels) pair to tuple of (data_1,data_2,...,data_k) where each `data_j`
@@ -1739,8 +1877,7 @@ def iarange(*args, **kwargs):
         raise ValueError("Only 1, 2, or 3 args allowed (not %d as input)" % len(args))
 
     # Offset to get final value in sequence is 1 for int-valued args, small float otherwise
-    offset = 1 if (_isint(stop) and _isint(start) and _isint(step)) \
-             else 1e-12
+    offset = 1 if (_isint(stop) and _isint(start) and _isint(step)) else 1e-12
     # Make offset negative for a negative step
     if step < 0: offset = -offset
 

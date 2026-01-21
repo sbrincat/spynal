@@ -16,10 +16,6 @@ from spynal.circstats import wrap, circ_distance, circ_subtract, \
 # TODO Tests for: circ_hist
 
 # =============================================================================
-# Data fixtures TEMP TODO Move to data_fixtures.py?
-# =============================================================================
-
-# =============================================================================
 # Unit tests
 # =============================================================================
 @pytest.mark.parametrize('units', ['radians', 'degrees'])
@@ -802,14 +798,14 @@ def test_circ_linear_correlation(paired_circ_linear_data_parametered, method, un
 # Set this to ignore expected warnings on using non-1-R error loss w/o fitting constant
 @pytest.mark.filterwarnings("ignore::UserWarning")
 @pytest.mark.parametrize('fit_method, error, result',
-                         [('gridsearch',    '1-R',      (0.0486, 0.0000, 0.6545)),
-                          ('gridsearch',    'SSE',      (0.0486, 1.8850, 96.8196)),
-                          ('gridsearch',    'deviance', (0.0486, 1.8850, 32.7317)),
-                          ('optimization',  '1-R',      (-0.0874, 0.0000, 0.6378)),
-                          ('optimization',  'SSE',      (0.0483, 1.9298, 93.9764)),
-                          ('optimization',  'deviance', (-0.0874, 3.6832, 31.8919)),
+                         [('gridsearch',    '1-R',      (0.0418, 0.0000, 0.6485)),
+                          ('gridsearch',    'SSE',      (0.0418, 2.0944, 95.3874)),
+                          ('gridsearch',    'deviance', (0.0418, 2.0944, 32.7265)),
+                          ('optimization',  '1-R',      (0.5027, 0.0000, 0.6002)),
+                          ('optimization',  'SSE',      (-0.0991, -2.3428, 93.1774)),
+                          ('optimization',  'deviance', (-0.5175, 0.0607, 28.2641)),
                           ('hybrid',        '1-R',      (0.0412, 0.0000, 0.6484)),
-                          ('hybrid',        'SSE',      (0.0483, 1.9298, 93.9764)),
+                          ('hybrid',        'SSE',      (0.0419, 2.0554, 95.1299)),
                           ('hybrid',        'deviance', (0.0412, 1.9126, 32.4203))])
 def test_circ_linear_regression(paired_circ_linear_data_parametered, fit_method, error, result):
     """ Unit tests for circ_linear_regression() """
@@ -825,8 +821,10 @@ def test_circ_linear_regression(paired_circ_linear_data_parametered, fit_method,
     circ_data = circ_data[:,0]
     linear_data = linear_data[:,:2]
     n_obs, n_predictors = linear_data.shape
-    n_fits = 1000 if fit_method in ['gridsearch','hybrid'] else 125
-    n_fits_noconstant = 100 if fit_method in ['gridsearch','hybrid'] else 25
+    if fit_method == 'gridsearch':      n_fits = 24*24*15
+    elif fit_method == 'hybrid':        n_fits = 12*12*5
+    elif fit_method == 'optimization':  n_fits = 8*8*5
+    n_fits_noconstant = n_fits/15 if fit_method == 'gridsearch' else n_fits/5
     circ_data_orig = circ_data.copy()
     linear_data_orig = linear_data.copy()
 

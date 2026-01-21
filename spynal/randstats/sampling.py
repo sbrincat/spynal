@@ -102,7 +102,9 @@ def signs(n, n_resamples=9999, seed=None):
     ------
     resamples : generator, shape=(n_resamples,) of [ndarray, shape=(n,), dtype=bool]
         Generator to iterate over for random sign test.
-        Each iteration contains a random resampling of n Bernoulli random variables.
+        Each iteration contains a random resampling of n Bernoulli random variables,
+        with boolean values (True/False). These can be converted to signs by, for example
+        signs = bool*2 - 1.
     """
     if seed is not None: set_random_seed(seed)
 
