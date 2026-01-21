@@ -69,3 +69,7 @@ You should now be able to directly import spynal and its modules/functions in yo
 We welcome any contributions of new/expanded functionality or more efficient implementations,  
 and all issues/bug reports.  
 Submit a pull request/issue on Github or email me at [Github handle] AT [institution] .edu  
+
+## Acknowledgements
+Many thanks to John Tauber (@johntauber), Alex Bardon (@abardon), and Huidi Li for code reviews, and assistance with  
+algorithm development, testing, and refinement.  
