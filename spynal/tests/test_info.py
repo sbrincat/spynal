@@ -7,6 +7,8 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from patsy import dmatrix
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import two_sample_data, one_way_data, two_way_data
 from spynal.info import neural_info, neural_info_2groups, neural_info_ngroups
 
 

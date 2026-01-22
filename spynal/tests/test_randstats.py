@@ -3,6 +3,8 @@ import pytest
 import numpy as np
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import one_sample_data, two_sample_data, one_way_data, two_way_data
 from spynal.utils import one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, data_labels_to_data_groups
 from spynal.randstats.randstats import one_sample_test, paired_sample_test, paired_sample_test_labels, \
@@ -660,6 +662,7 @@ def test_two_sample_confints(two_sample_data, stat, method, result_ci, result_ob
     with pytest.raises(MISSING_ARG_ERRS):
         ci, stat_obs, stat_resmp = test_func(data1, data2, axis=0, n_resamples=n_resamples,
                                              seed=1, return_stats=True, foo=None)
+
 
 def test_imports():
     """ Test different import methods for randstats module """

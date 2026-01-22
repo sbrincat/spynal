@@ -5,6 +5,8 @@ from math import pi
 import numpy as np
 
 from spynal.tests.data_fixtures import simulate_dataset, MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import one_sample_data, two_sample_data, two_way_data
 from spynal.utils import zscore, one_sample_tstat, paired_tstat, two_sample_tstat, \
                          one_way_fstat, two_way_fstat, fano, cv, cv2, lv, \
                          set_random_seed, randperm, interp1, setup_sliding_windows, \
@@ -321,6 +323,7 @@ def test_randperm():
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         randperm(n, k, foo=None)
+
 
 def test_interp1():
     """ Unit tests for interp1() function """

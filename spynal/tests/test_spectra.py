@@ -6,6 +6,8 @@ import xarray as xr
 
 from spynal.utils import iarange
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import oscillation, oscillatory_data
 from spynal.spectra.spectra import spectrum, spectrogram, itpc, plot_spectrum, plot_spectrogram
 from spynal.spectra.preprocess import cut_trials, realign_data, remove_dc, remove_evoked
 from spynal.spectra.postprocess import one_over_f_norm, pool_freq_bands, pool_time_epochs

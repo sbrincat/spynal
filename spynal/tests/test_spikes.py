@@ -3,6 +3,9 @@ import pytest
 import numpy as np
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import spike_timestamp, spike_bool, spike_data, \
+#   spike_timestamp_trial_uncut, spike_bool_trial_uncut, spike_data_trial_uncut, spike_waveform
 from spynal.utils import iarange, unsorted_unique, setup_sliding_windows, \
                          object_array_equal, concatenate_object_array
 from spynal.spikes import simulate_spike_trains, simulate_spike_waveforms, \
@@ -11,136 +14,6 @@ from spynal.spikes import simulate_spike_trains, simulate_spike_waveforms, \
                           rate, rate_stats, isi, isi_stats, waveform_stats, \
                           plot_raster, plot_mean_waveforms, plot_waveform_heatmap
 from spynal.spectra.multitaper import compute_tapers
-
-
-# =============================================================================
-# Fixtures for generating simulated data
-# =============================================================================
-@pytest.fixture(scope='session')
-def spike_timestamp():
-    """
-    Fixture simulates set of spike trains as spike timestamps to use for all unit tests
-
-    RETURNS
-    data    (10,2) ndarray of (n_spikes,) objects. Simulated spike timestamps
-            (eg simulating 10 trials x 2 units)
-
-    timepts None. Second argout returned only to match output of spike_bool
-    """
-    # Note: seed=1 makes data reproducibly match output of Matlab
-    data, _ = simulate_spike_trains(n_trials=20, n_conds=1, refractory=1e-3, seed=1)
-    # Reshape data to simulate (n_trials,n_units) spiking data
-    return data.reshape(10,2), None
-
-
-@pytest.fixture(scope='session')
-def spike_bool(spike_timestamp):
-    """
-    Fixture simulates set of spike trains as binary trains to use for all unit tests
-
-    RETURNS
-    data    (10,2,1001) ndarray of bool. Simulated binary spike trains
-            (eg simulating 10 trials x 2 units x 1001 timepts).
-
-    timepts (1001,) ndarray of float. Time sampling vector for data (in s).
-    """
-    # Note: Implicitly also tests times_to_bool function
-    return times_to_bool(spike_timestamp[0], lims=[0,1])
-
-
-@pytest.fixture(scope='session')
-def spike_data(spike_timestamp, spike_bool):
-    """
-    "Meta-fixture" that returns both timestamp and boolean spiking data types
-    in a dictionary.
-
-    RETURNS
-    data_dict   {'data_type' : (data,timepts)} dict containing outputs from
-                each of constituent fixtures
-
-    SOURCE      https://stackoverflow.com/a/42400786
-    """
-    return {'spike_timestamp': spike_timestamp, 'spike_bool': spike_bool}
-
-
-@pytest.fixture(scope='session')
-def spike_timestamp_trial_uncut(spike_timestamp):
-    """
-    Simulates set of spike trains as spike timestamps not cut into trials
-
-    RETURNS
-    data    (2,) ndarray of (n_spikes,) objects. Simulated spike timestamps
-            (eg simulating 2 units, uncut into trials)
-
-    timepts None. Second argout returned only to match output of spike_bool
-    """
-    data, _ = spike_timestamp
-    n_trials,n_units = data.shape
-    data_uncut = np.empty((n_units,),dtype=object)
-    for unit in range(n_units):
-        data_uncut[unit] = np.hstack([data[trial,unit]+trial for trial in range(n_trials)])
-
-    return data_uncut, None
-
-
-@pytest.fixture(scope='session')
-def spike_bool_trial_uncut(spike_bool):
-    """
-    Fixture simulates set of spike trains as binary trains to use for all unit tests
-
-    RETURNS
-    data    (2,1001) ndarray of bool. Simulated binary spike trains
-            (eg simulating 2 units x 1001 timepts, uncut into trials).
-
-    timepts (1001,) ndarray of float. Time sampling vector for data (in s).
-    """
-    data, timepts = spike_bool
-    n_trials,n_units,n_timepts = data.shape
-    data = data.transpose((1,2,0)).reshape((n_units,n_timepts*n_trials),order='F')
-    timepts = np.hstack([timepts + trial*n_timepts for trial in range(n_trials)])
-    return data, timepts
-
-
-@pytest.fixture(scope='session')
-def spike_data_trial_uncut(spike_timestamp_trial_uncut, spike_bool_trial_uncut):
-    """
-    "Meta-fixture" that returns both timestamp and boolean spiking data types
-    in a dictionary.
-
-    RETURNS
-    data_dict   {'data_type' : (data,timepts)} dict containing outputs from
-                each of constituent fixtures
-
-    SOURCE      https://stackoverflow.com/a/42400786
-    """
-    return {'spike_timestamp': spike_timestamp_trial_uncut,
-            'spike_bool': spike_bool_trial_uncut}
-
-
-@pytest.fixture(scope='session')
-def spike_waveform(spike_timestamp):
-    """
-    Fixture simulates spike waveforms of set of spike trains to use for all unit tests
-
-    RETURNS
-    data    (10,2) ndarray of (n_timepts,n_spikes) objects. Simulated spike waveforms
-            (eg simulating 10 trials x 2 units)
-
-    timepts (49,) ndarray of float. Time sampling vector for waveform data (in s).
-    """
-    spike_timestamp = spike_timestamp[0]
-    n_trials,n_units = spike_timestamp.shape
-
-    spike_waves = np.empty((n_trials,n_units), dtype=object)
-    for i_trial in range(n_trials):
-        for i_unit in range(n_units):
-            n_spikes = len(spike_timestamp[i_trial,i_unit])
-            if n_spikes != 0:
-                spike_waves[i_trial,i_unit],timepts = simulate_spike_waveforms(n_spikes=n_spikes)
-            else:
-                spike_waves[i_trial,i_unit] = np.asarray([])
-
-    return spike_waves, timepts
 
 
 # =============================================================================

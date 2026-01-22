@@ -3,7 +3,8 @@ import pytest
 import numpy as np
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
-from spynal.tests.validity_test_multi import create_subspace, simulate_subspace_dataset
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import one_sample_multivariate_data, two_sample_multivariate_data
 from spynal.utils import set_random_seed
 from spynal.multi import covariance_matrix, vector_cosine, orthogonalize_matrix, \
                          dimensionality, pc_noise_dim, pc_expvar_dim, participation_ratio, \
@@ -11,41 +12,6 @@ from spynal.multi import covariance_matrix, vector_cosine, orthogonalize_matrix,
                          subspace_reconstruction_index, subspace_projection_index, \
                          subspace_error_index, subspace_principal_angles
 # TODO shatter_dim
-
-
-
-# =============================================================================
-# Data fixtures TEMP TODO Move to data_fixtures.py
-# =============================================================================
-@pytest.fixture(scope='session')
-def one_sample_multivariate_data():
-    """ Generate 1-sample MVN data for unit tests: basis~(3, 2), data~(200, 3), cov~(3, 3) """
-    set_random_seed(1) # Note: seed=1 makes data reproducibly match output of Matlab
-
-    basis = create_subspace()
-    data,labels = simulate_subspace_dataset(basis=basis)
-    data -= data.mean(axis=0, keepdims=True)
-    cov = covariance_matrix(data)
-
-    return basis, data, cov, labels
-
-@pytest.fixture(scope='session')
-def two_sample_multivariate_data():
-    """ Generate 2-sample MVN data for unit tests: basis~(3, 2), data~(200, 3), cov~(3, 3) """
-    set_random_seed(1) # Note: seed=1 makes data reproducibly match output of Matlab
-
-    basis = create_subspace()
-    data,labels = simulate_subspace_dataset(basis=basis)
-    data -= data.mean(axis=0, keepdims=True)
-    cov = covariance_matrix(data)
-
-    # Tweak args to create_subspace() to get diff basis for 2nd set of data
-    basis2 = create_subspace(angle=30)
-    data2,labels = simulate_subspace_dataset(basis=basis2)
-    data2 -= data2.mean(axis=0, keepdims=True)
-    cov2 = covariance_matrix(data2)
-
-    return basis, data, cov, basis2, data2, cov2, labels
 
 
 # =============================================================================
@@ -366,3 +332,16 @@ def test_subspace_comparison(two_sample_multivariate_data, method, result):
     # Ensure that passing a nonexistent/misspelled kwarg raises an error
     with pytest.raises(MISSING_ARG_ERRS):
         comp = func(data1[0,:], cov1[0,:,:], basis1, data2[0,:], cov2[0,:,:], basis2, foo=None)
+
+
+def test_imports():
+    """ Test different import methods for multi module """
+    # Import entire package
+    import spynal
+    spynal.multi.vector_cosine
+    # Import module
+    import spynal.multi as multi
+    multi.vector_cosine
+    # Import specific function from module
+    from spynal.multi import vector_cosine
+    vector_cosine

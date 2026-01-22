@@ -1,62 +1,13 @@
 """ Unit tests for sync.py module """
-from math import pi
 import pytest
 import numpy as np
 
-from scipy.stats import bernoulli
-
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
-from spynal.utils import index_axis, set_random_seed
-from spynal.sync.sync import simulate_multichannel_oscillation, synchrony, spike_field_coupling
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import oscillation_pair, spike_field_pair
+from spynal.utils import index_axis
+from spynal.sync import synchrony, spike_field_coupling
 from spynal.spectra.spectra import spectrogram
-
-# =============================================================================
-# Fixtures for generating simulated data
-# =============================================================================
-@pytest.fixture(scope='session')
-def oscillation_pair():
-    """
-    Fixture simulates set of instances of pairs of weakly synchronized oscillatory data
-    for unit tests of field-field synchrony computation functions
-
-    RETURNS
-    data    (1000,40,2) ndarray. Simulated oscillatory data.
-            (eg simulating 1000 timepoints x 40 trials x 2 channels)
-    """
-    # Note: seed=1 makes data reproducibly match output of Matlab
-    frequency = 32
-    return simulate_multichannel_oscillation(2, frequency, amplitude=5.0, phase=[pi/4,0],
-                                             phase_sd=[0,pi/4], noise=1.0, n_trials=40,
-                                             time_range=1.0, smp_rate=1000, seed=1)
-
-
-@pytest.fixture(scope='session')
-def spike_field_pair(oscillation_pair):
-    """
-    Fixture simulates set of instances of weakly synchronized oscillatory spike-field data pairs
-    for unit tests of spike-field synchrony computation functions
-
-    RETURNS
-    spkdata (1000,40) ndarray of bool. Simulated oscillatory spiking data,
-            expressed as binary (0/1) spike trains.
-            (eg simulating 1000 timepoints x 4 trials or channels)
-
-    lfpdata (1000,40) ndarray of float. Simulated oscillatory LFP data
-            (eg simulating 1000 timepoints x 4 trials or channels)
-    """
-    set_random_seed(1)
-
-    # todo code up something actually proper (rate-modulated Poisson process?)
-    spkdata,lfpdata = oscillation_pair[:,:,0], oscillation_pair[:,:,1]
-
-    # Convert continuous oscillation to probability (range 0-1)
-    spkdata = (spkdata - spkdata.min()) / np.ptp(spkdata)
-    spkdata = spkdata**2  # Sparsen high rates some
-
-    # Use probabilities to generate Bernoulli random variable at each time point
-    spkdata =  bernoulli.ppf(0.5, spkdata).astype(bool)
-
-    return spkdata, lfpdata
 
 
 # =============================================================================

@@ -4,6 +4,9 @@ from math import pi
 import numpy as np
 
 from spynal.tests.data_fixtures import MISSING_ARG_ERRS
+# Implicit import via conftest.py
+# from spynal.tests.data_fixtures import one_sample_circ_data_parametered,
+#   paired_circ_data_parametered, paired_circ_linear_data_parametered
 from spynal.utils import set_random_seed
 from spynal.circstats import wrap, circ_distance, circ_subtract, \
                              amp_phase_to_complex, complex_to_amp_phase, \
